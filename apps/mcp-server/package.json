@@ -1,0 +1,35 @@
+{
+  "name": "@rayvan/mcp-server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "rayvan-mcp": "./dist/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "lint": "eslint \"src\" \"tests\" --no-error-on-unmatched-pattern",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@rayvan/action-engine": "workspace:*",
+    "@rayvan/config-engine": "workspace:*",
+    "@rayvan/core": "workspace:*",
+    "@rayvan/shared": "workspace:*",
+    "zod": "^3.25.56"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "vitest": "^3.2.3"
+  }
+}

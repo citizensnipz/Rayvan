@@ -79,3 +79,11 @@ test-results/
 tmp/
 temp/
 .cache/
+.turbo/
+
+# Rayvan local application data
+.rayvan/
+rayvan-data/
+
+# Plugin runtime state
+plugins/**/.runtime/

@@ -1,0 +1,9 @@
+[package]
+name = "rayvan-local-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native local database lifecycle for Rayvan"
+
+[dependencies]
+thiserror = { workspace = true }

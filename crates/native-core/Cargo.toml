@@ -1,0 +1,16 @@
+[package]
+name = "rayvan-native-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Native desktop utilities for Rayvan"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[target.'cfg(not(target_os = "unknown"))'.dependencies]
+tauri = { version = "2", optional = true }
+
+[features]
+tauri = ["dep:tauri"]
