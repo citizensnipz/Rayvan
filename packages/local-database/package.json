@@ -17,9 +17,11 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@rayvan/core": "workspace:*"
+    "@rayvan/core": "workspace:*",
+    "better-sqlite3": "^11.10.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "vitest": "^3.2.3"
   }
 }

@@ -1,0 +1,8 @@
+model = "gpt-5.6-luna"
+model_reasoning_effort = "low"
+sandbox_mode = "workspace-write"
+developer_instructions = """
+Follow the editor-neutral role contract at `.agents/roles/commit-pusher.md`.
+
+Read `AGENTS.md` and `ai/BOOTSTRAP.md` before meaningful work. Stage, commit, and push only when the user's current prompt explicitly requests those operations. Inspect the worktree first and never infer authorization from task completion.
+"""

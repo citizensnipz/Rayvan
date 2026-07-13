@@ -1,4 +1,7 @@
-import { AppShell, Button, EmptyState } from "@rayvan/ui";
+import { AppShell } from "@rayvan/ui";
+
+import { ProjectsFeature } from "../features/projects/index.js";
+import { ProjectsProvider } from "../features/projects/ProjectsContext.js";
 
 export function App() {
   return (
@@ -10,13 +13,10 @@ export function App() {
         </p>
       </header>
 
-      <EmptyState
-        title="No projects connected yet."
-        description="Connect a local project to begin discovering infrastructure."
-      />
-
-      <div style={{ marginTop: "1rem" }}>
-        <Button disabled>Add project</Button>
+      <div style={{ marginTop: "2rem" }}>
+        <ProjectsProvider>
+          <ProjectsFeature />
+        </ProjectsProvider>
       </div>
     </AppShell>
   );

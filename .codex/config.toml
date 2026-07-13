@@ -1,0 +1,26 @@
+[agents]
+max_threads = 5
+
+[agents."code-explorer"]
+description = "Read-only codebase discovery and investigation."
+config_file = "agents/code-explorer.toml"
+
+[agents."quick-implementer"]
+description = "Small, well-defined changes limited to one or two files."
+config_file = "agents/quick-implementer.toml"
+
+[agents.implementer]
+description = "Features, bug fixes, multi-file implementation, and validation."
+config_file = "agents/implementer.toml"
+
+[agents."architecture-reviewer"]
+description = "Read-only architectural review for high-risk or cross-cutting design and implementation."
+config_file = "agents/architecture-reviewer.toml"
+
+[agents."code-reviewer"]
+description = "Read-only review of diffs for correctness, security, regressions, and quality."
+config_file = "agents/code-reviewer.toml"
+
+[agents."commit-pusher"]
+description = "Stage, commit, and push completed changes only when explicitly requested by the user."
+config_file = "agents/commit-pusher.toml"

@@ -14,6 +14,8 @@ pub fn normalize_path(path: &Path) -> PathBuf {
 
 #[cfg(feature = "tauri")]
 pub fn app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, PathError> {
+    use tauri::Manager;
+
     app.path()
         .app_data_dir()
         .map_err(|_| PathError::AppDataUnavailable)

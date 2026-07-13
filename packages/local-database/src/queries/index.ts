@@ -1,7 +1,9 @@
 export interface ListProjectsQuery {
-  workspaceId: string;
+  includeArchived?: boolean;
 }
 
-export function buildListProjectsQuery(workspaceId: string): ListProjectsQuery {
-  return { workspaceId };
+export function buildListProjectsQuery(
+  includeArchived = false,
+): ListProjectsQuery {
+  return { includeArchived };
 }

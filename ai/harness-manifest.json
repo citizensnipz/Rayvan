@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "roles": [
+    {
+      "id": "code-explorer",
+      "contract": ".agents/roles/code-explorer.md",
+      "codex": {
+        "config_file": "agents/code-explorer.toml",
+        "model": "gpt-5.6-terra",
+        "model_reasoning_effort": "medium",
+        "sandbox_mode": "read-only"
+      },
+      "cursor": {
+        "model": "inherit",
+        "readonly": true,
+        "is_background": false
+      }
+    },
+    {
+      "id": "quick-implementer",
+      "contract": ".agents/roles/quick-implementer.md",
+      "codex": {
+        "config_file": "agents/quick-implementer.toml",
+        "model": "gpt-5.6-luna",
+        "model_reasoning_effort": "high",
+        "sandbox_mode": "workspace-write"
+      },
+      "cursor": {
+        "model": "inherit",
+        "readonly": false,
+        "is_background": false
+      }
+    },
+    {
+      "id": "implementer",
+      "contract": ".agents/roles/implementer.md",
+      "codex": {
+        "config_file": "agents/implementer.toml",
+        "model": "gpt-5.6-luna",
+        "model_reasoning_effort": "xhigh",
+        "sandbox_mode": "workspace-write"
+      },
+      "cursor": {
+        "model": "inherit",
+        "readonly": false,
+        "is_background": false
+      }
+    },
+    {
+      "id": "architecture-reviewer",
+      "contract": ".agents/roles/architecture-reviewer.md",
+      "codex": {
+        "config_file": "agents/architecture-reviewer.toml",
+        "model": "gpt-5.6-sol",
+        "model_reasoning_effort": "high",
+        "sandbox_mode": "read-only"
+      },
+      "cursor": {
+        "model": "inherit",
+        "readonly": true,
+        "is_background": false
+      }
+    },
+    {
+      "id": "code-reviewer",
+      "contract": ".agents/roles/code-reviewer.md",
+      "codex": {
+        "config_file": "agents/code-reviewer.toml",
+        "model": "gpt-5.6-sol",
+        "model_reasoning_effort": "low",
+        "sandbox_mode": "read-only"
+      },
+      "cursor": {
+        "model": "inherit",
+        "readonly": true,
+        "is_background": false
+      }
+    },
+    {
+      "id": "commit-pusher",
+      "contract": ".agents/roles/commit-pusher.md",
+      "codex": {
+        "config_file": "agents/commit-pusher.toml",
+        "model": "gpt-5.6-luna",
+        "model_reasoning_effort": "low",
+        "sandbox_mode": "workspace-write"
+      },
+      "cursor": {
+        "model": "inherit",
+        "readonly": false,
+        "is_background": false
+      }
+    }
+  ],
+  "topical_docs": [
+    "docs/product/vision.md",
+    "docs/product/principles.md",
+    "docs/product/terminology.md",
+    "docs/architecture/overview.md",
+    "docs/architecture/domain-model.md",
+    "docs/architecture/process-model.md",
+    "docs/architecture/security-model.md",
+    "docs/architecture/plugin-system.md",
+    "docs/architecture/action-approval-model.md",
+    "docs/architecture/ai-harness.md",
+    "docs/plugins/authoring.md",
+    "docs/plugins/lifecycle.md",
+    "docs/plugins/permissions.md",
+    "docs/decisions/0001-local-first-architecture.md"
+  ],
+  "paths": {
+    "agents_md": "AGENTS.md",
+    "bootstrap": "ai/BOOTSTRAP.md",
+    "cursor_rule": ".cursor/rules/harness.mdc",
+    "codex_config": ".codex/config.toml"
+  },
+  "allowed_codex_agent_keys": [
+    "model",
+    "model_reasoning_effort",
+    "sandbox_mode",
+    "developer_instructions"
+  ],
+  "allowed_cursor_frontmatter_keys": [
+    "name",
+    "description",
+    "model",
+    "readonly",
+    "is_background"
+  ],
+  "max_active_harness_file_bytes": 51200
+}

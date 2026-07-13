@@ -18,7 +18,9 @@
     "format:check": "prettier --check .",
     "cargo:check": "cargo check --workspace",
     "cargo:test": "cargo test --workspace",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm cargo:check && pnpm cargo:test"
+    "validate:harness": "node tooling/scripts/validate-harness.mjs",
+    "check:harness": "pnpm validate:harness && git diff --check",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm cargo:check && pnpm cargo:test && pnpm check:harness"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
@@ -36,5 +38,10 @@
   "packageManager": "pnpm@10.11.0",
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

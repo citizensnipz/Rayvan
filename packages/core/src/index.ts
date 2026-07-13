@@ -3,6 +3,7 @@ export * from "./errors/index.js";
 export * from "./result/index.js";
 export * from "./events/index.js";
 export * from "./domain/workspace.js";
+export * from "./domain/project.js";
 export * from "./domain/environment.js";
 export * from "./domain/integration.js";
 export * from "./domain/resource.js";

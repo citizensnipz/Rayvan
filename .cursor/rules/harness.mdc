@@ -1,0 +1,17 @@
+---
+description: Rayvan cross-editor harness entry points and context budget
+alwaysApply: true
+---
+
+# Rayvan Harness
+
+Before meaningful work:
+
+1. Read `AGENTS.md`
+2. Read `ai/BOOTSTRAP.md`
+3. Load at most two additional topical documents from the bootstrap routing table
+4. Read the nearest nested `AGENTS.md` when working in a subtree that defines one
+
+Use project subagents from `.cursor/agents/` according to `ai/BOOTSTRAP.md` orchestration. Prefer the main agent for simple work. Delegate only when context isolation or independent review justifies the cost.
+
+Harness validation: `pnpm check:harness`

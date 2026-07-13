@@ -1,4 +1,5 @@
 import type { DatabaseSchemaVersion } from "../schema/index.js";
+import { MIGRATION_VERSION, PROJECTS_TABLE_MIGRATION } from "../database/migrations.js";
 
 export interface Migration {
   version: number;
@@ -8,8 +9,8 @@ export interface Migration {
 
 export const INITIAL_MIGRATIONS: Migration[] = [
   {
-    version: 1,
-    up: "-- placeholder: create Rayvan metadata tables",
+    version: MIGRATION_VERSION,
+    up: PROJECTS_TABLE_MIGRATION,
   },
 ];
 
