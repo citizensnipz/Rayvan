@@ -62,6 +62,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # generate_context! requires frontendDist ("../dist") to exist at compile time.
+      # The typescript job builds it, but jobs do not share a filesystem.
+      - name: Ensure Tauri frontendDist exists
+        run: mkdir -p apps/desktop/dist
+
       - name: Cargo check
         run: cargo check --workspace
 
