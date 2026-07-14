@@ -42,6 +42,34 @@ describe("plugin model validation", () => {
     expect(() => validatePluginManifest(validManifest)).not.toThrow();
   });
 
+  it("accepts controlled presentation metadata", () => {
+    expect(() =>
+      validatePluginManifest({
+        ...validManifest,
+        presentation: {
+          icon: { iconId: "example-local", initials: "EL", label: "Example" },
+          theme: {
+            surface: "neutral",
+            accentColor: "#64748B",
+            foregroundMode: "dark",
+          },
+          supportsMultipleConnections: true,
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects free-form accent colors", () => {
+    expect(() =>
+      validatePluginManifest({
+        ...validManifest,
+        presentation: {
+          theme: { surface: "brand", accentColor: "rgb(255,0,0)" },
+        },
+      }),
+    ).toThrow(PluginValidationError);
+  });
+
   it("validates discovered resources and plugin resources", () => {
     const discovered: DiscoveredResource = {
       providerResourceId: "svc-1",

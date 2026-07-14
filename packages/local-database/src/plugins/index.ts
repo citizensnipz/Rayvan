@@ -15,4 +15,4 @@ export * from "./services/resource-state.js";
 export * from "./services/change-plan.js";
 export * from "./services/change-approval.js";
 export * from "./adapters/execution.js";
-export * from "./sqlite/repositories.js";
+/* Sqlite adapters: import from "@rayvan/local-database/sqlite" only. */

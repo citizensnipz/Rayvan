@@ -50,6 +50,9 @@ importers:
       '@rayvan/local-database':
         specifier: workspace:*
         version: link:../../packages/local-database
+      '@rayvan/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
       '@rayvan/shared':
         specifier: workspace:*
         version: link:../../packages/shared

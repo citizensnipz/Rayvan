@@ -15,6 +15,7 @@
   "dependencies": {
     "@rayvan/core": "workspace:*",
     "@rayvan/local-database": "workspace:*",
+    "@rayvan/plugin-sdk": "workspace:*",
     "@rayvan/shared": "workspace:*",
     "@rayvan/ui": "workspace:*",
     "@tauri-apps/api": "^2.5.0",
