@@ -1,0 +1,55 @@
+* {
+  box-sizing: border-box;
+}
+
+/*
+  Light/dark tokens follow common product-UI conventions
+  (slate neutrals, high-contrast text, subtle borders/surfaces).
+*/
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f5f9;
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-nav-active: #e2e8f0;
+  --color-danger: #b91c1c;
+  --color-overlay: rgba(15, 23, 42, 0.35);
+  --shadow-menu: 0 10px 24px rgba(15, 23, 42, 0.12);
+  --shadow-dialog: 0 16px 40px rgba(15, 23, 42, 0.12);
+  --color-switch-track: #cbd5e1;
+  --color-switch-track-on: #0f172a;
+  --color-switch-thumb: #ffffff;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-surface-muted: #334155;
+  --color-text: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  --color-border: #334155;
+  --color-border-strong: #475569;
+  --color-nav-active: #334155;
+  --color-danger: #f87171;
+  --color-overlay: rgba(0, 0, 0, 0.55);
+  --shadow-menu: 0 10px 24px rgba(0, 0, 0, 0.45);
+  --shadow-dialog: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --color-switch-track: #475569;
+  --color-switch-track-on: #38bdf8;
+  --color-switch-thumb: #ffffff;
+}
+
+body {
+  margin: 0;
+  font-family: "Figtree", system-ui, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+}

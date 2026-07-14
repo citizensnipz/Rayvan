@@ -1,0 +1,9 @@
+[package]
+name = "rayvan-credential-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "OS-backed credential storage for Rayvan"
+
+[dependencies]
+thiserror = { workspace = true }

@@ -1,0 +1,27 @@
+[package]
+name = "rayvan-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Rayvan desktop application"
+
+[lib]
+name = "rayvan_desktop_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+rayvan-native-core = { path = "../../../crates/native-core", features = ["tauri"] }
+rayvan-plugin-host = { path = "../../../crates/plugin-host" }
+rayvan-credential-store = { path = "../../../crates/credential-store" }
+rayvan-local-store = { path = "../../../crates/local-store" }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
