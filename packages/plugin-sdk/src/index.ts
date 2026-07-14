@@ -7,6 +7,7 @@ export * from "./errors/index.js";
 export * from "./protocol/index.js";
 export * from "./validation/index.js";
 export * from "./registry/index.js";
+export * from "./execution/index.js";
 export type {
   ApplyHandler,
   AuthenticateHandler,

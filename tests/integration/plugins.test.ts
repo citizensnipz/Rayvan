@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createPluginExecutionStack,
   InProcessPluginRegistry,
   RAYVAN_PLUGIN_API_VERSION,
 } from "../../packages/plugin-sdk/src/index.ts";
@@ -37,5 +38,15 @@ describe("bundled plugins", () => {
     expect(registry.list()).toHaveLength(plugins.length);
     expect(registry.supports("example-local", "discover")).toBe(true);
     expect(registry.supports("vercel", "discover")).toBe(false);
+  });
+
+  it("registers bundled plugins through createPluginExecutionStack", () => {
+    const { registry, executionService } = createPluginExecutionStack({
+      plugins,
+    });
+
+    expect(registry.list()).toHaveLength(plugins.length);
+    expect(executionService).toBeDefined();
+    expect(registry.supports("example-local", "plan")).toBe(true);
   });
 });

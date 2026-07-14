@@ -2,6 +2,8 @@ import { RAYVAN_PLUGIN_API_VERSION } from "../api-version.js";
 import { CAPABILITY_HANDLER_KEYS } from "../capabilities/index.js";
 import type {
   ApplyResult,
+  ApprovedChangePlan,
+  AuthenticateResult,
   ChangeOperation,
   ChangePlan,
   DiscoveredResource,
@@ -9,6 +11,7 @@ import type {
   PluginResource,
   VerificationResult,
 } from "../contracts/index.js";
+import type { PluginExecutionActor } from "../execution/actor.js";
 import {
   PluginValidationError,
   PluginVersionError,
@@ -293,6 +296,89 @@ export function validatePluginResource(
       pluginId: resource.pluginId,
     });
   }
+}
+
+function validatePluginExecutionActor(
+  actor: PluginExecutionActor,
+  field: string,
+  pluginId?: string,
+): void {
+  assertNonEmptyString(actor.id, `${field}.id`, pluginId);
+  const allowedTypes = new Set(["user", "mcp_agent", "system"]);
+  if (!allowedTypes.has(actor.type)) {
+    throw new PluginValidationError(
+      `${field}.type has unsupported value "${String(actor.type)}"`,
+      { pluginId },
+    );
+  }
+  if (
+    actor.type !== "system" &&
+    actor.displayName !== undefined &&
+    typeof actor.displayName !== "string"
+  ) {
+    throw new PluginValidationError(
+      `${field}.displayName must be a string when provided`,
+      { pluginId },
+    );
+  }
+}
+
+export function validateApprovedChangePlan(
+  approved: ApprovedChangePlan,
+): void {
+  const pluginId = approved.plan?.pluginId;
+  validateChangePlan(approved.plan);
+  assertNonEmptyString(approved.approvalId, "approvedPlan.approvalId", pluginId);
+  assertNonEmptyString(approved.approvedAt, "approvedPlan.approvedAt", pluginId);
+
+  if (!Array.isArray(approved.approvedOperationIds)) {
+    throw new PluginValidationError(
+      "approvedPlan.approvedOperationIds must be an array",
+      { pluginId },
+    );
+  }
+  for (const operationId of approved.approvedOperationIds) {
+    assertNonEmptyString(
+      operationId,
+      "approvedPlan.approvedOperationIds[]",
+      pluginId,
+    );
+  }
+  assertUniqueStrings(
+    approved.approvedOperationIds,
+    "approved operation id",
+    pluginId,
+  );
+
+  if (approved.approvedBy !== undefined) {
+    validatePluginExecutionActor(
+      approved.approvedBy,
+      "approvedPlan.approvedBy",
+      pluginId,
+    );
+  }
+
+  if (
+    approved.destructiveApproval !== undefined &&
+    typeof approved.destructiveApproval !== "boolean"
+  ) {
+    throw new PluginValidationError(
+      "approvedPlan.destructiveApproval must be a boolean when provided",
+      { pluginId },
+    );
+  }
+}
+
+export function validateAuthenticateResult(
+  result: AuthenticateResult,
+  pluginId?: string,
+): void {
+  if (typeof result.ok !== "boolean") {
+    throw new PluginValidationError("authenticateResult.ok must be a boolean", {
+      pluginId,
+    });
+  }
+  assertNonEmptyString(result.message, "authenticateResult.message", pluginId);
 }
 
 export function validateChangePlan(plan: ChangePlan): void {
