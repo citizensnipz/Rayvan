@@ -15,9 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Version comes from package.json "packageManager" — do not set `version` here.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
@@ -44,12 +43,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
 
+      # generate_context! requires frontendDist ("../dist") to exist at compile time.
+      # The typescript job builds it, but jobs do not share a filesystem.
+      - name: Ensure Tauri frontendDist exists
+        run: mkdir -p apps/desktop/dist
+
       - name: Cargo check
-        run: pnpm cargo:check
+        run: cargo check --workspace
 
       - name: Cargo test
-        run: pnpm cargo:test
+        run: cargo test --workspace

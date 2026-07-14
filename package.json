@@ -16,11 +16,12 @@
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "cargo:check": "cargo check --workspace",
-    "cargo:test": "cargo test --workspace",
+    "cargo:check": "node tooling/scripts/ensure-tauri-frontend-dist.mjs && cargo check --workspace",
+    "cargo:test": "node tooling/scripts/ensure-tauri-frontend-dist.mjs && cargo test --workspace",
     "validate:harness": "node tooling/scripts/validate-harness.mjs",
     "check:harness": "pnpm validate:harness && git diff --check",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm cargo:check && pnpm cargo:test && pnpm check:harness"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration && pnpm cargo:check && pnpm cargo:test && pnpm check:harness",
+    "prepush": "bash tooling/scripts/prepush.sh"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
