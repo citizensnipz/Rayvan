@@ -1,6 +1,6 @@
 {
-  "name": "@rayvan/plugin-sdk",
-  "version": "0.0.1",
+  "name": "@rayvan/plugin-example-local",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -15,6 +15,9 @@
     "lint": "eslint \"src\" \"tests\" --no-error-on-unmatched-pattern",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@rayvan/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^3.2.3"

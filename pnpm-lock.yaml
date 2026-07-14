@@ -200,13 +200,6 @@ importers:
         version: 3.2.7(@types/node@22.20.1)(jsdom@26.1.0)(tsx@4.23.1)
 
   packages/plugin-sdk:
-    dependencies:
-      '@rayvan/core':
-        specifier: workspace:*
-        version: link:../core
-      '@rayvan/shared':
-        specifier: workspace:*
-        version: link:../shared
     devDependencies:
       vitest:
         specifier: ^3.2.3
@@ -232,6 +225,16 @@ importers:
       react-dom:
         specifier: ^19.1.0
         version: 19.2.7(react@19.2.7)
+
+  plugins/example-local:
+    dependencies:
+      '@rayvan/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      vitest:
+        specifier: ^3.2.3
+        version: 3.2.7(@types/node@22.20.1)(jsdom@26.1.0)(tsx@4.23.1)
 
   plugins/github:
     dependencies:

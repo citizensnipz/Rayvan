@@ -1,58 +1,118 @@
-import type {
-  ConfigurationSnapshot,
-  Resource,
-} from "@rayvan/core";
-
-export interface ConnectionTestResult {
-  ok: boolean;
-  message: string;
-}
-
-export interface DiscoveredResource extends Resource {
-  readonly _discovered?: true;
-}
-
-export interface HealthCheck {
+/**
+ * Generic plugin resource envelope. Provider-specific schemas stay inside plugins.
+ */
+export interface PluginResource {
+  id: string;
+  pluginId: string;
+  providerResourceId: string;
+  resourceType: string;
   name: string;
-  status: "healthy" | "degraded" | "unhealthy";
+
+  projectId?: string;
+  environmentId?: string;
+
+  metadata: Record<string, unknown>;
+
+  pluginVersion: string;
+  schemaVersion: string;
+}
+
+/** Resource discovered before it is bound into a Rayvan project. */
+export interface DiscoveredResource {
+  providerResourceId: string;
+  resourceType: string;
+  name: string;
+  metadata: Record<string, unknown>;
+  schemaVersion: string;
+}
+
+/** Binding between a Rayvan resource id and a provider-native resource. */
+export interface ResourceBinding {
+  resourceId: string;
+  pluginId: string;
+  providerResourceId: string;
+  resourceType: string;
+  projectId?: string;
+  environmentId?: string;
+}
+
+export type ObservedResourceStatus =
+  | "ready"
+  | "degraded"
+  | "unavailable"
+  | "unknown";
+
+export interface ObservedCheck {
+  name: string;
+  status: "pass" | "warn" | "fail";
   message?: string;
 }
 
-export interface HealthSnapshot {
-  integrationId: string;
-  checks: HealthCheck[];
-  collectedAt: string;
+export interface ObservedResourceState {
+  resourceId: string;
+  pluginId: string;
+  resourceType: string;
+  observedAt: string;
+  status: ObservedResourceStatus;
+  attributes: Record<string, unknown>;
+  checks?: ObservedCheck[];
 }
 
-export interface ActionRequest {
-  kind: string;
-  parameters: Record<string, unknown>;
+export interface DesiredResourceState {
+  resourceId: string;
+  pluginId: string;
+  resourceType: string;
+  attributes: Record<string, unknown>;
 }
 
-export interface PluginActionOperation {
+/**
+ * Descriptive, serializable mutation step. Must not contain executable functions.
+ */
+export interface ChangeOperation {
   id: string;
-  kind: string;
+  type: string;
   description: string;
+  path?: string;
+  before?: unknown;
+  after?: unknown;
+  destructive?: boolean;
+  requiresApproval: boolean;
 }
 
-export interface PluginActionPlan {
+export interface ChangePlan {
+  id: string;
+  pluginId: string;
+  resourceId: string;
   summary: string;
-  operations: PluginActionOperation[];
+  operations: ChangeOperation[];
+  warnings: string[];
+  destructive: boolean;
 }
 
-export interface ApprovedPluginActionPlan extends PluginActionPlan {
+/**
+ * Host-approved plan reference. Approval creation and persistence belong to Core.
+ */
+export interface ApprovedChangePlan {
+  plan: ChangePlan;
   approvalId: string;
-  actionPlanId: string;
+  approvedAt: string;
 }
 
-export interface ActionExecutionResult {
+export interface AuthenticateResult {
   ok: boolean;
   message: string;
-  auditEvents: Array<{
-    type: string;
-    occurredAt: string;
-    details?: Record<string, unknown>;
-  }>;
 }
 
-export type { ConfigurationSnapshot };
+export interface ApplyResult {
+  ok: boolean;
+  message: string;
+  appliedOperationIds: string[];
+  resultingState?: ObservedResourceState;
+}
+
+export interface VerificationResult {
+  ok: boolean;
+  message: string;
+  observed?: ObservedResourceState;
+  mismatches?: string[];
+}

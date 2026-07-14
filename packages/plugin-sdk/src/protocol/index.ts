@@ -1,20 +1,24 @@
-export const PLUGIN_PROTOCOL_VERSION = "1";
-
-export type PluginPhase =
-  | "connect"
+/**
+ * End-to-end control-plane lifecycle.
+ * Approve and audit are owned by Rayvan Core / host, not by plugins.
+ */
+export type PluginLifecyclePhase =
+  | "authenticate"
   | "discover"
   | "inspect"
   | "plan"
   | "approve"
-  | "execute"
+  | "apply"
+  | "verify"
   | "audit";
 
-export const PLUGIN_PHASES: readonly PluginPhase[] = [
-  "connect",
+export const PLUGIN_LIFECYCLE_PHASES: readonly PluginLifecyclePhase[] = [
+  "authenticate",
   "discover",
   "inspect",
   "plan",
   "approve",
-  "execute",
+  "apply",
+  "verify",
   "audit",
 ] as const;
