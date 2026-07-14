@@ -72,7 +72,7 @@ pub fn create_project(
 ) -> Result<Project, CommandError> {
     state
         .database
-        .with_repository(|repository| {
+        .mutate_repository(|repository| {
             repository.create(CreateProjectInput { name, description })
         })
         .map_err(CommandError::from)
@@ -87,7 +87,7 @@ pub fn update_project(
 ) -> Result<Project, CommandError> {
     state
         .database
-        .with_repository(|repository| {
+        .mutate_repository(|repository| {
             repository.update(&id, UpdateProjectInput { name, description })
         })
         .map_err(CommandError::from)
@@ -101,7 +101,7 @@ pub fn set_project_archived(
 ) -> Result<Project, CommandError> {
     state
         .database
-        .with_repository(|repository| repository.set_archived(&id, archived))
+        .mutate_repository(|repository| repository.set_archived(&id, archived))
         .map_err(CommandError::from)
 }
 
@@ -109,6 +109,6 @@ pub fn set_project_archived(
 pub fn delete_project(id: String, state: State<'_, AppState>) -> Result<(), CommandError> {
     state
         .database
-        .with_repository(|repository| repository.delete(&id))
+        .mutate_repository(|repository| repository.delete(&id))
         .map_err(CommandError::from)
 }

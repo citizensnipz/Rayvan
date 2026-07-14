@@ -1,12 +1,12 @@
 import { Button, EmptyState, StatusBadge } from "@rayvan/ui";
-import type { Project } from "@rayvan/core";
+import type { Project, ProjectId } from "@rayvan/core";
 
 import { formatDateTime } from "../../lib/format.js";
 import { useProjects } from "./ProjectsContext.js";
 
 interface ProjectsListScreenProps {
-  onCreate: () => void;
-  onOpen: (projectId: string) => void;
+  onCreate?: () => void;
+  onOpen: (projectId: ProjectId) => void;
 }
 
 export function ProjectsListScreen({
@@ -55,11 +55,11 @@ export function ProjectsListScreen({
       >
         <div>
           <h2 style={{ margin: 0 }}>Projects</h2>
-          <p style={{ margin: "0.35rem 0 0", color: "#475569" }}>
+          <p style={{ margin: "0.35rem 0 0", color: "var(--color-text-secondary)" }}>
             Persistent workspaces for the software you operate.
           </p>
         </div>
-        <Button onClick={onCreate}>Create project</Button>
+        {onCreate ? <Button onClick={onCreate}>Create project</Button> : null}
       </div>
 
       <label
@@ -68,7 +68,7 @@ export function ProjectsListScreen({
           alignItems: "center",
           gap: "0.5rem",
           marginTop: "1rem",
-          color: "#334155",
+          color: "var(--color-text-secondary)",
         }}
       >
         <input
@@ -80,11 +80,11 @@ export function ProjectsListScreen({
       </label>
 
       {loading ? (
-        <p style={{ marginTop: "1.5rem", color: "#475569" }}>Loading projects...</p>
+        <p style={{ marginTop: "1.5rem", color: "var(--color-text-secondary)" }}>Loading projects...</p>
       ) : null}
 
       {error ? (
-        <p style={{ marginTop: "1.5rem", color: "#b91c1c" }} role="alert">
+        <p style={{ marginTop: "1.5rem", color: "var(--color-danger)" }} role="alert">
           {error}
         </p>
       ) : null}
@@ -92,7 +92,11 @@ export function ProjectsListScreen({
       {!loading && !error && projects.length === 0 ? (
         <EmptyState
           title="No projects yet."
-          description="Create a project to start organizing environments and resources."
+          description={
+            onCreate
+              ? "Create a project to start organizing environments and resources."
+              : "Projects you create will appear here."
+          }
         />
       ) : null}
 
@@ -112,8 +116,8 @@ export function ProjectsListScreen({
               style={{
                 padding: "1rem",
                 borderRadius: "8px",
-                border: "1px solid #e2e8f0",
-                background: "#ffffff",
+                border: "1px solid var(--color-border)",
+                background: "var(--color-surface)",
               }}
             >
               <div
@@ -138,17 +142,22 @@ export function ProjectsListScreen({
                     <StatusBadge status={project.status} />
                   </div>
                   {project.description ? (
-                    <p style={{ margin: "0.5rem 0 0", color: "#475569" }}>
+                    <p style={{ margin: "0.5rem 0 0", color: "var(--color-text-secondary)" }}>
                       {project.description}
                     </p>
                   ) : null}
-                  <p style={{ margin: "0.5rem 0 0", color: "#64748b", fontSize: "0.875rem" }}>
+                  <p style={{ margin: "0.5rem 0 0", color: "var(--color-text-muted)", fontSize: "0.875rem" }}>
                     Updated {formatDateTime(project.updatedAt)}
                   </p>
                 </div>
 
                 <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                  <Button onClick={() => onOpen(project.id)}>Open</Button>
+                  <Button
+                    disabled={project.status === "archived"}
+                    onClick={() => onOpen(project.id)}
+                  >
+                    Open
+                  </Button>
                   <Button onClick={() => void handleArchiveToggle(project)}>
                     {project.status === "archived" ? "Restore" : "Archive"}
                   </Button>

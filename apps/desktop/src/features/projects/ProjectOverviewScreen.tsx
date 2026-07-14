@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Button, StatusBadge } from "@rayvan/ui";
-import type { Project } from "@rayvan/core";
+import type { Project, ProjectId } from "@rayvan/core";
 
 import { formatDateTime } from "../../lib/format.js";
 import { useProjects } from "./ProjectsContext.js";
 import { ProjectForm } from "./ProjectForm.js";
 
 interface ProjectOverviewScreenProps {
-  projectId: string;
-  onBack: () => void;
+  projectId: ProjectId;
+  onBack?: () => void;
 }
 
 export function ProjectOverviewScreen({
@@ -62,16 +62,16 @@ export function ProjectOverviewScreen({
   }, [getProject, projectId]);
 
   if (loading) {
-    return <p style={{ color: "#475569" }}>Loading project...</p>;
+    return <p style={{ color: "var(--color-text-secondary)" }}>Loading project...</p>;
   }
 
   if (error || !project) {
     return (
       <section>
-        <p style={{ color: "#b91c1c" }} role="alert">
+        <p style={{ color: "var(--color-danger)" }} role="alert">
           {error ?? "Project not found."}
         </p>
-        <Button onClick={onBack}>Back to projects</Button>
+        {onBack ? <Button onClick={onBack}>Back to projects</Button> : null}
       </section>
     );
   }
@@ -96,9 +96,9 @@ export function ProjectOverviewScreen({
 
   return (
     <section>
-      <Button onClick={onBack}>Back to projects</Button>
+      {onBack ? <Button onClick={onBack}>Back to projects</Button> : null}
 
-      <div style={{ marginTop: "1rem" }}>
+      <div style={{ marginTop: onBack ? "1rem" : 0 }}>
         <div
           style={{
             display: "flex",
@@ -112,11 +112,11 @@ export function ProjectOverviewScreen({
         </div>
 
         {project.description ? (
-          <p style={{ margin: "0.75rem 0 0", color: "#475569" }}>
+          <p style={{ margin: "0.75rem 0 0", color: "var(--color-text-secondary)" }}>
             {project.description}
           </p>
         ) : (
-          <p style={{ margin: "0.75rem 0 0", color: "#94a3b8" }}>
+          <p style={{ margin: "0.75rem 0 0", color: "var(--color-text-muted)" }}>
             No description provided.
           </p>
         )}
@@ -126,7 +126,7 @@ export function ProjectOverviewScreen({
             margin: "1.25rem 0",
             display: "grid",
             gap: "0.5rem",
-            color: "#334155",
+            color: "var(--color-text-secondary)",
           }}
         >
           <div>
@@ -146,9 +146,9 @@ export function ProjectOverviewScreen({
             marginTop: "1.5rem",
             padding: "1rem",
             borderRadius: "8px",
-            border: "1px dashed #cbd5e1",
-            background: "#ffffff",
-            color: "#475569",
+            border: "1px dashed var(--color-border-strong)",
+            background: "var(--color-surface)",
+            color: "var(--color-text-secondary)",
           }}
         >
           Resources and environments will be added here in a future release.

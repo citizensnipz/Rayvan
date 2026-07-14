@@ -4,7 +4,9 @@ const fieldStyle = {
   width: "100%",
   padding: "0.5rem 0.75rem",
   borderRadius: "6px",
-  border: "1px solid #cbd5e1",
+  border: "1px solid var(--color-border-strong)",
+  background: "var(--color-surface)",
+  color: "var(--color-text)",
   fontSize: "0.95rem",
   boxSizing: "border-box" as const,
 };

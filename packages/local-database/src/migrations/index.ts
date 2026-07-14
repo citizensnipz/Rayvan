@@ -1,5 +1,9 @@
 import type { DatabaseSchemaVersion } from "../schema/index.js";
-import { MIGRATION_VERSION, PROJECTS_TABLE_MIGRATION } from "../database/migrations.js";
+import {
+  APP_SETTINGS_TABLE_MIGRATION,
+  MIGRATION_VERSION,
+  PROJECTS_TABLE_MIGRATION,
+} from "../database/migrations.js";
 
 export interface Migration {
   version: number;
@@ -9,8 +13,12 @@ export interface Migration {
 
 export const INITIAL_MIGRATIONS: Migration[] = [
   {
-    version: MIGRATION_VERSION,
+    version: 1,
     up: PROJECTS_TABLE_MIGRATION,
+  },
+  {
+    version: 2,
+    up: APP_SETTINGS_TABLE_MIGRATION,
   },
 ];
 
@@ -19,6 +27,9 @@ export function listPendingMigrations(
   target: DatabaseSchemaVersion,
 ): Migration[] {
   return INITIAL_MIGRATIONS.filter(
-    (migration) => migration.version > currentVersion && migration.version <= target.version,
+    (migration) =>
+      migration.version > currentVersion && migration.version <= target.version,
   );
 }
+
+export { MIGRATION_VERSION };

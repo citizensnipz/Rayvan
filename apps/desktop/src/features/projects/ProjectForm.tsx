@@ -66,7 +66,7 @@ export function ProjectForm({
         </label>
 
         {error ? (
-          <p style={{ margin: 0, color: "#b91c1c" }} role="alert">
+          <p style={{ margin: 0, color: "var(--color-danger)" }} role="alert">
             {error}
           </p>
         ) : null}

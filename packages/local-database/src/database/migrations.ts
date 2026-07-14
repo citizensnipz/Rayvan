@@ -17,4 +17,11 @@ CREATE INDEX IF NOT EXISTS idx_projects_status_updated
   ON projects (status, updated_at DESC);
 `;
 
-export const MIGRATION_VERSION = 1;
+export const APP_SETTINGS_TABLE_MIGRATION = `
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL
+);
+`;
+
+export const MIGRATION_VERSION = 2;

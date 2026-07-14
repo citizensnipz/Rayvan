@@ -20,6 +20,8 @@ pub fn run() {
             commands::update_project,
             commands::set_project_archived,
             commands::delete_project,
+            commands::get_current_project_id,
+            commands::set_current_project_id,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Rayvan desktop application");

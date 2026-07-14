@@ -10,9 +10,13 @@ export function Button({
       style={{
         padding: "0.5rem 1rem",
         borderRadius: "6px",
-        border: "1px solid #cbd5e1",
-        background: props.disabled ? "#f1f5f9" : "#ffffff",
-        color: props.disabled ? "#94a3b8" : "#0f172a",
+        border: "1px solid var(--color-border-strong)",
+        background: props.disabled
+          ? "var(--color-surface-muted)"
+          : "var(--color-surface)",
+        color: props.disabled
+          ? "var(--color-text-muted)"
+          : "var(--color-text)",
         cursor: props.disabled ? "not-allowed" : "pointer",
       }}
       {...props}

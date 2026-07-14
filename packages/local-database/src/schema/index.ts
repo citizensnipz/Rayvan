@@ -4,8 +4,8 @@ export interface DatabaseSchemaVersion {
 }
 
 export const CURRENT_SCHEMA_VERSION: DatabaseSchemaVersion = {
-  version: 1,
-  description: "Initial Rayvan local metadata schema",
+  version: 2,
+  description: "Projects plus app settings preferences",
 };
 
 export const ENTITY_TABLES = [
