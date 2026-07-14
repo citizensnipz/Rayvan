@@ -172,6 +172,9 @@ importers:
       '@rayvan/core':
         specifier: workspace:*
         version: link:../core
+      '@rayvan/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
       better-sqlite3:
         specifier: ^11.10.0
         version: 11.10.0

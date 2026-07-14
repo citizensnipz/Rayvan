@@ -3,6 +3,7 @@ import {
   APP_SETTINGS_TABLE_MIGRATION,
   MIGRATION_VERSION,
   PROJECTS_TABLE_MIGRATION,
+  V3_PLUGIN_PERSISTENCE_SQL,
 } from "../database/migrations.js";
 
 export interface Migration {
@@ -19,6 +20,10 @@ export const INITIAL_MIGRATIONS: Migration[] = [
   {
     version: 2,
     up: APP_SETTINGS_TABLE_MIGRATION,
+  },
+  {
+    version: 3,
+    up: V3_PLUGIN_PERSISTENCE_SQL,
   },
 ];
 

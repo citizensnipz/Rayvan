@@ -1,35 +1,4 @@
-export const PROJECTS_TABLE_MIGRATION = `
-CREATE TABLE IF NOT EXISTS schema_migrations (
-  version INTEGER PRIMARY KEY NOT NULL,
-  applied_at TEXT NOT NULL
-);
 
-CREATE TABLE IF NOT EXISTS projects (
-  id TEXT PRIMARY KEY NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_projects_status_updated
-  ON projects (status, updated_at DESC);
-`;
-
-export const APP_SETTINGS_TABLE_MIGRATION = `
-CREATE TABLE IF NOT EXISTS app_settings (
-  key TEXT PRIMARY KEY NOT NULL,
-  value TEXT NOT NULL
-);
-`;
-
-/**
- * Plugin persistence schema (v3).
- * Authoritative source: `crates/local-store/migrations/v3_plugin_persistence.sql`
- * Keep this mirror in sync with `node packages/local-database/scripts/sync-v3-sql-from-rust.mjs`.
- */
-export const V3_PLUGIN_PERSISTENCE_SQL = `
 CREATE TABLE IF NOT EXISTS plugin_installed (
   id TEXT PRIMARY KEY NOT NULL,
   plugin_id TEXT NOT NULL UNIQUE,
@@ -303,6 +272,3 @@ CREATE INDEX IF NOT EXISTS idx_plugin_execution_history_plugin
   ON plugin_execution_history (plugin_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_plugin_execution_history_execution
   ON plugin_execution_history (execution_id);
-`;
-
-export const MIGRATION_VERSION = 3;

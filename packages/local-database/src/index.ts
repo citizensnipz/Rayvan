@@ -3,3 +3,4 @@ export * from "./projects/repository.js";
 export * from "./projects/service.js";
 export * from "./projects/validation.js";
 export * from "./database/migrations.js";
+export * from "./plugins/index.js";

@@ -97,11 +97,86 @@ Rust owns future plugin process lifecycle through `crates/plugin-host`. TypeScri
 
 `plugins/example-local` (`@rayvan/plugin-example-local`) is an in-memory mock local environment plugin that demonstrates discover → inspect → plan → apply → verify without credentials or network access. Lifecycle coverage includes both direct handler unit tests and an execution-service path test.
 
+## Persistence
+
+Plugin lifecycle data is stored locally in dedicated `plugin_*` SQLite tables (schema v3) via `@rayvan/local-database` and `crates/local-store`. Core `Integration` / `ActionPlan` remain separate product concepts and are not overloaded.
+
+Records live in `@rayvan/local-database` (with `@rayvan/plugin-sdk` types). Repository interfaces are complete in-memory for domain tests. better-sqlite3 covers a representative subset (installed plugins, connections, grants, discovery, execution history); remaining entities use the same interfaces and can gain SQLite adapters later. A future cloud store can share the same contracts. Schema authority is the Rust SQL file under `crates/local-store/migrations/`.
+
+### Installed plugin versus connection
+
+An **installed plugin** is a package registration (built-in today) with a manifest snapshot, enablement, and compatibility status. A **plugin connection** is a configured provider account/instance under that installation (for example personal vs org GitHub). Connections may be project-scoped; workspace-wide reuse can be added later without a destructive migration.
+
+### Credentials
+
+Ordinary tables store only `CredentialReferenceRecord` rows (provider, storage key, type). Secret material goes through `CredentialStore`. This pass ships `development_memory` for tests/dev. Production keychain / encrypted store adapters can plug in later without changing connection models. Repository list methods never return secrets.
+
+### Permissions
+
+`PluginPermissionGrantRecord` rows are connection-scoped (optional project/environment narrowing). Active grants require `granted && !revokedAt` and a non-disconnected connection. `PersistentPluginPermissionResolver` (local-database) implements the SDK `PluginPermissionResolver` interface; `InMemoryPluginPermissionResolver` remains for SDK tests. Environment-scoped grants do not broaden to project-only requests.
+
+### Discovery and bindings
+
+**Discovered resources** are generic provider envelopes keyed uniquely by `(connectionId, providerResourceId, resourceType)`. Missing items from a sync are marked `missing` (not deleted). **Resource bindings** attach a discovered resource to a Rayvan project (optional environment). Bindings mean association, not exclusive ownership. Mapping suggestions are advisory and never auto-bind.
+
+### Observed versus desired state
+
+Latest observed state is upserted in `plugin_observed_resource_state` with append-only history in `plugin_observed_resource_state_history`. Desired state is stored separately per binding with monotonic `revision` and optimistic concurrency. Do not store plaintext secrets in either; use credential references.
+
+### Plan, approval, apply, verify
+
+Change plans are immutable versioned JSON envelopes (`planSchemaVersion`). Approvals and rejections are append-only. Apply and verify persist as distinct records. Hosts build `ApprovedChangePlan` from plan + latest approval via `ChangeApprovalService`. Execution history implements `PluginExecutionEventSink` without storing raw IO or secrets.
+
+### Disconnect, disable, uninstall
+
+- **Disconnect:** status `disconnected`, revoke/unusable grants, invalidate bindings, delete credential material, preserve discovered resources / plans / history. Never delete remote provider resources.
+- **Disable / uninstall:** soft-status only (`PluginInstallationService.disable` / `uninstall`); block new executions via `PluginExecutionGuard`; preserve installation, connections, resources, and audit history. Permission grants are scoped: replacing grants for one project/environment does not wipe grants for other scopes.
+
+### Startup reconciliation
+
+`PluginInstallationService.reconcileBuiltIns()` creates missing built-in records, updates version/manifest snapshots, marks unavailable built-ins `missing`, and marks unsupported `rayvanApiVersion` as `incompatible` without auto-enabling.
+
+### Host integration
+
+Wire persistence outside the SDK:
+
+```text
+PluginExecutionGuard → createPluginExecutionStack({
+  permissionResolver: PersistentPluginPermissionResolver,
+  eventSink: PersistentPluginExecutionEventSink,
+})
+```
+
+Do not import repositories from `@rayvan/plugin-sdk`.
+
+### Example lifecycle
+
+```text
+Install built-in Vercel plugin
+→ Create Vercel connection
+→ Store credential reference
+→ Grant read permissions
+→ Discover projects
+→ Bind project to Production
+→ Inspect current state
+→ Save desired state
+→ Generate plan
+→ Approve operations
+→ Apply
+→ Verify
+→ Store audit history
+```
+
+### Future cloud repositories
+
+The same repository interfaces can back a remote store. Local SQLite remains the default offline path.
+
 ## Current status
 
 - Foundational SDK, registry, validation, errors, execution service, and example plugin are implemented
+- Local plugin persistence (models, repos, services, adapters, migrations v3) is implemented in `@rayvan/local-database` / `rayvan-local-store`
 - Official provider plugins (`github`, `vercel`, `supabase`, `runpod`) are placeholders with empty capabilities
-- Dynamic loading, marketplace, signing, sandboxing, and OAuth are not implemented
+- Dynamic loading, marketplace, signing, sandboxing, OAuth, Tauri command wiring, and environments FK are not implemented
 
 See also:
 

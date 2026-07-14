@@ -1,4 +1,4 @@
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
 
 pub const V1_PROJECTS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 "#;
 
+/// Authoritative plugin persistence SQL (also mirrored in TypeScript).
+/// Edit `migrations/v3_plugin_persistence.sql`, then sync TS via
+/// `node packages/local-database/scripts/sync-v3-sql-from-rust.mjs`.
+pub const V3_PLUGIN_PERSISTENCE_SQL: &str =
+    include_str!("../migrations/v3_plugin_persistence.sql");
+
 pub struct MigrationSet {
     pub version: u32,
     pub description: &'static str,
@@ -43,6 +49,11 @@ pub const MIGRATIONS: &[MigrationSet] = &[
         description: "App settings for session preferences",
         sql: V2_APP_SETTINGS_SQL,
     },
+    MigrationSet {
+        version: 3,
+        description: "Plugin persistence tables",
+        sql: V3_PLUGIN_PERSISTENCE_SQL,
+    },
 ];
 
 /// Backward-compatible alias used by earlier call sites.
@@ -51,3 +62,19 @@ pub const INITIAL_MIGRATION: MigrationSet = MigrationSet {
     description: "Initial Rayvan projects schema",
     sql: V1_PROJECTS_SQL,
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v3_sql_defines_plugin_tables() {
+        assert!(V3_PLUGIN_PERSISTENCE_SQL.contains("plugin_installed"));
+        assert!(V3_PLUGIN_PERSISTENCE_SQL.contains("plugin_connections"));
+        assert!(V3_PLUGIN_PERSISTENCE_SQL.contains("plugin_execution_history"));
+        assert!(V3_PLUGIN_PERSISTENCE_SQL.contains(
+            "UNIQUE (connection_id, provider_resource_id, resource_type)"
+        ));
+        assert_eq!(CURRENT_SCHEMA_VERSION, 3);
+    }
+}
