@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@rayvan/config-engine": "workspace:*",
     "@rayvan/core": "workspace:*",
     "@rayvan/local-database": "workspace:*",
     "@rayvan/plugin-sdk": "workspace:*",

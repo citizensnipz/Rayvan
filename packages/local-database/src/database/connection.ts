@@ -6,6 +6,8 @@ import {
   MIGRATION_VERSION,
   PROJECTS_TABLE_MIGRATION,
   V3_PLUGIN_PERSISTENCE_SQL,
+  V4_ENVIRONMENTS_AND_CONFIGURATION_SQL,
+  V5_DESIRED_APPLIED_CONFIGURATION_SQL,
 } from "./migrations.js";
 
 interface MigrationStep {
@@ -17,6 +19,8 @@ const MIGRATION_STEPS: MigrationStep[] = [
   { version: 1, sql: PROJECTS_TABLE_MIGRATION },
   { version: 2, sql: APP_SETTINGS_TABLE_MIGRATION },
   { version: 3, sql: V3_PLUGIN_PERSISTENCE_SQL },
+  { version: 4, sql: V4_ENVIRONMENTS_AND_CONFIGURATION_SQL },
+  { version: 5, sql: V5_DESIRED_APPLIED_CONFIGURATION_SQL },
 ];
 
 export class LocalDatabaseConnection {

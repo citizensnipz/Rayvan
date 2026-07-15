@@ -3,3 +3,5 @@ export * from "./drift/index.js";
 export * from "./requirements/index.js";
 export * from "./explanations/index.js";
 export * from "./redaction/index.js";
+export * from "./matrix/index.js";
+export * from "./status/index.js";

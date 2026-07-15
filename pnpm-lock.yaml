@@ -44,6 +44,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@rayvan/config-engine':
+        specifier: workspace:*
+        version: link:../../packages/config-engine
       '@rayvan/core':
         specifier: workspace:*
         version: link:../../packages/core

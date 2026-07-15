@@ -16,7 +16,9 @@ An **integration** connects a project to a provider plugin such as GitHub or Ver
 
 ## Configuration
 
-**Configuration entries** store metadata about keys: whether they are secret or required, optional descriptions, and optional value fingerprints for drift detection. Secret values are not stored as plain `value` fields in ordinary tables.
+Logical **configuration keys** are project-scoped identities. **Occurrences** record discovered provider values (with value-access controls). **Desired configuration values** are per (key × environment); **applied configuration states** are per (key × environment × resource binding). Targets are derived from occurrences that have a `resourceBindingId` — there is no separate targets table.
+
+Secret / sensitive desired values store only `secretValueRef` and fingerprints in ordinary tables — never plaintext. Editor draft dirty state is separate from persisted `ConfigurationSyncStatus`.
 
 ## Findings
 

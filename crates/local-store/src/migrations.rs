@@ -1,4 +1,4 @@
-pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_SCHEMA_VERSION: u32 = 5;
 
 pub const V1_PROJECTS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -32,6 +32,14 @@ CREATE TABLE IF NOT EXISTS app_settings (
 pub const V3_PLUGIN_PERSISTENCE_SQL: &str =
     include_str!("../migrations/v3_plugin_persistence.sql");
 
+/// Environments + configuration persistence SQL (also mirrored in TypeScript).
+pub const V4_ENVIRONMENTS_CONFIGURATION_SQL: &str =
+    include_str!("../migrations/v4_environments_configuration.sql");
+
+/// Desired + applied configuration persistence SQL (also mirrored in TypeScript).
+pub const V5_DESIRED_APPLIED_CONFIGURATION_SQL: &str =
+    include_str!("../migrations/v5_desired_applied_configuration.sql");
+
 pub struct MigrationSet {
     pub version: u32,
     pub description: &'static str,
@@ -54,6 +62,16 @@ pub const MIGRATIONS: &[MigrationSet] = &[
         description: "Plugin persistence tables",
         sql: V3_PLUGIN_PERSISTENCE_SQL,
     },
+    MigrationSet {
+        version: 4,
+        description: "Environments and configuration persistence",
+        sql: V4_ENVIRONMENTS_CONFIGURATION_SQL,
+    },
+    MigrationSet {
+        version: 5,
+        description: "Desired and applied configuration state",
+        sql: V5_DESIRED_APPLIED_CONFIGURATION_SQL,
+    },
 ];
 
 /// Backward-compatible alias used by earlier call sites.
@@ -75,6 +93,27 @@ mod tests {
         assert!(V3_PLUGIN_PERSISTENCE_SQL.contains(
             "UNIQUE (connection_id, provider_resource_id, resource_type)"
         ));
-        assert_eq!(CURRENT_SCHEMA_VERSION, 3);
+    }
+
+    #[test]
+    fn v4_sql_defines_environments_and_configuration() {
+        assert!(V4_ENVIRONMENTS_CONFIGURATION_SQL.contains("environments"));
+        assert!(V4_ENVIRONMENTS_CONFIGURATION_SQL.contains("configuration_keys"));
+        assert!(V4_ENVIRONMENTS_CONFIGURATION_SQL.contains("configuration_occurrences"));
+        assert!(V4_ENVIRONMENTS_CONFIGURATION_SQL.contains("secret_value_ref"));
+    }
+
+    #[test]
+    fn v5_sql_defines_desired_and_applied() {
+        assert!(V5_DESIRED_APPLIED_CONFIGURATION_SQL.contains("desired_configuration_values"));
+        assert!(V5_DESIRED_APPLIED_CONFIGURATION_SQL.contains("applied_configuration_states"));
+        assert!(V5_DESIRED_APPLIED_CONFIGURATION_SQL.contains("secret_value_ref"));
+        assert!(V5_DESIRED_APPLIED_CONFIGURATION_SQL.contains(
+            "UNIQUE (configuration_key_id, environment_id)"
+        ));
+        assert!(V5_DESIRED_APPLIED_CONFIGURATION_SQL.contains(
+            "UNIQUE (configuration_key_id, environment_id, resource_binding_id)"
+        ));
+        assert_eq!(CURRENT_SCHEMA_VERSION, 5);
     }
 }

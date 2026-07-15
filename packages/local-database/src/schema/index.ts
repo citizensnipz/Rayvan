@@ -1,6 +1,6 @@
 /**
- * Tables that currently exist in the local SQLite schema (v3).
- * Aspirational Core entities (environments, integrations, action_plans, …)
+ * Tables that currently exist in the local SQLite schema (v5).
+ * Aspirational Core entities (integrations, action_plans, …)
  * are intentionally omitted until they have migrations.
  */
 export const PHYSICAL_TABLES = [
@@ -23,6 +23,11 @@ export const PHYSICAL_TABLES = [
   "plugin_change_applies",
   "plugin_change_verifications",
   "plugin_execution_history",
+  "environments",
+  "configuration_keys",
+  "configuration_occurrences",
+  "desired_configuration_values",
+  "applied_configuration_states",
 ] as const;
 
 /** @deprecated Prefer PHYSICAL_TABLES — kept as an alias for existing imports. */
@@ -34,6 +39,7 @@ export interface DatabaseSchemaVersion {
 }
 
 export const CURRENT_SCHEMA_VERSION: DatabaseSchemaVersion = {
-  version: 3,
-  description: "Projects, app settings, and plugin persistence",
+  version: 5,
+  description:
+    "Projects, app settings, plugin persistence, environments, configuration, desired and applied configuration state",
 };

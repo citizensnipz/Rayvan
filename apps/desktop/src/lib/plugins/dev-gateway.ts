@@ -48,7 +48,12 @@ export function createDevPluginIntegrationsGateway(): PluginIntegrationsGateway 
   );
 
   let catalogPromise: Promise<Map<string, InstalledPluginRecord>> | null = null;
-  const seededProjectIds = new Set<string>();
+  /**
+   * In-flight / completed seed promises per project.
+   * Concurrent callers must await the same promise — never treat a project as
+   * seeded before the seed finishes (React Strict Mode / effect races).
+   */
+  const seedByProject = new Map<string, Promise<void>>();
 
   function ensureCatalog(): Promise<Map<string, InstalledPluginRecord>> {
     catalogPromise ??= ensureCatalogInstalled(persistence.installedPlugins);
@@ -58,15 +63,22 @@ export function createDevPluginIntegrationsGateway(): PluginIntegrationsGateway 
   return {
     async ensureProjectSeeded(projectId: string): Promise<void> {
       const installedByPluginId = await ensureCatalog();
-      if (seededProjectIds.has(projectId)) {
-        return;
+      const inflight = seedByProject.get(projectId);
+      if (inflight) {
+        return inflight;
       }
-      seededProjectIds.add(projectId);
-      await seedProjectConnections(
+
+      const promise = seedProjectConnections(
         { connections: persistence.connections, permissionGrants: persistence.permissionGrants },
         projectId,
         installedByPluginId,
-      );
+      ).catch((error: unknown) => {
+        seedByProject.delete(projectId);
+        throw error;
+      });
+
+      seedByProject.set(projectId, promise);
+      return promise;
     },
 
     async listInstalledPlugins(): Promise<InstalledPluginRecord[]> {

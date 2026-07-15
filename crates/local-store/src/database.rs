@@ -278,7 +278,20 @@ mod tests {
                 )
                 .expect("version")
         };
-        assert_eq!(version, 3);
+        assert_eq!(version, crate::migrations::CURRENT_SCHEMA_VERSION);
+
+        let environments_table_exists: bool = {
+            let guard = database.connection.lock().expect("lock");
+            let connection = guard.as_ref().expect("conn");
+            connection
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'environments'",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("environments table")
+        };
+        assert!(environments_table_exists);
 
         std::fs::remove_dir_all(temp_dir).ok();
     }

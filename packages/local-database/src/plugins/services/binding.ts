@@ -9,8 +9,12 @@ import type {
 
 export interface CreateBindingInput {
   projectId: string;
-  /** When set, caller must supply expectedProjectIdForEnvironment matching projectId. */
   environmentId?: string;
+  /**
+   * Caller-asserted project id of the environment (after looking it up).
+   * This service does not load environments — when both are set they must
+   * match `projectId`. Soft validation only until environments FK exists.
+   */
   expectedProjectIdForEnvironment?: string;
   discoveredResourceId: string;
   role?: string;
