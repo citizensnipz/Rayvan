@@ -1,10 +1,13 @@
-import { FeaturePlaceholder } from "../../app/FeaturePlaceholder.js";
+import { useResolvedCurrentProject } from "../../app/CurrentProjectContext.js";
+import { EnvironmentsProvider } from "./EnvironmentsContext.js";
+import { EnvironmentsWorkspace } from "./EnvironmentsWorkspace.js";
 
 export function EnvironmentsPage() {
+  const { currentProjectId } = useResolvedCurrentProject();
+
   return (
-    <FeaturePlaceholder
-      title="Environments"
-      description="Environments for this project will appear here."
-    />
+    <EnvironmentsProvider>
+      <EnvironmentsWorkspace projectId={currentProjectId} />
+    </EnvironmentsProvider>
   );
 }

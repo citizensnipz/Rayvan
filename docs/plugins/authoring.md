@@ -109,6 +109,7 @@ Registration validates the manifest, rejects duplicate plugin IDs, and fails if 
 - Never mutate infrastructure during inspect or plan phases.
 - Do not read secrets from `.env` files directly; request mediated secret access when that host API exists.
 - Do not create approvals, persist audit events, or access the Core database from plugin code.
+- Do not call `PluginExecutionService` or other `src/execution/` host APIs from plugin code. Export handlers only; the host invokes them through the execution service.
 
 ## Current limitations
 

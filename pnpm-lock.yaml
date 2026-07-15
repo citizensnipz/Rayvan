@@ -44,12 +44,18 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@rayvan/config-engine':
+        specifier: workspace:*
+        version: link:../../packages/config-engine
       '@rayvan/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@rayvan/local-database':
         specifier: workspace:*
         version: link:../../packages/local-database
+      '@rayvan/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
       '@rayvan/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -172,6 +178,9 @@ importers:
       '@rayvan/core':
         specifier: workspace:*
         version: link:../core
+      '@rayvan/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
       better-sqlite3:
         specifier: ^11.10.0
         version: 11.10.0

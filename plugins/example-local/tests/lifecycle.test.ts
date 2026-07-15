@@ -94,6 +94,9 @@ describe("@rayvan/plugin-example-local", () => {
       plan: changePlan,
       approvalId: "approval-1",
       approvedAt: "1970-01-01T00:00:00.000Z",
+      approvedOperationIds: changePlan.operations
+        .filter((operation) => operation.requiresApproval)
+        .map((operation) => operation.id),
     };
 
     const applyResult = await plugin.apply!({

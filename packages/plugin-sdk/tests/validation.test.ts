@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PluginValidationError,
   validateApplyResult,
+  validateApprovedChangePlan,
   validateChangePlan,
   validateDiscoveredResource,
   validateObservedResourceState,
@@ -39,6 +40,34 @@ const validManifest: PluginManifest = {
 describe("plugin model validation", () => {
   it("accepts a valid manifest", () => {
     expect(() => validatePluginManifest(validManifest)).not.toThrow();
+  });
+
+  it("accepts controlled presentation metadata", () => {
+    expect(() =>
+      validatePluginManifest({
+        ...validManifest,
+        presentation: {
+          icon: { iconId: "example-local", initials: "EL", label: "Example" },
+          theme: {
+            surface: "neutral",
+            accentColor: "#64748B",
+            foregroundMode: "dark",
+          },
+          supportsMultipleConnections: true,
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects free-form accent colors", () => {
+    expect(() =>
+      validatePluginManifest({
+        ...validManifest,
+        presentation: {
+          theme: { surface: "brand", accentColor: "rgb(255,0,0)" },
+        },
+      }),
+    ).toThrow(PluginValidationError);
   });
 
   it("validates discovered resources and plugin resources", () => {
@@ -94,6 +123,24 @@ describe("plugin model validation", () => {
 
     expect(() => validateChangePlan(plan)).not.toThrow();
     expect(JSON.parse(JSON.stringify(plan))).toEqual(plan);
+
+    expect(() =>
+      validateApprovedChangePlan({
+        plan,
+        approvalId: "approval-1",
+        approvedAt: "1970-01-01T00:00:00.000Z",
+        approvedOperationIds: ["op-1"],
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      validateApprovedChangePlan({
+        plan,
+        approvalId: "approval-1",
+        approvedAt: "1970-01-01T00:00:00.000Z",
+        approvedOperationIds: ["op-1", "op-1"],
+      }),
+    ).toThrow(PluginValidationError);
   });
 
   it("validates observed, apply, and verification results", () => {

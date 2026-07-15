@@ -2,6 +2,8 @@ import { RAYVAN_PLUGIN_API_VERSION } from "../api-version.js";
 import { CAPABILITY_HANDLER_KEYS } from "../capabilities/index.js";
 import type {
   ApplyResult,
+  ApprovedChangePlan,
+  AuthenticateResult,
   ChangeOperation,
   ChangePlan,
   DiscoveredResource,
@@ -9,16 +11,21 @@ import type {
   PluginResource,
   VerificationResult,
 } from "../contracts/index.js";
+import type { PluginExecutionActor } from "../execution/actor.js";
 import {
   PluginValidationError,
   PluginVersionError,
 } from "../errors/index.js";
 import {
+  PLUGIN_ACCENT_COLOR_PATTERN,
   PLUGIN_CAPABILITIES,
+  PLUGIN_FOREGROUND_MODES,
   PLUGIN_PERMISSIONS,
+  PLUGIN_THEME_SURFACES,
   type PluginCapability,
   type PluginManifest,
   type PluginPermission,
+  type PluginPresentationDefinition,
   type PluginResourceTypeDefinition,
 } from "../manifest/index.js";
 import type { RayvanPlugin } from "../plugin.js";
@@ -202,6 +209,94 @@ export function validatePluginManifest(manifest: PluginManifest): void {
     "resource type id",
     pluginId,
   );
+
+  if (manifest.presentation !== undefined) {
+    validatePluginPresentation(manifest.presentation, pluginId);
+  }
+}
+
+function validatePluginPresentation(
+  presentation: PluginPresentationDefinition,
+  pluginId: string,
+): void {
+  if (
+    presentation.supportsMultipleConnections !== undefined &&
+    typeof presentation.supportsMultipleConnections !== "boolean"
+  ) {
+    throw new PluginValidationError(
+      "presentation.supportsMultipleConnections must be a boolean when provided",
+      { pluginId },
+    );
+  }
+
+  if (presentation.icon !== undefined) {
+    const { icon } = presentation;
+    if (typeof icon !== "object" || icon === null) {
+      throw new PluginValidationError("presentation.icon must be an object", {
+        pluginId,
+      });
+    }
+    assertNonEmptyString(icon.label, "presentation.icon.label", pluginId);
+    if (icon.iconId !== undefined) {
+      assertNonEmptyString(icon.iconId, "presentation.icon.iconId", pluginId);
+      if (!/^[a-z][a-z0-9-]*$/.test(icon.iconId)) {
+        throw new PluginValidationError(
+          `presentation.icon.iconId "${icon.iconId}" must be a lowercase kebab-case id`,
+          { pluginId },
+        );
+      }
+    }
+    if (icon.initials !== undefined) {
+      assertNonEmptyString(icon.initials, "presentation.icon.initials", pluginId);
+      if (icon.initials.length > 3) {
+        throw new PluginValidationError(
+          "presentation.icon.initials must be at most 3 characters",
+          { pluginId },
+        );
+      }
+    }
+  }
+
+  if (presentation.theme !== undefined) {
+    const { theme } = presentation;
+    if (typeof theme !== "object" || theme === null) {
+      throw new PluginValidationError("presentation.theme must be an object", {
+        pluginId,
+      });
+    }
+    if (
+      !PLUGIN_THEME_SURFACES.includes(
+        theme.surface as (typeof PLUGIN_THEME_SURFACES)[number],
+      )
+    ) {
+      throw new PluginValidationError(
+        `presentation.theme.surface must be one of: ${PLUGIN_THEME_SURFACES.join(", ")}`,
+        { pluginId },
+      );
+    }
+    if (theme.accentColor !== undefined) {
+      assertNonEmptyString(
+        theme.accentColor,
+        "presentation.theme.accentColor",
+        pluginId,
+      );
+      if (!PLUGIN_ACCENT_COLOR_PATTERN.test(theme.accentColor)) {
+        throw new PluginValidationError(
+          'presentation.theme.accentColor must be a #RRGGBB hex color',
+          { pluginId },
+        );
+      }
+    }
+    if (
+      theme.foregroundMode !== undefined &&
+      !PLUGIN_FOREGROUND_MODES.includes(theme.foregroundMode)
+    ) {
+      throw new PluginValidationError(
+        `presentation.theme.foregroundMode must be one of: ${PLUGIN_FOREGROUND_MODES.join(", ")}`,
+        { pluginId },
+      );
+    }
+  }
 }
 
 export function validatePluginHandlers(plugin: RayvanPlugin): void {
@@ -293,6 +388,89 @@ export function validatePluginResource(
       pluginId: resource.pluginId,
     });
   }
+}
+
+function validatePluginExecutionActor(
+  actor: PluginExecutionActor,
+  field: string,
+  pluginId?: string,
+): void {
+  assertNonEmptyString(actor.id, `${field}.id`, pluginId);
+  const allowedTypes = new Set(["user", "mcp_agent", "system"]);
+  if (!allowedTypes.has(actor.type)) {
+    throw new PluginValidationError(
+      `${field}.type has unsupported value "${String(actor.type)}"`,
+      { pluginId },
+    );
+  }
+  if (
+    actor.type !== "system" &&
+    actor.displayName !== undefined &&
+    typeof actor.displayName !== "string"
+  ) {
+    throw new PluginValidationError(
+      `${field}.displayName must be a string when provided`,
+      { pluginId },
+    );
+  }
+}
+
+export function validateApprovedChangePlan(
+  approved: ApprovedChangePlan,
+): void {
+  const pluginId = approved.plan?.pluginId;
+  validateChangePlan(approved.plan);
+  assertNonEmptyString(approved.approvalId, "approvedPlan.approvalId", pluginId);
+  assertNonEmptyString(approved.approvedAt, "approvedPlan.approvedAt", pluginId);
+
+  if (!Array.isArray(approved.approvedOperationIds)) {
+    throw new PluginValidationError(
+      "approvedPlan.approvedOperationIds must be an array",
+      { pluginId },
+    );
+  }
+  for (const operationId of approved.approvedOperationIds) {
+    assertNonEmptyString(
+      operationId,
+      "approvedPlan.approvedOperationIds[]",
+      pluginId,
+    );
+  }
+  assertUniqueStrings(
+    approved.approvedOperationIds,
+    "approved operation id",
+    pluginId,
+  );
+
+  if (approved.approvedBy !== undefined) {
+    validatePluginExecutionActor(
+      approved.approvedBy,
+      "approvedPlan.approvedBy",
+      pluginId,
+    );
+  }
+
+  if (
+    approved.destructiveApproval !== undefined &&
+    typeof approved.destructiveApproval !== "boolean"
+  ) {
+    throw new PluginValidationError(
+      "approvedPlan.destructiveApproval must be a boolean when provided",
+      { pluginId },
+    );
+  }
+}
+
+export function validateAuthenticateResult(
+  result: AuthenticateResult,
+  pluginId?: string,
+): void {
+  if (typeof result.ok !== "boolean") {
+    throw new PluginValidationError("authenticateResult.ok must be a boolean", {
+      pluginId,
+    });
+  }
+  assertNonEmptyString(result.message, "authenticateResult.message", pluginId);
 }
 
 export function validateChangePlan(plan: ChangePlan): void {

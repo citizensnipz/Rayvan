@@ -5,6 +5,7 @@ use rusqlite::{params, Connection};
 use thiserror::Error;
 
 use crate::migrations::MIGRATIONS;
+use crate::plugins::{PluginRepository, PluginStoreError};
 use crate::projects::{ProjectError, ProjectRepository};
 use crate::settings::{SettingsError, SettingsRepository};
 
@@ -20,6 +21,8 @@ pub enum LocalStoreError {
     Project(#[from] ProjectError),
     #[error("settings error: {0}")]
     Settings(#[from] SettingsError),
+    #[error("plugin store error: {0}")]
+    Plugin(#[from] PluginStoreError),
 }
 
 #[derive(Debug, Clone)]
@@ -117,6 +120,28 @@ impl LocalDatabase {
         Ok(result)
     }
 
+    pub fn with_plugins<T>(
+        &self,
+        operation: impl FnOnce(&PluginRepository) -> Result<T, PluginStoreError>,
+    ) -> Result<T, LocalStoreError> {
+        let guard = self
+            .connection
+            .lock()
+            .map_err(|_| LocalStoreError::NotInitialized)?;
+        let connection = guard.as_ref().ok_or(LocalStoreError::NotInitialized)?;
+        let repository = PluginRepository::new(connection);
+        operation(&repository).map_err(LocalStoreError::Plugin)
+    }
+
+    pub fn mutate_plugins<T>(
+        &self,
+        operation: impl FnOnce(&PluginRepository) -> Result<T, PluginStoreError>,
+    ) -> Result<T, LocalStoreError> {
+        let result = self.with_plugins(operation)?;
+        self.checkpoint()?;
+        Ok(result)
+    }
+
     fn checkpoint(&self) -> Result<(), LocalStoreError> {
         let guard = self
             .connection
@@ -206,6 +231,68 @@ mod tests {
 
         assert_eq!(loaded.name, "Native");
         assert_eq!(restored_id.as_deref(), Some(created.id.as_str()));
+        std::fs::remove_dir_all(temp_dir).ok();
+    }
+
+    #[test]
+    fn initializes_plugin_tables_and_persists_installed_plugin() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "rayvan-local-store-plugins-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let db_path = temp_dir.join("rayvan.db");
+        let database = LocalDatabase::new(&db_path);
+        database.initialize().expect("initialize");
+
+        let installed = database
+            .mutate_plugins(|repository| {
+                repository.create_installed_builtin(
+                    "example.local",
+                    "0.0.1",
+                    r#"{"id":"example.local","name":"Example","version":"0.0.1","publisher":"rayvan","rayvanApiVersion":"1","capabilities":[],"permissions":[],"resourceTypes":[]}"#,
+                )
+            })
+            .expect("create installed plugin");
+
+        let loaded = database
+            .with_plugins(|repository| repository.get_installed_by_plugin_id("example.local"))
+            .expect("load")
+            .expect("exists");
+
+        assert_eq!(loaded.plugin_id, installed.plugin_id);
+        assert_eq!(loaded.status, "installed");
+        assert!(loaded.enabled);
+
+        let version: u32 = {
+            let guard = database
+                .connection
+                .lock()
+                .expect("lock");
+            let connection = guard.as_ref().expect("conn");
+            connection
+                .query_row(
+                    "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("version")
+        };
+        assert_eq!(version, crate::migrations::CURRENT_SCHEMA_VERSION);
+
+        let environments_table_exists: bool = {
+            let guard = database.connection.lock().expect("lock");
+            let connection = guard.as_ref().expect("conn");
+            connection
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'environments'",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("environments table")
+        };
+        assert!(environments_table_exists);
+
         std::fs::remove_dir_all(temp_dir).ok();
     }
 }

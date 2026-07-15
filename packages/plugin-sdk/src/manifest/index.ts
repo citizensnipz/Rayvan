@@ -37,6 +37,21 @@ export interface PluginResourceTypeDefinition {
   schemaVersion: string;
 }
 
+export type {
+  PluginForegroundMode,
+  PluginIconDefinition,
+  PluginPresentationDefinition,
+  PluginThemeDefinition,
+  PluginThemeSurface,
+} from "./presentation.js";
+export {
+  PLUGIN_ACCENT_COLOR_PATTERN,
+  PLUGIN_FOREGROUND_MODES,
+  PLUGIN_THEME_SURFACES,
+} from "./presentation.js";
+
+import type { PluginPresentationDefinition } from "./presentation.js";
+
 /**
  * Versioned plugin identity and capability declaration.
  * Stable string IDs are suitable for storage and serialization.
@@ -55,4 +70,7 @@ export interface PluginManifest {
   permissions: PluginPermission[];
 
   resourceTypes: PluginResourceTypeDefinition[];
+
+  /** Optional host UI presentation (icons/theme). Serializable only. */
+  presentation?: PluginPresentationDefinition;
 }

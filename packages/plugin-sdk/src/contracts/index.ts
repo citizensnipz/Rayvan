@@ -1,3 +1,5 @@
+import type { PluginExecutionActor } from "../execution/actor.js";
+
 /**
  * Generic plugin resource envelope. Provider-specific schemas stay inside plugins.
  */
@@ -91,11 +93,17 @@ export interface ChangePlan {
 
 /**
  * Host-approved plan reference. Approval creation and persistence belong to Core.
+ * Apply must receive this envelope — never a raw unapproved ChangePlan.
  */
 export interface ApprovedChangePlan {
   plan: ChangePlan;
   approvalId: string;
   approvedAt: string;
+  /** Operation ids explicitly approved by the host. Required. */
+  approvedOperationIds: string[];
+  approvedBy?: PluginExecutionActor;
+  /** Must be true when the plan or any operation is destructive. */
+  destructiveApproval?: boolean;
 }
 
 export interface AuthenticateResult {

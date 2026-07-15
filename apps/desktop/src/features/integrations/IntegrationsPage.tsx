@@ -1,10 +1,13 @@
-import { FeaturePlaceholder } from "../../app/FeaturePlaceholder.js";
+import { useResolvedCurrentProject } from "../../app/CurrentProjectContext.js";
+import { IntegrationsProvider } from "./IntegrationsContext.js";
+import { IntegrationsWorkspace } from "./IntegrationsWorkspace.js";
 
 export function IntegrationsPage() {
+  const { currentProjectId } = useResolvedCurrentProject();
+
   return (
-    <FeaturePlaceholder
-      title="Integrations"
-      description="Connected providers and credentials for this project will appear here."
-    />
+    <IntegrationsProvider>
+      <IntegrationsWorkspace projectId={currentProjectId} />
+    </IntegrationsProvider>
   );
 }

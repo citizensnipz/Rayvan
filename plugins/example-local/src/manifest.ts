@@ -25,4 +25,17 @@ export const manifest: PluginManifest = {
       schemaVersion: LOCAL_SERVICE_SCHEMA_VERSION,
     },
   ],
+  presentation: {
+    icon: {
+      iconId: "example-local",
+      initials: "EL",
+      label: "Example Local",
+    },
+    theme: {
+      surface: "neutral",
+      accentColor: "#64748B",
+      foregroundMode: "dark",
+    },
+    supportsMultipleConnections: false,
+  },
 };
