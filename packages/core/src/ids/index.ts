@@ -18,6 +18,12 @@ export type AppliedConfigurationStateId = string & {
   readonly __brand: "AppliedConfigurationStateId";
 };
 export type FindingId = string & { readonly __brand: "FindingId" };
+export type FindingLifecycleEventId = string & {
+  readonly __brand: "FindingLifecycleEventId";
+};
+export type FindingEvaluationRunId = string & {
+  readonly __brand: "FindingEvaluationRunId";
+};
 export type ActionPlanId = string & { readonly __brand: "ActionPlanId" };
 
 export function workspaceId(value: string): WorkspaceId {
@@ -64,6 +70,14 @@ export function appliedConfigurationStateId(
 
 export function findingId(value: string): FindingId {
   return value as FindingId;
+}
+
+export function findingLifecycleEventId(value: string): FindingLifecycleEventId {
+  return value as FindingLifecycleEventId;
+}
+
+export function findingEvaluationRunId(value: string): FindingEvaluationRunId {
+  return value as FindingEvaluationRunId;
 }
 
 export function actionPlanId(value: string): ActionPlanId {

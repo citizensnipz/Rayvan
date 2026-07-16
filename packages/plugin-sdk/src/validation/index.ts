@@ -7,10 +7,28 @@ import type {
   ChangeOperation,
   ChangePlan,
   DiscoveredResource,
+  EvaluateFindingsResult,
   ObservedResourceState,
+  PluginFindingDetection,
+  PluginFindingEvidence,
+  PluginFindingObservedState,
+  PluginFindingRemediation,
+  PluginFindingRuleDefinition,
   PluginResource,
+  PluginSafeFindingValue,
   VerificationResult,
 } from "../contracts/index.js";
+import {
+  isPluginFindingCategory,
+  isPluginFindingSeverity,
+  PLUGIN_FINDING_REMEDIATION_TYPES,
+} from "../contracts/index.js";
+import type {
+  EvaluateFindingsContext,
+  PluginFindingEnvironmentContext,
+  PluginFindingObservedStateContext,
+  PluginFindingResourceContext,
+} from "../contexts/index.js";
 import type { PluginExecutionActor } from "../execution/actor.js";
 import {
   PluginValidationError,
@@ -34,6 +52,42 @@ const PLUGIN_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const RESOURCE_TYPE_ID_PATTERN = /^[a-z][a-z0-9._-]*$/;
+
+/** Keys treated as secret-bearing (aligned with execution/redaction.ts). */
+const SENSITIVE_KEY_PATTERN =
+  /^(token|secret|password|authorization|apiKey|accessToken|refreshToken)$/i;
+
+/**
+ * Obvious secret material in free-text evidence / remediation strings.
+ * Rejected at validation time (host must not persist plaintext secrets).
+ */
+const OBVIOUS_SECRET_PATTERNS: readonly RegExp[] = [
+  /\bBearer\s+[A-Za-z0-9\-._~+/]+=*/i,
+  /\b(?:api[_-]?key|secret|password|token|access[_-]?token|refresh[_-]?token)\s*[:=]\s*\S+/i,
+  /\bsk-(?:live|test)?[_-]?[A-Za-z0-9]{16,}\b/,
+  /\bghp_[A-Za-z0-9]{20,}\b/,
+  /\bgho_[A-Za-z0-9]{20,}\b/,
+  /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/i,
+];
+
+const SAFE_VALUE_ACCESSES = new Set([
+  "readable",
+  "fingerprint",
+  "masked",
+  "locked",
+  "name_only",
+  "unknown",
+]);
+
+const EVIDENCE_TYPES = new Set([
+  "configuration_comparison",
+  "connection_error",
+  "resource_state",
+  "deployment_state",
+  "message",
+]);
+
+const REMEDIATION_TYPES = new Set<string>(PLUGIN_FINDING_REMEDIATION_TYPES);
 
 function assertNonEmptyString(
   value: unknown,
@@ -86,6 +140,90 @@ function isPluginPermission(value: unknown): value is PluginPermission {
   );
 }
 
+function assertNoObviousSecrets(
+  value: string,
+  field: string,
+  pluginId?: string,
+): void {
+  for (const pattern of OBVIOUS_SECRET_PATTERNS) {
+    if (pattern.test(value)) {
+      throw new PluginValidationError(
+        `${field} appears to contain a secret and must be redacted`,
+        { pluginId },
+      );
+    }
+  }
+}
+
+function assertNoSensitiveKeys(
+  value: unknown,
+  field: string,
+  pluginId?: string,
+  seen = new WeakSet<object>(),
+): void {
+  if (value === null || value === undefined) {
+    return;
+  }
+  if (typeof value === "string") {
+    assertNoObviousSecrets(value, field, pluginId);
+    return;
+  }
+  if (typeof value === "function") {
+    throw new PluginValidationError(
+      `${field} must be serializable (functions are not allowed)`,
+      { pluginId },
+    );
+  }
+  if (Array.isArray(value)) {
+    if (seen.has(value)) {
+      return;
+    }
+    seen.add(value);
+    for (let i = 0; i < value.length; i += 1) {
+      assertNoSensitiveKeys(value[i], `${field}[${i}]`, pluginId, seen);
+    }
+    return;
+  }
+  if (typeof value === "object") {
+    if (seen.has(value)) {
+      return;
+    }
+    seen.add(value);
+    for (const [key, nested] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      if (SENSITIVE_KEY_PATTERN.test(key)) {
+        throw new PluginValidationError(
+          `${field}.${key} must not include secret-bearing keys`,
+          { pluginId },
+        );
+      }
+      if (typeof nested === "function") {
+        throw new PluginValidationError(
+          `${field}.${key} must be serializable (functions are not allowed)`,
+          { pluginId },
+        );
+      }
+      assertNoSensitiveKeys(nested, `${field}.${key}`, pluginId, seen);
+    }
+  }
+}
+
+function assertNamespacedRuleId(
+  ruleId: string,
+  pluginId: string,
+  field: string,
+): void {
+  assertNonEmptyString(ruleId, field, pluginId);
+  const prefix = `${pluginId}.`;
+  if (!ruleId.startsWith(prefix) || ruleId.length <= prefix.length) {
+    throw new PluginValidationError(
+      `${field} "${ruleId}" must be namespaced as "${pluginId}...."`,
+      { pluginId },
+    );
+  }
+}
+
 function validateResourceTypeDefinition(
   resourceType: PluginResourceTypeDefinition,
   pluginId: string,
@@ -115,6 +253,36 @@ function validateResourceTypeDefinition(
     throw new PluginValidationError(
       "resourceTypes[].description must be a string when provided",
       { pluginId },
+    );
+  }
+}
+
+function validateFindingRuleDefinition(
+  rule: PluginFindingRuleDefinition,
+  pluginId: string,
+  index: number,
+): void {
+  const field = `findingRules[${index}]`;
+  assertNamespacedRuleId(rule.id, pluginId, `${field}.id`);
+  assertNonEmptyString(rule.name, `${field}.name`, pluginId);
+  assertNonEmptyString(rule.description, `${field}.description`, pluginId);
+  if (!isPluginFindingCategory(rule.category)) {
+    throw new PluginValidationError(
+      `${field}.category has unsupported value "${String(rule.category)}"`,
+      { pluginId },
+    );
+  }
+  if (!isPluginFindingSeverity(rule.defaultSeverity)) {
+    throw new PluginValidationError(
+      `${field}.defaultSeverity has unsupported value "${String(rule.defaultSeverity)}"`,
+      { pluginId },
+    );
+  }
+  if (rule.documentationUrl !== undefined) {
+    assertNonEmptyString(
+      rule.documentationUrl,
+      `${field}.documentationUrl`,
+      pluginId,
     );
   }
 }
@@ -209,6 +377,23 @@ export function validatePluginManifest(manifest: PluginManifest): void {
     "resource type id",
     pluginId,
   );
+
+  if (manifest.findingRules !== undefined) {
+    if (!Array.isArray(manifest.findingRules)) {
+      throw new PluginValidationError(
+        "manifest.findingRules must be an array when provided",
+        { pluginId },
+      );
+    }
+    for (let i = 0; i < manifest.findingRules.length; i += 1) {
+      validateFindingRuleDefinition(manifest.findingRules[i]!, pluginId, i);
+    }
+    assertUniqueStrings(
+      manifest.findingRules.map((rule) => rule.id),
+      "finding rule id",
+      pluginId,
+    );
+  }
 
   if (manifest.presentation !== undefined) {
     validatePluginPresentation(manifest.presentation, pluginId);
@@ -598,5 +783,453 @@ export function validateVerificationResult(
       "verificationResult.mismatches must be an array when provided",
       { pluginId },
     );
+  }
+}
+
+function validateSafeFindingValue(
+  value: PluginSafeFindingValue,
+  field: string,
+  pluginId: string,
+): void {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new PluginValidationError(`${field} must be an object`, { pluginId });
+  }
+  if (!SAFE_VALUE_ACCESSES.has(value.access)) {
+    throw new PluginValidationError(
+      `${field}.access has unsupported value "${String(value.access)}"`,
+      { pluginId },
+    );
+  }
+  if (typeof value.sensitive !== "boolean") {
+    throw new PluginValidationError(`${field}.sensitive must be a boolean`, {
+      pluginId,
+    });
+  }
+  if (value.access === "readable") {
+    if (value.sensitive !== false) {
+      throw new PluginValidationError(
+        `${field}.sensitive must be false for readable values`,
+        { pluginId },
+      );
+    }
+    assertNonEmptyString(value.value, `${field}.value`, pluginId);
+    assertNoObviousSecrets(value.value, `${field}.value`, pluginId);
+  } else if (value.access === "fingerprint") {
+    if (value.sensitive !== true) {
+      throw new PluginValidationError(
+        `${field}.sensitive must be true for fingerprint values`,
+        { pluginId },
+      );
+    }
+    assertNonEmptyString(value.fingerprint, `${field}.fingerprint`, pluginId);
+  } else if (value.access === "masked") {
+    if (value.sensitive !== true) {
+      throw new PluginValidationError(
+        `${field}.sensitive must be true for masked values`,
+        { pluginId },
+      );
+    }
+    if (value.maskedValue !== undefined) {
+      assertNonEmptyString(value.maskedValue, `${field}.maskedValue`, pluginId);
+      assertNoObviousSecrets(value.maskedValue, `${field}.maskedValue`, pluginId);
+    }
+  }
+}
+
+function validateFindingObservedState(
+  state: PluginFindingObservedState,
+  field: string,
+  pluginId: string,
+): void {
+  if (state === null || typeof state !== "object" || Array.isArray(state)) {
+    throw new PluginValidationError(`${field} must be an object`, { pluginId });
+  }
+  validateSafeFindingValue(state.value, `${field}.value`, pluginId);
+  if (state.label !== undefined) {
+    assertNonEmptyString(state.label, `${field}.label`, pluginId);
+  }
+  if (state.inSync !== undefined && typeof state.inSync !== "boolean") {
+    throw new PluginValidationError(
+      `${field}.inSync must be a boolean when provided`,
+      { pluginId },
+    );
+  }
+}
+
+function validateFindingEvidence(
+  evidence: PluginFindingEvidence,
+  field: string,
+  pluginId: string,
+): void {
+  if (evidence === null || typeof evidence !== "object" || Array.isArray(evidence)) {
+    throw new PluginValidationError(`${field} must be an object`, { pluginId });
+  }
+  if (!EVIDENCE_TYPES.has(evidence.type)) {
+    throw new PluginValidationError(
+      `${field}.type has unsupported value "${String(evidence.type)}"`,
+      { pluginId },
+    );
+  }
+
+  switch (evidence.type) {
+    case "configuration_comparison":
+      assertNonEmptyString(
+        evidence.configurationKeyId,
+        `${field}.configurationKeyId`,
+        pluginId,
+      );
+      assertNonEmptyString(
+        evidence.environmentId,
+        `${field}.environmentId`,
+        pluginId,
+      );
+      if (evidence.expectedState !== undefined) {
+        validateSafeFindingValue(
+          evidence.expectedState,
+          `${field}.expectedState`,
+          pluginId,
+        );
+      }
+      if (!Array.isArray(evidence.observedStates)) {
+        throw new PluginValidationError(
+          `${field}.observedStates must be an array`,
+          { pluginId },
+        );
+      }
+      for (let i = 0; i < evidence.observedStates.length; i += 1) {
+        validateFindingObservedState(
+          evidence.observedStates[i]!,
+          `${field}.observedStates[${i}]`,
+          pluginId,
+        );
+      }
+      break;
+    case "connection_error":
+      assertNonEmptyString(evidence.connectionId, `${field}.connectionId`, pluginId);
+      assertNonEmptyString(evidence.safeMessage, `${field}.safeMessage`, pluginId);
+      assertNoObviousSecrets(evidence.safeMessage, `${field}.safeMessage`, pluginId);
+      if (evidence.errorCode !== undefined) {
+        assertNonEmptyString(evidence.errorCode, `${field}.errorCode`, pluginId);
+      }
+      break;
+    case "resource_state":
+      assertNonEmptyString(
+        evidence.resourceBindingId,
+        `${field}.resourceBindingId`,
+        pluginId,
+      );
+      assertNonEmptyString(evidence.state, `${field}.state`, pluginId);
+      assertNoObviousSecrets(evidence.state, `${field}.state`, pluginId);
+      break;
+    case "deployment_state":
+      assertNonEmptyString(evidence.status, `${field}.status`, pluginId);
+      assertNoObviousSecrets(evidence.status, `${field}.status`, pluginId);
+      if (evidence.deploymentId !== undefined) {
+        assertNonEmptyString(
+          evidence.deploymentId,
+          `${field}.deploymentId`,
+          pluginId,
+        );
+      }
+      break;
+    case "message":
+      assertNonEmptyString(evidence.message, `${field}.message`, pluginId);
+      assertNoObviousSecrets(evidence.message, `${field}.message`, pluginId);
+      break;
+    default: {
+      const _exhaustive: never = evidence;
+      void _exhaustive;
+      throw new PluginValidationError(`${field}.type is unsupported`, {
+        pluginId,
+      });
+    }
+  }
+
+  assertNoSensitiveKeys(evidence, field, pluginId);
+}
+
+function validateFindingRemediation(
+  remediation: PluginFindingRemediation,
+  field: string,
+  pluginId: string,
+): void {
+  if (
+    remediation === null ||
+    typeof remediation !== "object" ||
+    Array.isArray(remediation)
+  ) {
+    throw new PluginValidationError(`${field} must be an object`, { pluginId });
+  }
+  if (typeof (remediation as { run?: unknown }).run === "function") {
+    throw new PluginValidationError(
+      `${field} must not include executable callbacks`,
+      { pluginId },
+    );
+  }
+  if (!REMEDIATION_TYPES.has(remediation.type)) {
+    throw new PluginValidationError(
+      `${field}.type has unsupported value "${String(remediation.type)}"`,
+      { pluginId },
+    );
+  }
+
+  assertNonEmptyString(remediation.label, `${field}.label`, pluginId);
+  assertNoObviousSecrets(remediation.label, `${field}.label`, pluginId);
+
+  if (remediation.type === "manual") {
+    assertNonEmptyString(
+      remediation.instructions,
+      `${field}.instructions`,
+      pluginId,
+    );
+    assertNoObviousSecrets(
+      remediation.instructions,
+      `${field}.instructions`,
+      pluginId,
+    );
+  }
+
+  assertNoSensitiveKeys(remediation, field, pluginId);
+}
+
+export function validatePluginFindingDetection(
+  detection: PluginFindingDetection,
+  pluginId: string,
+): void {
+  assertNamespacedRuleId(detection.ruleId, pluginId, "detection.ruleId");
+  assertNonEmptyString(detection.title, "detection.title", pluginId);
+  assertNonEmptyString(detection.summary, "detection.summary", pluginId);
+  assertNoObviousSecrets(detection.title, "detection.title", pluginId);
+  assertNoObviousSecrets(detection.summary, "detection.summary", pluginId);
+
+  if (detection.description !== undefined) {
+    assertNonEmptyString(detection.description, "detection.description", pluginId);
+    assertNoObviousSecrets(
+      detection.description,
+      "detection.description",
+      pluginId,
+    );
+  }
+
+  if (
+    detection.severity !== undefined &&
+    !isPluginFindingSeverity(detection.severity)
+  ) {
+    throw new PluginValidationError(
+      `detection.severity has unsupported value "${String(detection.severity)}"`,
+      { pluginId },
+    );
+  }
+
+  if (
+    detection.scope === null ||
+    typeof detection.scope !== "object" ||
+    Array.isArray(detection.scope)
+  ) {
+    throw new PluginValidationError("detection.scope must be an object", {
+      pluginId,
+    });
+  }
+
+  if (!Array.isArray(detection.evidence)) {
+    throw new PluginValidationError("detection.evidence must be an array", {
+      pluginId,
+    });
+  }
+  for (let i = 0; i < detection.evidence.length; i += 1) {
+    validateFindingEvidence(
+      detection.evidence[i]!,
+      `detection.evidence[${i}]`,
+      pluginId,
+    );
+  }
+
+  if (detection.remediation !== undefined) {
+    validateFindingRemediation(
+      detection.remediation,
+      "detection.remediation",
+      pluginId,
+    );
+  }
+
+  if (!Array.isArray(detection.fingerprintParts)) {
+    throw new PluginValidationError(
+      "detection.fingerprintParts must be an array",
+      { pluginId },
+    );
+  }
+  if (detection.fingerprintParts.length === 0) {
+    throw new PluginValidationError(
+      "detection.fingerprintParts must not be empty",
+      { pluginId },
+    );
+  }
+  for (let i = 0; i < detection.fingerprintParts.length; i += 1) {
+    assertNonEmptyString(
+      detection.fingerprintParts[i],
+      `detection.fingerprintParts[${i}]`,
+      pluginId,
+    );
+  }
+
+  if (detection.metadata !== undefined) {
+    if (
+      detection.metadata === null ||
+      typeof detection.metadata !== "object" ||
+      Array.isArray(detection.metadata)
+    ) {
+      throw new PluginValidationError(
+        "detection.metadata must be an object when provided",
+        { pluginId },
+      );
+    }
+    assertNoSensitiveKeys(detection.metadata, "detection.metadata", pluginId);
+  }
+}
+
+function validateFindingEnvironmentContext(
+  environment: PluginFindingEnvironmentContext,
+  field: string,
+  pluginId: string,
+): void {
+  assertNonEmptyString(environment.id, `${field}.id`, pluginId);
+  if (environment.name !== undefined) {
+    assertNonEmptyString(environment.name, `${field}.name`, pluginId);
+  }
+}
+
+function validateFindingResourceContext(
+  resource: PluginFindingResourceContext,
+  field: string,
+  pluginId: string,
+): void {
+  if (resource === null || typeof resource !== "object" || Array.isArray(resource)) {
+    throw new PluginValidationError(`${field} must be an object`, { pluginId });
+  }
+  if (
+    resource.resourceBindingId === undefined &&
+    resource.discoveredResourceId === undefined
+  ) {
+    throw new PluginValidationError(
+      `${field} must include resourceBindingId or discoveredResourceId`,
+      { pluginId },
+    );
+  }
+}
+
+function validateFindingObservedStateContext(
+  state: PluginFindingObservedStateContext,
+  field: string,
+  pluginId: string,
+): void {
+  validateSafeFindingValue(state.value, `${field}.value`, pluginId);
+}
+
+export function validateEvaluateFindingsContext(
+  context: EvaluateFindingsContext,
+): void {
+  const pluginId = context.pluginId;
+  assertNonEmptyString(context.pluginId, "evaluateFindings.pluginId");
+  assertNonEmptyString(context.projectId, "evaluateFindings.projectId", pluginId);
+  assertNonEmptyString(
+    context.connectionId,
+    "evaluateFindings.connectionId",
+    pluginId,
+  );
+
+  if (context.integrationId !== undefined) {
+    assertNonEmptyString(
+      context.integrationId,
+      "evaluateFindings.integrationId",
+      pluginId,
+    );
+  }
+  if (context.lastEvaluatedAt !== undefined) {
+    assertNonEmptyString(
+      context.lastEvaluatedAt,
+      "evaluateFindings.lastEvaluatedAt",
+      pluginId,
+    );
+  }
+
+  if (!Array.isArray(context.environments)) {
+    throw new PluginValidationError(
+      "evaluateFindings.environments must be an array",
+      { pluginId },
+    );
+  }
+  for (let i = 0; i < context.environments.length; i += 1) {
+    validateFindingEnvironmentContext(
+      context.environments[i]!,
+      `evaluateFindings.environments[${i}]`,
+      pluginId,
+    );
+  }
+
+  if (!Array.isArray(context.resources)) {
+    throw new PluginValidationError(
+      "evaluateFindings.resources must be an array",
+      { pluginId },
+    );
+  }
+  for (let i = 0; i < context.resources.length; i += 1) {
+    validateFindingResourceContext(
+      context.resources[i]!,
+      `evaluateFindings.resources[${i}]`,
+      pluginId,
+    );
+  }
+
+  if (!Array.isArray(context.observedStates)) {
+    throw new PluginValidationError(
+      "evaluateFindings.observedStates must be an array",
+      { pluginId },
+    );
+  }
+  for (let i = 0; i < context.observedStates.length; i += 1) {
+    validateFindingObservedStateContext(
+      context.observedStates[i]!,
+      `evaluateFindings.observedStates[${i}]`,
+      pluginId,
+    );
+  }
+}
+
+export function validateEvaluateFindingsResult(
+  result: EvaluateFindingsResult,
+  pluginId: string,
+): void {
+  if (result === null || typeof result !== "object" || Array.isArray(result)) {
+    throw new PluginValidationError(
+      "evaluateFindingsResult must be an object",
+      { pluginId },
+    );
+  }
+  if (!Array.isArray(result.detections)) {
+    throw new PluginValidationError(
+      "evaluateFindingsResult.detections must be an array",
+      { pluginId },
+    );
+  }
+  if (!Array.isArray(result.warnings)) {
+    throw new PluginValidationError(
+      "evaluateFindingsResult.warnings must be an array",
+      { pluginId },
+    );
+  }
+  for (const warning of result.warnings) {
+    assertNonEmptyString(
+      warning,
+      "evaluateFindingsResult.warnings[]",
+      pluginId,
+    );
+    assertNoObviousSecrets(
+      warning,
+      "evaluateFindingsResult.warnings[]",
+      pluginId,
+    );
+  }
+  for (const detection of result.detections) {
+    validatePluginFindingDetection(detection, pluginId);
   }
 }

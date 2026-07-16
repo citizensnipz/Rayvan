@@ -10,9 +10,9 @@ import type {
   ConfigurationKey,
   ConfigurationOccurrence,
   Environment,
+  FindingRecord,
 } from "@rayvan/core";
 import type {
-  ConfigurationDerivedFinding,
   ConfigurationMatrixViewModel,
   EnvironmentConfigurationStatusViewModel,
 } from "@rayvan/config-engine";
@@ -80,7 +80,7 @@ export function EnvironmentsWorkspace({ projectId }: EnvironmentsWorkspaceProps)
   const [bindings, setBindings] = useState<ResourceBindingRecord[]>([]);
   const [suggestions, setSuggestions] = useState<EnvironmentMappingSuggestionRecord[]>([]);
   const [matrix, setMatrix] = useState<ConfigurationMatrixViewModel | null>(null);
-  const [findings, setFindings] = useState<ConfigurationDerivedFinding[]>([]);
+  const [findings, setFindings] = useState<FindingRecord[]>([]);
   const [syncState, setSyncState] = useState<EnvironmentSyncState | null>(null);
   const [configStatuses, setConfigStatuses] = useState<
     Record<string, EnvironmentConfigurationStatusViewModel>
@@ -118,7 +118,7 @@ export function EnvironmentsWorkspace({ projectId }: EnvironmentsWorkspaceProps)
           gateway.listBindings(activeProjectId),
           gateway.listPendingSuggestions(activeProjectId),
           gateway.getMatrix(activeProjectId),
-          gateway.getDerivedFindings(activeProjectId),
+          gateway.listOpenFindings(activeProjectId),
           gateway.getSyncState(activeProjectId),
         ]);
         if (loadGenerationRef.current !== generation) {

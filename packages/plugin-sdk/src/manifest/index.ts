@@ -4,7 +4,8 @@ export type PluginCapability =
   | "inspect"
   | "plan"
   | "apply"
-  | "verify";
+  | "verify"
+  | "evaluate_findings";
 
 export const PLUGIN_CAPABILITIES: readonly PluginCapability[] = [
   "authenticate",
@@ -13,6 +14,7 @@ export const PLUGIN_CAPABILITIES: readonly PluginCapability[] = [
   "plan",
   "apply",
   "verify",
+  "evaluate_findings",
 ] as const;
 
 export type PluginPermission =
@@ -50,6 +52,7 @@ export {
   PLUGIN_THEME_SURFACES,
 } from "./presentation.js";
 
+import type { PluginFindingRuleDefinition } from "../contracts/index.js";
 import type { PluginPresentationDefinition } from "./presentation.js";
 
 /**
@@ -70,6 +73,12 @@ export interface PluginManifest {
   permissions: PluginPermission[];
 
   resourceTypes: PluginResourceTypeDefinition[];
+
+  /**
+   * Optional finding rule declarations for `evaluate_findings`.
+   * Rule ids must be namespaced as `${pluginId}....`.
+   */
+  findingRules?: PluginFindingRuleDefinition[];
 
   /** Optional host UI presentation (icons/theme). Serializable only. */
   presentation?: PluginPresentationDefinition;

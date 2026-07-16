@@ -1,0 +1,38 @@
+{
+  "name": "@rayvan/daemon",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "rayvand": "./dist/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx --tsconfig tests/tsconfig.typecheck.json watch src/main.ts serve",
+    "start": "node dist/main.js",
+    "serve": "tsx --tsconfig tests/tsconfig.typecheck.json src/main.ts serve",
+    "lint": "eslint \"src\" \"tests\" --no-error-on-unmatched-pattern",
+    "typecheck": "tsc -p tests/tsconfig.typecheck.json",
+    "test": "vitest run --config tests/vitest.config.ts"
+  },
+  "dependencies": {
+    "@rayvan/core": "workspace:*",
+    "@rayvan/daemon-client": "workspace:*",
+    "@rayvan/daemon-contracts": "workspace:*",
+    "@rayvan/findings-engine": "workspace:*",
+    "@rayvan/local-database": "workspace:*",
+    "@rayvan/plugin-sdk": "workspace:*",
+    "@rayvan/shared": "workspace:*",
+    "@rayvan/plugin-example-local": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "vitest": "^3.2.3"
+  }
+}

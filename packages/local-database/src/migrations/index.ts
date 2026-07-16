@@ -6,6 +6,8 @@ import {
   V3_PLUGIN_PERSISTENCE_SQL,
   V4_ENVIRONMENTS_AND_CONFIGURATION_SQL,
   V5_DESIRED_APPLIED_CONFIGURATION_SQL,
+  V6_FINDINGS_SQL,
+  V7_DAEMON_CONTROL_PLANE_SQL,
 } from "../database/migrations.js";
 
 export interface Migration {
@@ -34,6 +36,14 @@ export const INITIAL_MIGRATIONS: Migration[] = [
   {
     version: 5,
     up: V5_DESIRED_APPLIED_CONFIGURATION_SQL,
+  },
+  {
+    version: 6,
+    up: V6_FINDINGS_SQL,
+  },
+  {
+    version: 7,
+    up: V7_DAEMON_CONTROL_PLANE_SQL,
   },
 ];
 

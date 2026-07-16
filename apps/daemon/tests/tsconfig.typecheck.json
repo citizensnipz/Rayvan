@@ -1,0 +1,23 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../../..",
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "rootDir": "../../..",
+    "paths": {
+      "@rayvan/core": ["packages/core/src/index.ts"],
+      "@rayvan/daemon-client": ["packages/daemon-client/src/index.ts"],
+      "@rayvan/daemon-contracts": ["packages/daemon-contracts/src/index.ts"],
+      "@rayvan/findings-engine": ["packages/findings-engine/src/index.ts"],
+      "@rayvan/local-database": ["packages/local-database/src/index.ts"],
+      "@rayvan/local-database/sqlite": ["packages/local-database/src/sqlite.ts"],
+      "@rayvan/plugin-example-local": ["plugins/example-local/src/index.ts"],
+      "@rayvan/plugin-sdk": ["packages/plugin-sdk/src/index.ts"],
+      "@rayvan/shared": ["packages/shared/src/index.ts"]
+    }
+  },
+  "include": ["../src"]
+}

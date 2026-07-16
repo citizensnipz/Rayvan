@@ -1,10 +1,5 @@
-import { FeaturePlaceholder } from "../../app/FeaturePlaceholder.js";
+import { AgentMcpWorkspace } from "./AgentMcpWorkspace.js";
 
 export function AgentMcpPage() {
-  return (
-    <FeaturePlaceholder
-      title="Agent / MCP"
-      description="Local agent and MCP server status for this project will appear here."
-    />
-  );
+  return <AgentMcpWorkspace />;
 }

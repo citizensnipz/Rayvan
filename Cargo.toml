@@ -5,6 +5,7 @@ members = [
     "crates/native-core",
     "crates/plugin-host",
     "crates/credential-store",
+    "crates/daemon-ipc",
     "crates/local-store",
 ]
 

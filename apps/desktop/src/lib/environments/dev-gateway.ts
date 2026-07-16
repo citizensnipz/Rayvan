@@ -1,6 +1,5 @@
 import {
   APPLY_EFFECT_WARNINGS,
-  buildConfigurationDerivedFindings,
   buildConfigurationMatrix,
   deriveEnvironmentStatus,
   type ConfigurationApplyPlan,
@@ -24,6 +23,7 @@ import type {
   ResourceBindingRecord,
 } from "@rayvan/local-database";
 
+import { createDevFindingsGateway } from "../findings/index.js";
 import { DEV_FIXTURE_USER_ACTOR } from "../plugins/dev-fixtures.js";
 import { seedProjectEnvironments } from "./dev-fixtures.js";
 import type {
@@ -74,6 +74,8 @@ function idleSyncState(projectId: string): EnvironmentSyncState {
 export function createDevEnvironmentsGateway(): EnvironmentsGateway {
   const envPersistence = createInMemoryEnvironmentPersistence();
   const pluginPersistence = createInMemoryPluginPersistence();
+  /** Shared findings store for this gateway instance (persisted FindingRecords). */
+  const findingsGateway = createDevFindingsGateway();
 
   const environmentService = new EnvironmentService(envPersistence.environments);
   const configurationService = new ConfigurationService(
@@ -172,6 +174,28 @@ export function createDevEnvironmentsGateway(): EnvironmentsGateway {
         },
         projectId,
       )
+        .then(async () => {
+          const environments = await environmentService.list(projectId, {
+            includeArchived: true,
+          });
+          const connections = await listProjectConnections(projectId);
+          const environmentIdsByName: Record<string, string> = {};
+          for (const environment of environments) {
+            environmentIdsByName[environment.name] = environment.id;
+          }
+          const connectionIdsByPluginId: Record<string, string> = {};
+          for (const connection of connections) {
+            connectionIdsByPluginId[connection.pluginId] = connection.id;
+          }
+          if (findingsGateway.seedForProjectContext) {
+            await findingsGateway.seedForProjectContext(projectId, {
+              environmentIdsByName,
+              connectionIdsByPluginId,
+            });
+          } else {
+            await findingsGateway.ensureProjectSeeded(projectId);
+          }
+        })
         .then(() => undefined)
         .catch((error: unknown) => {
           seedByProject.delete(projectId);
@@ -676,19 +700,26 @@ export function createDevEnvironmentsGateway(): EnvironmentsGateway {
       });
     },
 
-    async getDerivedFindings(projectId: string) {
-      const [environments, keys, occurrences] = await Promise.all([
-        resolveActiveEnvironments(projectId),
-        configurationService.listKeys(projectId),
-        configurationService.listOccurrencesByProject(projectId),
-      ]);
-      const matrix = buildConfigurationMatrix({
+    async listOpenFindings(projectId: string) {
+      await findingsGateway.ensureProjectSeeded(projectId);
+      return findingsGateway.listFindings({
         projectId,
-        environments,
-        keys,
-        occurrences,
+        statuses: ["open", "acknowledged"],
+        includeResolved: false,
       });
-      return buildConfigurationDerivedFindings(matrix, keys, occurrences);
+    },
+
+    async getFindingsSummary(projectId: string) {
+      await findingsGateway.ensureProjectSeeded(projectId);
+      return findingsGateway.getProjectSummary(projectId);
+    },
+
+    async getEnvironmentFindingsSummary(
+      projectId: string,
+      environmentId: string,
+    ) {
+      await findingsGateway.ensureProjectSeeded(projectId);
+      return findingsGateway.getEnvironmentSummary(projectId, environmentId);
     },
 
     async syncWithIntegrations(

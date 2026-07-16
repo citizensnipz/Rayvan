@@ -10,11 +10,14 @@
     "tauri": "tauri",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepare:sidecars": "node ./scripts/prepare-sidecars.mjs"
   },
   "dependencies": {
     "@rayvan/config-engine": "workspace:*",
     "@rayvan/core": "workspace:*",
+    "@rayvan/daemon-contracts": "workspace:*",
+    "@rayvan/findings-engine": "workspace:*",
     "@rayvan/local-database": "workspace:*",
     "@rayvan/plugin-sdk": "workspace:*",
     "@rayvan/shared": "workspace:*",

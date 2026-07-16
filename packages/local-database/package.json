@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@rayvan/core": "workspace:*",
+    "@rayvan/findings-engine": "workspace:*",
     "@rayvan/plugin-sdk": "workspace:*",
     "better-sqlite3": "^11.10.0"
   },

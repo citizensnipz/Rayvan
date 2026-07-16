@@ -6,5 +6,9 @@
     "composite": true
   },
   "include": ["src"],
-  "references": [{ "path": "../core" }, { "path": "../plugin-sdk" }]
+  "references": [
+    { "path": "../core" },
+    { "path": "../findings-engine" },
+    { "path": "../plugin-sdk" }
+  ]
 }

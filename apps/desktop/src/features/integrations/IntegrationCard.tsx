@@ -89,6 +89,14 @@ export function IntegrationCard({ card, onOpen, onAction }: IntegrationCardProps
             {card.pluginName} &middot; {card.publisher}
           </span>
           <IntegrationStatusIndicator status={card.status} label={card.statusLabel} />
+          {(card.findingsCount ?? 0) > 0 && card.findingsLabel ? (
+            <span
+              style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)" }}
+              aria-label={card.findingsLabel}
+            >
+              {card.findingsLabel}
+            </span>
+          ) : null}
         </div>
       </div>
 

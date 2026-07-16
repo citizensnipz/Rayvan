@@ -3,6 +3,8 @@ import {
   type ApplyContext,
   type ChangePlan,
   type DiscoveryContext,
+  type EvaluateFindingsContext,
+  type EvaluateFindingsResult,
   type InspectContext,
   type ObservedResourceState,
   type PlanContext,
@@ -11,6 +13,7 @@ import {
   validateApplyResult,
   validateChangePlan,
   validateDiscoveredResource,
+  validateEvaluateFindingsResult,
   validateVerificationResult,
 } from "@rayvan/plugin-sdk";
 import {
@@ -251,6 +254,55 @@ async function verify(context: VerifyContext) {
   return result;
 }
 
+async function evaluateFindings(
+  context: EvaluateFindingsContext,
+): Promise<EvaluateFindingsResult> {
+  if (context.pluginId !== EXAMPLE_LOCAL_PLUGIN_ID) {
+    throw new PluginExecutionError(
+      EXAMPLE_LOCAL_PLUGIN_ID,
+      "evaluate_findings",
+      `Unexpected plugin id: ${context.pluginId}`,
+    );
+  }
+
+  const services = store.list();
+  const result: EvaluateFindingsResult =
+    services.length === 0
+      ? { detections: [], warnings: [] }
+      : {
+          detections: [
+            {
+              ruleId: `${EXAMPLE_LOCAL_PLUGIN_ID}.service-present`,
+              severity: "info",
+              title: "Local services available",
+              summary: `${services.length} mock local service(s) are present`,
+              scope: {},
+              evidence: [
+                {
+                  type: "message",
+                  message: `Discovered ${services.map((service) => service.providerResourceId).join(", ")}`,
+                },
+              ],
+              fingerprintParts: [
+                EXAMPLE_LOCAL_PLUGIN_ID,
+                "service-present",
+                context.connectionId,
+              ],
+              remediation: {
+                type: "manual",
+                label: "No action required",
+                instructions:
+                  "Informational only — demonstrates evaluate_findings detections.",
+              },
+            },
+          ],
+          warnings: [],
+        };
+
+  validateEvaluateFindingsResult(result, EXAMPLE_LOCAL_PLUGIN_ID);
+  return result;
+}
+
 export const plugin: RayvanPlugin = {
   manifest,
   discover,
@@ -258,6 +310,7 @@ export const plugin: RayvanPlugin = {
   plan,
   apply,
   verify,
+  evaluateFindings,
 };
 
 /** Test helper to restore deterministic fixtures between cases. */

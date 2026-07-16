@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import type { FindingSummary } from "@rayvan/core";
 import type { PluginExecutionActor } from "@rayvan/plugin-sdk";
 import type {
   InstalledPluginRecord,
@@ -13,6 +14,7 @@ import type {
   PluginPermissionGrantRecord,
 } from "@rayvan/local-database";
 
+import { createDevFindingsGateway } from "../../lib/findings/index.js";
 import { AddIntegrationDialog } from "./AddIntegrationDialog.js";
 import { IntegrationDetail } from "./IntegrationDetail.js";
 import { useIntegrationsGateway } from "./IntegrationsContext.js";
@@ -53,12 +55,16 @@ interface IntegrationsWorkspaceProps {
 
 export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps) {
   const gateway = useIntegrationsGateway();
+  const [findingsGateway] = useState(() => createDevFindingsGateway());
   const loadGenerationRef = useRef(0);
 
   const [installedPlugins, setInstalledPlugins] = useState<InstalledPluginRecord[]>([]);
   const [connections, setConnections] = useState<PluginConnectionRecord[]>([]);
   const [grantsByConnectionId, setGrantsByConnectionId] = useState<
     Record<string, PluginPermissionGrantRecord[]>
+  >({});
+  const [summariesByConnectionId, setSummariesByConnectionId] = useState<
+    Record<string, FindingSummary>
   >({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +88,34 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
         }
         setInstalledPlugins(nextInstalled);
         setConnections(nextConnections);
+
+        const connectionIdsByPluginId: Record<string, string> = {};
+        for (const connection of nextConnections) {
+          connectionIdsByPluginId[connection.pluginId] = connection.id;
+        }
+        if (findingsGateway.seedForProjectContext) {
+          await findingsGateway.seedForProjectContext(activeProjectId, {
+            connectionIdsByPluginId,
+          });
+        } else {
+          await findingsGateway.ensureProjectSeeded(activeProjectId);
+        }
+        if (loadGenerationRef.current !== generation) {
+          return;
+        }
+        const summaryEntries = await Promise.all(
+          nextConnections.map(async (connection) => {
+            const summary = await findingsGateway.getIntegrationSummary(
+              activeProjectId,
+              connection.id,
+            );
+            return [connection.id, summary] as const;
+          }),
+        );
+        if (loadGenerationRef.current !== generation) {
+          return;
+        }
+        setSummariesByConnectionId(Object.fromEntries(summaryEntries));
       } catch (refreshError) {
         if (loadGenerationRef.current !== generation) {
           return;
@@ -97,7 +131,7 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
         }
       }
     },
-    [gateway],
+    [gateway, findingsGateway],
   );
 
   // Reset workspace tabs whenever the current project changes, then seed
@@ -109,11 +143,13 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
     setDialogOpen(false);
     setBanner(null);
     setGrantsByConnectionId({});
+    setSummariesByConnectionId({});
     setError(null);
 
     if (!projectId) {
       setInstalledPlugins([]);
       setConnections([]);
+      setSummariesByConnectionId({});
       setLoading(false);
       return;
     }
@@ -159,10 +195,16 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
       connections
         .map((connection) => {
           const installed = installedByPluginId.get(connection.installedPluginId);
-          return installed ? mapConnectionToCardViewModel(connection, installed) : null;
+          return installed
+            ? mapConnectionToCardViewModel(
+                connection,
+                installed,
+                summariesByConnectionId[connection.id] ?? null,
+              )
+            : null;
         })
         .filter((card): card is NonNullable<typeof card> => card !== null),
-    [connections, installedByPluginId],
+    [connections, installedByPluginId, summariesByConnectionId],
   );
 
   const libraryPlugins = useMemo(

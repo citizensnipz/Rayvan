@@ -106,7 +106,12 @@ export class ChangeApprovalService {
     if (!plan) {
       throw new PluginDomainError(`Change plan not found: ${changePlanId}`);
     }
-    if (plan.status !== "approved" && plan.status !== "applying") {
+    if (
+      plan.status !== "approved" &&
+      plan.status !== "applying" &&
+      plan.status !== "applied" &&
+      plan.status !== "failed"
+    ) {
       throw new PluginDomainError(
         `Plan is not approved (status=${plan.status})`,
       );

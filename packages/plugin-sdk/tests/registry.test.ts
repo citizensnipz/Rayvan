@@ -69,7 +69,7 @@ describe("InProcessPluginRegistry", () => {
     ).toThrow(PluginVersionError);
   });
 
-  it("rejects handler/capability mismatches", () => {
+  it("rejects handler/capability mismatches including evaluate_findings", () => {
     const registry = new InProcessPluginRegistry();
 
     expect(() =>
@@ -86,6 +86,45 @@ describe("InProcessPluginRegistry", () => {
         },
       }),
     ).toThrow(/discover/);
+
+    expect(() =>
+      registry.register({
+        manifest: baseManifest({ capabilities: ["evaluate_findings"] }),
+      }),
+    ).toThrow(/evaluateFindings/);
+
+    expect(() =>
+      registry.register({
+        manifest: baseManifest(),
+        async evaluateFindings() {
+          return { detections: [], warnings: [] };
+        },
+      }),
+    ).toThrow(/evaluate_findings/);
+  });
+
+  it("registers evaluate_findings when handler and capability match", () => {
+    const registry = new InProcessPluginRegistry();
+    registry.register({
+      manifest: baseManifest({
+        id: "findings-demo",
+        capabilities: ["evaluate_findings"],
+        findingRules: [
+          {
+            id: "findings-demo.ready",
+            name: "Ready",
+            description: "Demo rule",
+            category: "other",
+            defaultSeverity: "info",
+          },
+        ],
+      }),
+      async evaluateFindings() {
+        return { detections: [], warnings: [] };
+      },
+    });
+
+    expect(registry.supports("findings-demo", "evaluate_findings")).toBe(true);
   });
 
   it("reports capability support and unregisters plugins", () => {

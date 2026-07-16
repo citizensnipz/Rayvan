@@ -2,6 +2,7 @@ import type {
   ApplyContext,
   AuthenticateContext,
   DiscoveryContext,
+  EvaluateFindingsContext,
   InspectContext,
   PlanContext,
   VerifyContext,
@@ -45,10 +46,16 @@ export interface VerifyExecutionRequest extends PluginExecutionRequestBase {
   context: VerifyContext;
 }
 
+export interface EvaluateFindingsExecutionRequest
+  extends PluginExecutionRequestBase {
+  context: EvaluateFindingsContext;
+}
+
 export type PluginExecutionRequest =
   | AuthenticateExecutionRequest
   | DiscoverExecutionRequest
   | InspectExecutionRequest
   | PlanExecutionRequest
   | ApplyExecutionRequest
-  | VerifyExecutionRequest;
+  | VerifyExecutionRequest
+  | EvaluateFindingsExecutionRequest;

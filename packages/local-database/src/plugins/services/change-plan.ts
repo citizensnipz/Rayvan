@@ -73,6 +73,10 @@ export class ChangePlanService {
     return this.plans.getById(id);
   }
 
+  async listByProjectId(projectId: string): Promise<ChangePlanRecord[]> {
+    return this.plans.listByProjectId(projectId);
+  }
+
   async requireCurrent(planId: string): Promise<ChangePlanRecord> {
     const plan = await this.plans.getById(planId);
     if (!plan) {

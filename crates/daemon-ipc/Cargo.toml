@@ -1,0 +1,22 @@
+[package]
+name = "rayvan-daemon-ipc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Local framed JSON-RPC client for rayvand"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
+interprocess = "2"
+rayvan-credential-store = { path = "../credential-store" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"

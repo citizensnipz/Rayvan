@@ -2,7 +2,9 @@ import { useMemo, useState, type CSSProperties } from "react";
 import type { ProjectId } from "@rayvan/core";
 import { Button } from "@rayvan/ui";
 
+import rayvanLogoMed from "../../assets/brand/rayvan-logo-med.png";
 import { useProjects } from "../../features/projects/ProjectsContext.js";
+import { useDaemonConnection } from "../../lib/daemon/index.js";
 import { useResolvedCurrentProject } from "../CurrentProjectContext.js";
 import { useAppNavigation } from "../navigation/AppNavigationContext.js";
 
@@ -17,6 +19,19 @@ const navStyle: CSSProperties = {
 };
 
 const brandStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.55rem",
+  margin: 0,
+};
+
+const brandLogoStyle: CSSProperties = {
+  display: "block",
+  height: "1.75rem",
+  width: "auto",
+};
+
+const brandNameStyle: CSSProperties = {
   margin: 0,
   fontFamily: '"Quicksand", sans-serif',
   fontSize: "1.25rem",
@@ -51,11 +66,27 @@ const menuItemStyle: CSSProperties = {
   cursor: "pointer",
 };
 
+const daemonBannerStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "0.75rem",
+  marginLeft: "auto",
+  padding: "0.35rem 0.75rem",
+  borderRadius: "8px",
+  border: "1px solid var(--color-border-strong)",
+  background: "var(--color-surface-muted)",
+  color: "var(--color-text)",
+  fontSize: "0.85rem",
+  maxWidth: "28rem",
+};
+
 export function TopNav() {
   const { projects } = useProjects();
   const { currentProject, hasProject, setCurrentProjectId } =
     useResolvedCurrentProject();
   const { openCreateProject, setActiveSection } = useAppNavigation();
+  const { loading, connected, lastError, reconnect } = useDaemonConnection();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const activeProjects = useMemo(
@@ -69,15 +100,26 @@ export function TopNav() {
     setMenuOpen(false);
   }
 
-  const selectorLabel = hasProject && currentProject
-    ? currentProject.name
-    : activeProjects.length > 0
-      ? "Select project"
-      : null;
+  const selectorLabel =
+    hasProject && currentProject
+      ? currentProject.name
+      : activeProjects.length > 0
+        ? "Select project"
+        : null;
+
+  const showDaemonBanner = !loading && !connected;
 
   return (
     <header style={navStyle}>
-      <h1 style={brandStyle}>Rayvan</h1>
+      <div style={brandStyle}>
+        <img
+          src={rayvanLogoMed}
+          alt=""
+          aria-hidden="true"
+          style={brandLogoStyle}
+        />
+        <h1 style={brandNameStyle}>Rayvan</h1>
+      </div>
       {selectorLabel ? (
         <div style={{ position: "relative" }}>
           <Button
@@ -140,6 +182,15 @@ export function TopNav() {
           + Create new project
         </Button>
       )}
+      {showDaemonBanner ? (
+        <div role="status" style={daemonBannerStyle}>
+          <span>
+            Local daemon offline
+            {lastError ? `: ${lastError}` : ". Start rayvand or retry."}
+          </span>
+          <Button onClick={() => void reconnect()}>Retry</Button>
+        </div>
+      ) : null}
     </header>
   );
 }

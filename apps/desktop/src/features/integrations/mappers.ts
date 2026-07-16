@@ -1,3 +1,4 @@
+import type { FindingSeverity, FindingSummary } from "@rayvan/core";
 import type {
   InstalledPluginRecord,
   PluginConnectionRecord,
@@ -27,6 +28,40 @@ const STATUS_LABELS: Record<IntegrationStatus, string> = {
   disconnected: "Disconnected",
   error: "Error",
 };
+
+const SEVERITY_LABELS: Record<FindingSeverity, string> = {
+  critical: "Critical",
+  error: "Error",
+  warning: "Warning",
+  info: "Informational",
+};
+
+export function mapFindingsFromIntegrationSummary(
+  summary?: FindingSummary | null,
+): {
+  findingsCount?: number;
+  findingsLabel?: string;
+  highestSeverity?: FindingSeverity;
+} {
+  if (!summary) {
+    return {};
+  }
+  const findingsCount = summary.openCount + summary.acknowledgedCount;
+  const severityText = summary.highestSeverity
+    ? SEVERITY_LABELS[summary.highestSeverity]
+    : undefined;
+  const findingsLabel =
+    findingsCount === 0
+      ? "0 open findings"
+      : severityText
+        ? `${findingsCount} open finding${findingsCount === 1 ? "" : "s"} · highest ${severityText}`
+        : `${findingsCount} open finding${findingsCount === 1 ? "" : "s"}`;
+  return {
+    findingsCount,
+    findingsLabel,
+    highestSeverity: summary.highestSeverity,
+  };
+}
 
 function readMetadataFields(
   metadata: Record<string, unknown>,
@@ -90,8 +125,10 @@ export function resolveIntegrationStatus(
 
 export function mapIconFromManifest(manifest: PluginManifest): IntegrationIconViewModel {
   const icon = manifest.presentation?.icon;
-  const label = icon?.label ?? manifest.name;
-  const initials = icon?.initials ?? manifest.name.slice(0, 2).toUpperCase();
+  const fallbackName = manifest.name?.trim() || manifest.id || "Plugin";
+  const label = icon?.label ?? fallbackName;
+  const initials =
+    icon?.initials ?? fallbackName.slice(0, 2).toUpperCase();
   return { iconId: icon?.iconId, initials, label };
 }
 
@@ -115,9 +152,11 @@ function cardActionsFor(): IntegrationCardAction[] {
 export function mapConnectionToCardViewModel(
   connection: PluginConnectionRecord,
   installed: InstalledPluginRecord,
+  findingsSummary?: FindingSummary | null,
 ): PluginIntegrationCardViewModel {
   const manifest = installed.manifestSnapshot;
   const { status, label } = resolveIntegrationStatus(connection);
+  const findings = mapFindingsFromIntegrationSummary(findingsSummary);
 
   return {
     connectionId: connection.id,
@@ -133,6 +172,7 @@ export function mapConnectionToCardViewModel(
     statusLabel: label,
     fields: readMetadataFields(connection.metadata, "uiCard"),
     actions: cardActionsFor(),
+    ...findings,
   };
 }
 

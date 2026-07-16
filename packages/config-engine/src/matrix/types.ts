@@ -54,12 +54,17 @@ export interface ConfigurationMatrixViewModel {
   };
 }
 
+/**
+ * @deprecated Prefer FindingDetection from `@rayvan/findings-engine`.
+ * Categories use the product Findings taxonomy for transitional callers.
+ */
 export interface ConfigurationDerivedFinding {
   id: string;
   projectId: string;
   environmentId?: string;
   severity: "info" | "warning" | "error";
-  category: "missing_configuration" | "configuration_drift" | "health";
+  /** Product taxonomy: configuration | drift | other (was missing_configuration / configuration_drift / health). */
+  category: "configuration" | "drift" | "other";
   title: string;
   description: string;
   configurationKeyId?: string;

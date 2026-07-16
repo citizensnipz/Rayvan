@@ -447,4 +447,294 @@ CREATE INDEX IF NOT EXISTS idx_applied_configuration_states_binding
   ON applied_configuration_states (resource_binding_id);
 `;
 
-export const MIGRATION_VERSION = 5;
+/**
+ * Findings persistence schema (v6).
+ * Authoritative source: `crates/local-store/migrations/v6_findings.sql`
+ * Keep this mirror in sync with `node packages/local-database/scripts/sync-v6-sql-from-rust.mjs`.
+ */
+export const V6_FINDINGS_SQL = `
+CREATE TABLE IF NOT EXISTS findings (
+  id TEXT PRIMARY KEY NOT NULL,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  rule_id TEXT NOT NULL,
+  source_json TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN (
+    'configuration', 'environment', 'integration', 'resource', 'deployment',
+    'security', 'availability', 'drift', 'permission', 'mapping', 'other'
+  )),
+  severity TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'error', 'critical')),
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL CHECK (status IN (
+    'open', 'acknowledged', 'resolved', 'dismissed', 'suppressed'
+  )),
+  fingerprint TEXT NOT NULL,
+  fingerprint_version TEXT NOT NULL,
+  environment_id TEXT REFERENCES environments(id) ON DELETE SET NULL,
+  integration_id TEXT,
+  connection_id TEXT,
+  discovered_resource_id TEXT,
+  resource_binding_id TEXT,
+  configuration_key_id TEXT REFERENCES configuration_keys(id) ON DELETE SET NULL,
+  change_plan_id TEXT,
+  deployment_id TEXT,
+  evidence_json TEXT NOT NULL,
+  remediation_json TEXT,
+  first_detected_at TEXT NOT NULL,
+  last_detected_at TEXT NOT NULL,
+  occurrence_count INTEGER NOT NULL CHECK (occurrence_count >= 0),
+  acknowledged_at TEXT,
+  acknowledged_by_json TEXT,
+  dismissed_at TEXT,
+  dismissed_by_json TEXT,
+  dismissal_reason TEXT,
+  resolved_at TEXT,
+  resolution_json TEXT,
+  suppressed_until TEXT,
+  last_evaluation_run_id TEXT,
+  metadata_json TEXT NOT NULL,
+  schema_version TEXT NOT NULL,
+  UNIQUE (project_id, fingerprint)
+);
+
+CREATE INDEX IF NOT EXISTS idx_findings_project_status
+  ON findings (project_id, status);
+CREATE INDEX IF NOT EXISTS idx_findings_project_severity
+  ON findings (project_id, severity);
+CREATE INDEX IF NOT EXISTS idx_findings_project_category
+  ON findings (project_id, category);
+CREATE INDEX IF NOT EXISTS idx_findings_project_environment
+  ON findings (project_id, environment_id);
+CREATE INDEX IF NOT EXISTS idx_findings_project_connection
+  ON findings (project_id, connection_id);
+CREATE INDEX IF NOT EXISTS idx_findings_resource_binding
+  ON findings (resource_binding_id);
+CREATE INDEX IF NOT EXISTS idx_findings_configuration_key
+  ON findings (configuration_key_id);
+CREATE INDEX IF NOT EXISTS idx_findings_last_detected
+  ON findings (last_detected_at);
+
+CREATE TABLE IF NOT EXISTS finding_lifecycle_events (
+  id TEXT PRIMARY KEY NOT NULL,
+  finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN (
+    'created', 'updated', 'reopened', 'acknowledged', 'dismissed',
+    'suppressed', 'resolved', 'severity_changed'
+  )),
+  actor_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  previous_status TEXT CHECK (previous_status IS NULL OR previous_status IN (
+    'open', 'acknowledged', 'resolved', 'dismissed', 'suppressed'
+  )),
+  next_status TEXT CHECK (next_status IS NULL OR next_status IN (
+    'open', 'acknowledged', 'resolved', 'dismissed', 'suppressed'
+  )),
+  reason TEXT,
+  metadata_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_finding_lifecycle_events_finding_created
+  ON finding_lifecycle_events (finding_id, created_at);
+
+CREATE TABLE IF NOT EXISTS finding_evaluation_runs (
+  id TEXT PRIMARY KEY NOT NULL,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  scope_json TEXT NOT NULL,
+  trigger TEXT NOT NULL CHECK (trigger IN (
+    'manual', 'startup', 'environment_sync', 'integration_sync',
+    'configuration_inspection', 'apply_completed', 'verification_completed',
+    'connection_state_changed', 'desired_configuration_saved'
+  )),
+  status TEXT NOT NULL CHECK (status IN (
+    'succeeded', 'partially_succeeded', 'failed', 'cancelled'
+  )),
+  started_at TEXT NOT NULL,
+  finished_at TEXT NOT NULL,
+  evaluators_run INTEGER NOT NULL CHECK (evaluators_run >= 0),
+  evaluators_failed INTEGER NOT NULL CHECK (evaluators_failed >= 0),
+  findings_created INTEGER NOT NULL CHECK (findings_created >= 0),
+  findings_updated INTEGER NOT NULL CHECK (findings_updated >= 0),
+  findings_reopened INTEGER NOT NULL CHECK (findings_reopened >= 0),
+  findings_resolved INTEGER NOT NULL CHECK (findings_resolved >= 0),
+  safe_errors_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_finding_evaluation_runs_project_started
+  ON finding_evaluation_runs (project_id, started_at);
+`;
+
+export const V7_DAEMON_CONTROL_PLANE_SQL = `
+-- Daemon control plane: local clients, operations, approvals, audit, locks.
+
+CREATE TABLE IF NOT EXISTS daemon_metadata (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS local_clients (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('desktop', 'mcp', 'cli')),
+  status TEXT NOT NULL CHECK (status IN ('active', 'revoked', 'expired')),
+  permission_profile_id TEXT NOT NULL,
+  project_scopes_json TEXT NOT NULL,
+  environment_scopes_json TEXT,
+  approval_policy_json TEXT NOT NULL,
+  credential_reference_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_connected_at TEXT,
+  last_activity_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_local_clients_status
+  ON local_clients (status);
+
+CREATE TABLE IF NOT EXISTS mcp_permission_profiles (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  built_in INTEGER NOT NULL CHECK (built_in IN (0, 1)),
+  permissions_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS operations (
+  id TEXT PRIMARY KEY NOT NULL,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  type TEXT NOT NULL CHECK (type IN (
+    'integration_sync', 'environment_sync', 'resource_inspection',
+    'findings_scan', 'change_plan_generation', 'change_apply',
+    'change_verification', 'plugin_operation'
+  )),
+  status TEXT NOT NULL CHECK (status IN (
+    'queued', 'running', 'waiting_for_approval', 'succeeded',
+    'partially_succeeded', 'failed', 'cancelled', 'timed_out'
+  )),
+  actor_json TEXT NOT NULL,
+  progress_json TEXT,
+  started_at TEXT,
+  finished_at TEXT,
+  correlation_id TEXT NOT NULL,
+  idempotency_key TEXT,
+  safe_error_json TEXT,
+  result_summary_json TEXT,
+  approval_request_id TEXT,
+  change_plan_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_operations_idempotency
+  ON operations (idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_operations_project_created
+  ON operations (project_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_operations_status
+  ON operations (status);
+
+CREATE TABLE IF NOT EXISTS operation_events (
+  id TEXT PRIMARY KEY NOT NULL,
+  operation_id TEXT NOT NULL REFERENCES operations(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  message TEXT,
+  progress_json TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_operation_events_operation_created
+  ON operation_events (operation_id, created_at);
+
+CREATE TABLE IF NOT EXISTS approval_requests (
+  id TEXT PRIMARY KEY NOT NULL,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  operation_id TEXT REFERENCES operations(id) ON DELETE SET NULL,
+  change_plan_id TEXT,
+  requested_by_json TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN (
+    'local_mutation', 'remote_apply', 'destructive_operation', 'sensitive_value_access'
+  )),
+  summary TEXT NOT NULL,
+  safe_details_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN (
+    'pending', 'approved', 'denied', 'expired', 'cancelled'
+  )),
+  created_at TEXT NOT NULL,
+  expires_at TEXT,
+  decided_at TEXT,
+  decided_by_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_approval_requests_status_created
+  ON approval_requests (status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS mcp_audit_events (
+  id TEXT PRIMARY KEY NOT NULL,
+  client_id TEXT,
+  tool_name TEXT,
+  daemon_method TEXT,
+  project_id TEXT,
+  environment_id TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  status TEXT NOT NULL CHECK (status IN (
+    'succeeded', 'failed', 'denied', 'cancelled', 'pending_approval'
+  )),
+  operation_id TEXT,
+  approval_id TEXT,
+  affected_object_ids_json TEXT NOT NULL,
+  safe_summary TEXT NOT NULL,
+  error_code TEXT,
+  contacted_remote INTEGER NOT NULL CHECK (contacted_remote IN (0, 1)),
+  mutated_remote INTEGER NOT NULL CHECK (mutated_remote IN (0, 1)),
+  correlation_id TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_audit_events_client_started
+  ON mcp_audit_events (client_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_audit_events_project_started
+  ON mcp_audit_events (project_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS resource_locks (
+  id TEXT PRIMARY KEY NOT NULL,
+  resource_key TEXT NOT NULL UNIQUE,
+  operation_id TEXT NOT NULL REFERENCES operations(id) ON DELETE CASCADE,
+  holder_actor_json TEXT NOT NULL,
+  acquired_at TEXT NOT NULL,
+  expires_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS idempotency_records (
+  idempotency_key TEXT PRIMARY KEY NOT NULL,
+  method TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  response_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS plugin_mcp_actions (
+  id TEXT PRIMARY KEY NOT NULL,
+  plugin_id TEXT NOT NULL,
+  namespaced_id TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL,
+  input_schema_json TEXT NOT NULL,
+  output_schema_json TEXT NOT NULL,
+  risk TEXT NOT NULL CHECK (risk IN (
+    'read', 'local_write', 'remote_read', 'plan', 'remote_write', 'destructive'
+  )),
+  required_plugin_permissions_json TEXT NOT NULL,
+  required_mcp_permissions_json TEXT NOT NULL,
+  destructive INTEGER NOT NULL CHECK (destructive IN (0, 1)),
+  requires_approval INTEGER NOT NULL CHECK (requires_approval IN (0, 1)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`;
+
+export const MIGRATION_VERSION = 7;

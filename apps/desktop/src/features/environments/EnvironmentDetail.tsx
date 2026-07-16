@@ -5,9 +5,9 @@ import type {
   ConfigurationOccurrence,
   DesiredConfigurationValue,
   Environment,
+  FindingRecord,
 } from "@rayvan/core";
 import type {
-  ConfigurationDerivedFinding,
   EnvironmentConfigurationStatusViewModel,
 } from "@rayvan/config-engine";
 import { Button } from "@rayvan/ui";
@@ -27,7 +27,7 @@ interface EnvironmentDetailProps {
   environment: Environment;
   card?: EnvironmentCardViewModel;
   resources: ResourceListItemViewModel[];
-  findings: ConfigurationDerivedFinding[];
+  findings: FindingRecord[];
   keys: ConfigurationKey[];
   occurrences: ConfigurationOccurrence[];
   gateway: EnvironmentsGateway;
@@ -60,7 +60,11 @@ export function EnvironmentDetail({
     useState<EnvironmentConfigurationStatusViewModel | null>(null);
 
   const envFindings = findings.filter(
-    (finding) => finding.environmentId === environment.id,
+    (finding) =>
+      finding.environmentId === environment.id &&
+      (finding.status === "open" ||
+        finding.status === "acknowledged" ||
+        finding.status === "suppressed"),
   );
 
   useEffect(() => {
@@ -189,7 +193,12 @@ export function EnvironmentDetail({
               </div>
               <div>
                 <dt>Findings</dt>
-                <dd style={{ margin: 0, fontWeight: 600 }}>{card.findingsCount}</dd>
+                <dd
+                  style={{ margin: 0, fontWeight: 600 }}
+                  aria-label={card.findingsLabel}
+                >
+                  {card.findingsLabel}
+                </dd>
               </div>
               <div>
                 <dt>Last sync</dt>
@@ -283,9 +292,16 @@ export function EnvironmentDetail({
               >
                 <strong>{finding.title}</strong>
                 <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
-                  {finding.severity} · {finding.category}
+                  <span aria-label={`Severity: ${finding.severity}`}>{finding.severity}</span>
+                  {" · "}
+                  <span aria-label={`Status: ${finding.status}`}>{finding.status}</span>
+                  {" · "}
+                  {finding.category}
                 </div>
-                <p style={{ margin: "0.35rem 0 0" }}>{finding.description}</p>
+                <p style={{ margin: "0.35rem 0 0" }}>{finding.summary}</p>
+                <p style={{ margin: "0.5rem 0 0", fontSize: "0.85rem" }}>
+                  Open the Findings section and search for this title to review the full record.
+                </p>
               </li>
             ))
           )}

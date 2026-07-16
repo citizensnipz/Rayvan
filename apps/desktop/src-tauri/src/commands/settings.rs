@@ -2,16 +2,14 @@ use tauri::State;
 
 use crate::state::AppState;
 
-use super::projects::CommandError;
+use super::daemon::CommandError;
 
 #[tauri::command]
 pub fn get_current_project_id(
     state: State<'_, AppState>,
 ) -> Result<Option<String>, CommandError> {
-    state
-        .database
-        .with_settings(|settings| settings.get_current_project_id())
-        .map_err(CommandError::from)
+    let prefs = state.prefs.lock().unwrap();
+    Ok(prefs.current_project_id.clone())
 }
 
 #[tauri::command]
@@ -19,8 +17,13 @@ pub fn set_current_project_id(
     project_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    state
-        .database
-        .mutate_settings(|settings| settings.set_current_project_id(project_id.as_deref()))
-        .map_err(CommandError::from)
+    let mut prefs = state.prefs.lock().unwrap();
+    prefs
+        .set_current_project_id(project_id)
+        .map_err(|message| CommandError {
+            code: "INTERNAL_ERROR".into(),
+            message,
+            id: None,
+            data: None,
+        })
 }

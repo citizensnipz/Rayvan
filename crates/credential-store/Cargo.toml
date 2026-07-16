@@ -7,3 +7,4 @@ description = "OS-backed credential storage for Rayvan"
 
 [dependencies]
 thiserror = { workspace = true }
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }

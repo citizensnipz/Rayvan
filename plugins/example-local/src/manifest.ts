@@ -15,7 +15,14 @@ export const manifest: PluginManifest = {
   version: "0.1.0",
   publisher: "rayvan",
   rayvanApiVersion: RAYVAN_PLUGIN_API_VERSION,
-  capabilities: ["discover", "inspect", "plan", "apply", "verify"],
+  capabilities: [
+    "discover",
+    "inspect",
+    "plan",
+    "apply",
+    "verify",
+    "evaluate_findings",
+  ],
   permissions: [],
   resourceTypes: [
     {
@@ -23,6 +30,16 @@ export const manifest: PluginManifest = {
       name: "Local Service",
       description: "An in-memory mock local development service",
       schemaVersion: LOCAL_SERVICE_SCHEMA_VERSION,
+    },
+  ],
+  findingRules: [
+    {
+      id: `${EXAMPLE_LOCAL_PLUGIN_ID}.service-present`,
+      name: "Local service present",
+      description:
+        "Emits an informational finding when at least one local service is discoverable.",
+      category: "resource",
+      defaultSeverity: "info",
     },
   ],
   presentation: {

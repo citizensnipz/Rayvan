@@ -12,6 +12,7 @@ export type {
   ApplyHandler,
   AuthenticateHandler,
   DiscoverHandler,
+  EvaluateFindingsHandler,
   InspectHandler,
   PlanHandler,
   RayvanPlugin,

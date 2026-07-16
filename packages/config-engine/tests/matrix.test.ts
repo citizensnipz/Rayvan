@@ -532,14 +532,14 @@ describe("buildConfigurationDerivedFindings", () => {
     expect(
       findings.some(
         (finding) =>
-          finding.category === "missing_configuration" &&
+          finding.category === "configuration" &&
           finding.configurationKeyName === "DATABASE_URL",
       ),
     ).toBe(true);
     expect(
       findings.some(
         (finding) =>
-          finding.category === "configuration_drift" &&
+          finding.category === "drift" &&
           finding.configurationKeyName === "API_URL",
       ),
     ).toBe(true);

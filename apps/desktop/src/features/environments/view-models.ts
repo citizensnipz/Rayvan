@@ -8,6 +8,7 @@ import type {
   EnvironmentIconToken,
   EnvironmentKind,
   EnvironmentStatus,
+  FindingSeverity,
 } from "@rayvan/core";
 import type {
   ConfigurationApplyPlan,
@@ -77,6 +78,9 @@ export interface EnvironmentCardViewModel {
   integrationCount: number;
   configurationKeyCount: number;
   findingsCount: number;
+  /** Accessible text label — never colour-only severity. */
+  findingsLabel: string;
+  highestFindingSeverity?: FindingSeverity;
   lastSyncLabel: string;
   health: EnvironmentHealthSummary;
   configAggregate?: EnvironmentConfigAggregateSummary;
