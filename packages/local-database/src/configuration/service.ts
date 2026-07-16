@@ -8,6 +8,7 @@ import type {
 
 import {
   ConfigurationKeyNotFoundError,
+  ConfigurationOccurrenceNotFoundError,
 } from "./errors.js";
 import type { ConfigurationKeyRepository } from "./key-repository.js";
 import type { ConfigurationOccurrenceRepository } from "./occurrence-repository.js";
@@ -161,5 +162,25 @@ export class ConfigurationService {
     environmentId: string,
   ): Promise<ConfigurationOccurrence[]> {
     return this.occurrences.listByEnvironmentId(environmentId);
+  }
+
+  getOccurrence(id: string): Promise<ConfigurationOccurrence | null> {
+    return this.occurrences.getById(id);
+  }
+
+  async updateOccurrence(
+    id: string,
+    input: {
+      environmentId?: string | null;
+      resourceBindingId?: string | null;
+      scope?: string | null;
+      lastObservedAt?: string;
+    },
+  ): Promise<ConfigurationOccurrence> {
+    const existing = await this.occurrences.getById(id);
+    if (!existing) {
+      throw new ConfigurationOccurrenceNotFoundError(id);
+    }
+    return this.occurrences.update(id, input);
   }
 }

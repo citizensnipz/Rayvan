@@ -9,7 +9,7 @@
     "rootDir": "../../..",
     "paths": {
       "@rayvan/core": ["packages/core/src/index.ts"],
-      "@rayvan/daemon-client": ["apps/daemon/src/daemon-client.ts"],
+      "@rayvan/daemon-client": ["packages/daemon-client/src/index.ts"],
       "@rayvan/daemon-contracts": ["packages/daemon-contracts/src/index.ts"],
       "@rayvan/findings-engine": ["packages/findings-engine/src/index.ts"],
       "@rayvan/local-database": ["packages/local-database/src/index.ts"],

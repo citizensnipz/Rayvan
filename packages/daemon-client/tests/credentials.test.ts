@@ -70,6 +70,22 @@ describe("LocalClientCredentialStore", () => {
     expect(secureStore.values.has("client-1")).toBe(false);
   });
 
+  it("treats orphan keyring secrets without metadata as unresolved", () => {
+    const root = mkdtempSync(join(tmpdir(), "rayvan-credentials-"));
+    roots.push(root);
+    const secureStore = new MemorySecureStore();
+    const credentials = new LocalClientCredentialStore(
+      join(root, "local-clients.json"),
+      secureStore,
+    );
+    secureStore.set("client-1", "rvc_orphan_token");
+
+    expect(credentials.resolve("client-1")).toBeNull();
+    const issued = credentials.issue("client-1");
+    expect(credentials.resolve("client-1")).toBe(issued);
+    expect(credentials.verify("client-1", issued)).toBe(true);
+  });
+
   it("keeps the previous credential when rotation cannot update the keyring", () => {
     const root = mkdtempSync(join(tmpdir(), "rayvan-credentials-"));
     roots.push(root);

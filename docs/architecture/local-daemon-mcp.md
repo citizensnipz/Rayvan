@@ -121,7 +121,13 @@ pnpm daemon:dev
 pnpm desktop:dev
 pnpm mcp:dev -- --client-id <registered-client-id>
 pnpm mcp:inspect
+pnpm prepare:sidecars
+pnpm test:integration
 ```
+
+Real multi-process scenario coverage lives in
+`tests/integration/daemon-mcp-e2e.test.ts` (spawned `rayvand`, isolated data
+dirs, example-local apply/verify, optional MCP `list_projects`).
 
 For MCP Inspector, configure the inspected command as:
 
@@ -138,20 +144,43 @@ configuration.
 
 ## Transitional constraints
 
-The daemon IPC and MCP adapter are implemented, but the architecture migration
-is not complete until all of the following land:
+The daemon IPC and MCP adapter are implemented. Status of the local cutover:
 
-- Tauri launches/attaches to a packaged daemon sidecar and no longer opens the
-  writable production database.
-- Rust plugin-host integration replaces the in-process development runtime.
-- Sync, inspection, apply, and verification persist real plugin results.
-- Unsupported configuration-target/adoption methods receive repository and
-  migration support.
-- Windows, macOS, and Linux installers bundle `rayvand` and `rayvan-mcp`.
+| Area | Status |
+| --- | --- |
+| Desktop → daemon IPC (no `LocalDatabase` in AppState) | **Done** — Tauri attaches/launches `rayvand`, authenticates as `rayvan-desktop` from the OS keyring |
+| Agent / MCP workspace UI | **Done** — desktop Agent/MCP surface talks to the daemon |
+| example-local in-process sync / plan / apply / verify | **Done** — real fixture mutations via the daemon-hosted TS plugin stack |
+| Real multi-process E2E scenario | **Done** — `tests/integration/daemon-mcp-e2e.test.ts` (`pnpm test:integration`); successful verify auto-resolves findings linked to the change plan |
+| Sidecar packaging scaffolding | **Done** — `pnpm prepare:sidecars` + `bundle.externalBin`; see `apps/desktop/PACKAGING.md` |
+| Production SEA/pkg sidecar binaries | **Transitional** — wrappers / .NET launchers for dev; replace before shipping installers |
+| Rust `crates/plugin-host` out-of-process plugin runtime | **Transitional** — not wired; daemon still hosts the TS stack in-process |
+| SQLite-backed change-plan / binding persistence | **Transitional** — plugin domain records still use in-memory persistence |
 
-Until the daemon-owned plugin host is connected, provider sync, inspection,
-apply, and verification fail with `PLUGIN_UNAVAILABLE`; they never report
-simulated remote success.
+### Plugin execution host (current)
+
+Until `crates/plugin-host` is wired, **the daemon hosts the TypeScript plugin
+execution stack in-process** (`createPluginExecutionStack` + built-in
+`example-local`). That stack owns discover / inspect / plan / apply / verify for
+the local fixture plugin. Plugin domain records for change plans, bindings, and
+discovery currently use in-memory persistence (`createInMemoryPluginPersistence`)
+even though SQLite tables exist — SQLite repositories for change plans are not
+yet connected.
+
+`plugins.list` reports `example-local` as **available** with `host: in_process`
+when the built-in is registered. Sync, inspection, apply, and verification
+execute against that host when a connection/resource exists. They **never**
+report simulated remote success when the plugin, connection, or resource is
+missing — callers receive `PLUGIN_UNAVAILABLE` or `NOT_FOUND` instead.
+
+Configuration targets are derived from occurrence `resourceBindingId` (no
+separate targets table). Adoption promotes discovered keys to managed
+(`source: manual`); ignore marks occurrences with `scope: ignored`.
+
+Isolated tests may set `RAYVAN_ALLOW_UNAUTHENTICATED_TEST_CLIENT=1` so the
+unauthenticated `test` client can handshake without touching production keyring
+credentials. Production desktop, CLI, and MCP clients must use provisioned
+credentials.
 
 Future Rayvan Cloud or a remote MCP endpoint can reuse the daemon
 application-service contracts behind a different authenticated transport. It

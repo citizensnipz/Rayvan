@@ -158,6 +158,7 @@ export interface ChangePlanRepository {
   save(record: ChangePlanRecord): Promise<void>;
   getById(id: string): Promise<ChangePlanRecord | undefined>;
   listByBindingId(resourceBindingId: string): Promise<ChangePlanRecord[]>;
+  listByProjectId(projectId: string): Promise<ChangePlanRecord[]>;
   setStatus(id: string, status: ChangePlanStatus): Promise<void>;
   supersede(input: {
     planId: string;

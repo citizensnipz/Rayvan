@@ -87,3 +87,10 @@ rayvan-data/
 
 # Plugin runtime state
 plugins/**/.runtime/
+
+# Tauri sidecar packaging placeholders / host-triple binaries
+apps/desktop/src-tauri/binaries/rayvand-*
+apps/desktop/src-tauri/binaries/rayvan-mcp-*
+apps/desktop/src-tauri/binaries/*.mjs
+apps/desktop/src-tauri/binaries/.scaffold-tmp/
+!apps/desktop/src-tauri/binaries/README.md

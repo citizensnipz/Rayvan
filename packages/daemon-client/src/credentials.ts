@@ -110,7 +110,10 @@ export class LocalClientCredentialStore {
 
   resolve(clientId: string): string | null {
     const credential = this.secureStore.get(clientId);
-    if (credential) {
+    // Only treat a keyring secret as valid when the hash metadata file still
+    // matches. Orphan secrets (keyring present, local-clients.json missing or
+    // rotated) must return null so callers re-issue instead of failing auth.
+    if (credential && this.verify(clientId, credential)) {
       return credential;
     }
 

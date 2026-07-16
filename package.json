@@ -16,6 +16,7 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "test:integration": "vitest run --config vitest.config.ts",
+    "prepare:sidecars": "node apps/desktop/scripts/prepare-sidecars.mjs",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",

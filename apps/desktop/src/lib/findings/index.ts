@@ -19,6 +19,7 @@ export {
   createSharedFindingsPersistence,
   type DevFindingsGatewayOptions,
 } from "./dev-gateway.js";
+export { createDaemonFindingsGateway } from "./daemon-gateway.js";
 export {
   buildDevFindingRecords,
   buildDevFindingsProjectContext,

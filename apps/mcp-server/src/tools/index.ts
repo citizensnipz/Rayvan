@@ -250,6 +250,59 @@ export const RAYVAN_TOOLS: readonly ToolDefinition[] = [
     risk: "local_mutation",
   },
   {
+    name: "set_configuration_targets",
+    method: DaemonMethods.setConfigurationTargets,
+    description:
+      "Bind configuration occurrences to a resource binding (targets via resourceBindingId).",
+    inputSchema: z
+      .object({
+        project_id: z.string().min(1),
+        configuration_key_id: z.string().min(1),
+        resource_binding_id: z.string().min(1),
+        occurrence_ids: z.array(z.string().min(1)).optional(),
+      })
+      .strict(),
+    risk: "local_mutation",
+  },
+  {
+    name: "remove_configuration_target",
+    method: DaemonMethods.removeConfigurationTarget,
+    description: "Clear the resource binding target from a configuration occurrence.",
+    inputSchema: z
+      .object({
+        project_id: z.string().min(1),
+        occurrence_id: z.string().min(1),
+      })
+      .strict(),
+    risk: "local_mutation",
+  },
+  {
+    name: "adopt_discovered_configuration",
+    method: DaemonMethods.adoptDiscoveredConfiguration,
+    description: "Adopt discovered configuration into managed desired state.",
+    inputSchema: z
+      .object({
+        project_id: z.string().min(1),
+        occurrence_id: z.string().min(1),
+        environment_id: z.string().optional(),
+        resource_binding_id: z.string().optional(),
+      })
+      .strict(),
+    risk: "local_mutation",
+  },
+  {
+    name: "ignore_discovered_configuration",
+    method: DaemonMethods.ignoreDiscoveredConfiguration,
+    description: "Ignore a discovered configuration occurrence.",
+    inputSchema: z
+      .object({
+        project_id: z.string().min(1),
+        occurrence_id: z.string().min(1),
+      })
+      .strict(),
+    risk: "local_mutation",
+  },
+  {
     name: "list_findings",
     method: DaemonMethods.listFindings,
     description: "List findings for a project.",
@@ -309,6 +362,28 @@ export const RAYVAN_TOOLS: readonly ToolDefinition[] = [
     risk: "local_mutation",
   },
   {
+    name: "reopen_finding",
+    method: DaemonMethods.reopenFinding,
+    description: "Reopen a dismissed, resolved, or suppressed finding.",
+    inputSchema: finding,
+    risk: "local_mutation",
+  },
+  {
+    name: "generate_change_plan",
+    method: DaemonMethods.generateChangePlan,
+    description:
+      "Generate a change plan for a resource binding via the daemon plugin host.",
+    inputSchema: z
+      .object({
+        project_id: z.string().min(1),
+        environment_id: z.string().optional(),
+        resource_binding_id: z.string().optional(),
+        desired_attributes: z.record(z.unknown()).optional(),
+      })
+      .strict(),
+    risk: "local_mutation",
+  },
+  {
     name: "generate_plan_from_finding",
     method: DaemonMethods.generatePlanFromFinding,
     description: "Generate a local change plan from a finding.",
@@ -356,6 +431,14 @@ export const RAYVAN_TOOLS: readonly ToolDefinition[] = [
     description: "Verify a previously applied change plan.",
     inputSchema: plan,
     risk: "sync",
+  },
+  {
+    name: "retry_failed_change",
+    method: DaemonMethods.retryFailedChange,
+    description:
+      "Retry a failed change apply after verification rules (never blind retry of interrupted apply).",
+    inputSchema: plan.extend({ idempotency_key: z.string().optional() }),
+    risk: "remote_mutation",
   },
   {
     name: "list_operations",

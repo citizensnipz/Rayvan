@@ -558,6 +558,12 @@ export class InMemoryChangePlanRepository implements ChangePlanRepository {
       .map(clone);
   }
 
+  async listByProjectId(projectId: string): Promise<ChangePlanRecord[]> {
+    return [...this.byId.values()]
+      .filter((record) => record.projectId === projectId)
+      .map(clone);
+  }
+
   async setStatus(id: string, status: ChangePlanStatus): Promise<void> {
     const existing = this.byId.get(id);
     if (!existing) {

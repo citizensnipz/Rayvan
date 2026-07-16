@@ -19,7 +19,7 @@ export default defineConfig({
       },
       {
         find: "@rayvan/daemon-client",
-        replacement: workspace("apps/daemon/src/daemon-client.ts"),
+        replacement: workspace("packages/daemon-client/src/index.ts"),
       },
       {
         find: "@rayvan/local-database",

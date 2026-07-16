@@ -84,6 +84,9 @@ importers:
       '@rayvan/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@rayvan/daemon-contracts':
+        specifier: workspace:*
+        version: link:../../packages/daemon-contracts
       '@rayvan/findings-engine':
         specifier: workspace:*
         version: link:../../packages/findings-engine

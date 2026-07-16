@@ -12,10 +12,28 @@ vi.mock("@tauri-apps/api/core", () => ({
         return null;
       case "set_current_project_id":
         return null;
+      case "daemon_status":
+        return {
+          connected: false,
+          endpoint: "",
+          spawned: false,
+          lastError: "daemon unavailable in tests",
+        };
+      case "daemon_reconnect":
+        return {
+          connected: false,
+          endpoint: "",
+          spawned: false,
+          lastError: "daemon unavailable in tests",
+        };
       default:
         return null;
     }
   }),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => undefined),
 }));
 
 describe("Desktop App", () => {

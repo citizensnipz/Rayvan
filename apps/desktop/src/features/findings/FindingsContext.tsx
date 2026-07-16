@@ -1,11 +1,16 @@
 import {
   createContext,
   useContext,
-  useState,
+  useMemo,
   type PropsWithChildren,
 } from "react";
 
 import {
+  preferDaemonGateways,
+  useOptionalDaemonConnection,
+} from "../../lib/daemon/index.js";
+import {
+  createDaemonFindingsGateway,
   createDevFindingsGateway,
   type FindingsGateway,
 } from "../../lib/findings/index.js";
@@ -19,16 +24,22 @@ const FindingsContext = createContext<FindingsContextValue | null>(null);
 interface FindingsProviderProps extends PropsWithChildren {
   /**
    * Inject a gateway (e.g. a fresh dev fixture instance, or a test double)
-   * so callers never share singleton state. Defaults to a fresh
-   * development fixture gateway created once per provider mount.
+   * so callers never share singleton state. Defaults to daemon-first when
+   * connected, otherwise a fresh development fixture gateway.
    */
   gateway?: FindingsGateway;
 }
 
 export function FindingsProvider({ gateway, children }: FindingsProviderProps) {
-  const [instance] = useState<FindingsGateway>(
-    () => gateway ?? createDevFindingsGateway(),
-  );
+  const daemon = useOptionalDaemonConnection();
+  const instance = useMemo<FindingsGateway>(() => {
+    if (gateway) {
+      return gateway;
+    }
+    return preferDaemonGateways(daemon?.connected === true)
+      ? createDaemonFindingsGateway()
+      : createDevFindingsGateway();
+  }, [gateway, daemon?.connected]);
 
   return (
     <FindingsContext.Provider value={{ gateway: instance }}>

@@ -247,10 +247,23 @@ function deriveSession(
     permissions: client
       ? permissionsForProfile(client.permissionProfileId)
       : new Set(BUILT_IN_PERMISSION_PROFILES.administrator),
-    projectScopes: client?.projectScopes ?? "*",
+    projectScopes: resolveProjectScopes(client),
     environmentScopes: client?.environmentScopes ?? "*",
     subscribed: false,
   };
+}
+
+function resolveProjectScopes(
+  client: LocalClientRecord | undefined,
+): string[] | "*" {
+  if (!client) return "*";
+  if (
+    client.permissionProfileId === "administrator" ||
+    client.projectScopes.length === 0
+  ) {
+    return "*";
+  }
+  return client.projectScopes;
 }
 
 function actorFor(

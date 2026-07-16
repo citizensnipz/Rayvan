@@ -32,6 +32,11 @@ import {
   ChangePlanService,
   ChangeApprovalService,
   FindingSummaryService,
+  SqliteFindingRepository,
+  SqliteFindingLifecycleEventRepository,
+  createInMemoryPluginPersistence,
+  type InMemoryPluginPersistence,
+  MIGRATION_VERSION,
 } from "@rayvan/local-database";
 import {
   LocalDatabaseConnection,
@@ -42,14 +47,8 @@ import {
   SqliteDesiredConfigurationValueRepository,
   SqliteAppliedConfigurationStateRepository,
 } from "@rayvan/local-database/sqlite";
-import {
-  SqliteFindingRepository,
-  SqliteFindingLifecycleEventRepository,
-  createInMemoryPluginPersistence,
-} from "@rayvan/local-database";
 import { createPluginExecutionStack } from "@rayvan/plugin-sdk";
 import { plugin as exampleLocalPlugin } from "@rayvan/plugin-example-local";
-import { MIGRATION_VERSION } from "@rayvan/local-database";
 
 import type { SessionContext } from "./auth/session.js";
 import {
@@ -61,6 +60,10 @@ import {
 import { DaemonAppError, toDaemonError } from "./errors.js";
 import { ControlPlaneRepository } from "./repos/control-plane.js";
 import { EventBus } from "./services/event-bus.js";
+import {
+  ExampleLocalHost,
+  toPluginExecutionActor,
+} from "./services/example-local-host.js";
 import { DaemonSecretStore } from "./services/secrets.js";
 
 const DAEMON_VERSION = "0.0.1";
@@ -92,6 +95,8 @@ export class DaemonRuntime {
   readonly changePlanService: ChangePlanService;
   readonly changeApprovalService: ChangeApprovalService;
   readonly pluginStack: ReturnType<typeof createPluginExecutionStack>;
+  readonly pluginRepos: InMemoryPluginPersistence;
+  readonly exampleLocalHost: ExampleLocalHost;
   private readonly connectedSessions = new Map<string, SessionContext>();
   private readonly allowUnauthenticatedTestClient: boolean;
   private shuttingDown = false;
@@ -101,7 +106,8 @@ export class DaemonRuntime {
     this.runtimeDir = options.runtimeDir ?? defaultRayvanRuntimeDir();
     this.endpoint = options.endpoint ?? daemonEndpointPath(this.runtimeDir);
     this.allowUnauthenticatedTestClient =
-      options.allowUnauthenticatedTestClient === true;
+      options.allowUnauthenticatedTestClient === true ||
+      process.env.RAYVAN_ALLOW_UNAUTHENTICATED_TEST_CLIENT === "1";
     mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
     mkdirSync(this.runtimeDir, { recursive: true, mode: 0o700 });
 
@@ -130,7 +136,7 @@ export class DaemonRuntime {
     const applied = new SqliteAppliedConfigurationStateRepository(this.db);
     const findings = new SqliteFindingRepository(this.db);
     const lifecycle = new SqliteFindingLifecycleEventRepository(this.db);
-    const pluginRepos = createInMemoryPluginPersistence();
+    this.pluginRepos = createInMemoryPluginPersistence();
 
     this.projectService = new ProjectService(projects);
     this.environmentService = new EnvironmentService(environments);
@@ -142,17 +148,24 @@ export class DaemonRuntime {
     );
     this.findingService = new FindingLifecycleService(findings, lifecycle);
     this.findingSummary = new FindingSummaryService(findings);
-    this.changePlanService = new ChangePlanService(pluginRepos.changePlans);
+    this.changePlanService = new ChangePlanService(this.pluginRepos.changePlans);
     this.changeApprovalService = new ChangeApprovalService(
-      pluginRepos.changePlans,
-      pluginRepos.changePlanApprovals,
-      pluginRepos.changeApplies,
-      pluginRepos.changeVerifications,
+      this.pluginRepos.changePlans,
+      this.pluginRepos.changePlanApprovals,
+      this.pluginRepos.changeApplies,
+      this.pluginRepos.changeVerifications,
     );
 
+    // Transitional: daemon hosts the TS plugin stack in-process until
+    // crates/plugin-host (out-of-process) is the connected runtime.
     this.pluginStack = createPluginExecutionStack({
       plugins: [exampleLocalPlugin],
     });
+    this.exampleLocalHost = new ExampleLocalHost(
+      this.pluginRepos,
+      this.pluginStack,
+    );
+    void this.exampleLocalHost.ensureReconciled();
   }
 
   recoverIncompleteOperations(): void {
@@ -203,7 +216,7 @@ export class DaemonRuntime {
         .filter((o) => ["queued", "running", "waiting_for_approval"].includes(o.status))
         .length,
       pendingApprovals: this.control.listApprovals({ status: "pending" }).length,
-      pluginHostStatus: "unavailable",
+      pluginHostStatus: "ready",
     };
   }
 
@@ -283,7 +296,7 @@ export class DaemonRuntime {
       }
       session.client = current;
       session.permissions = permissionsForProfile(current.permissionProfileId);
-      session.projectScopes = current.projectScopes;
+      session.projectScopes = resolveProjectScopes(current);
       session.environmentScopes = current.environmentScopes ?? "*";
     }
     const startedAt = new Date().toISOString();
@@ -406,16 +419,35 @@ export class DaemonRuntime {
         requirePermission(session, "mcp_clients:manage");
         const projectId = requireString(p, "projectId");
         requireProjectScope(session, projectId);
-        const updated = await this.projectService.update(projectId, {
-          name: optionalString(p, "name"),
-          description: optionalString(p, "description"),
-        });
+        const hasName = Object.prototype.hasOwnProperty.call(p, "name");
+        const hasDescription =
+          Object.prototype.hasOwnProperty.call(p, "description");
+        let updated =
+          hasName || hasDescription
+            ? await this.projectService.update(projectId, {
+                name: hasName ? optionalString(p, "name") : undefined,
+                description: hasDescription
+                  ? optionalString(p, "description")
+                  : undefined,
+              })
+            : await this.projectService.getById(projectId);
+        if (!updated) {
+          throw new DaemonAppError("NOT_FOUND", "Project not found");
+        }
+        if (typeof p.archived === "boolean") {
+          updated = p.archived
+            ? await this.projectService.archive(projectId)
+            : await this.projectService.restore(projectId);
+        }
         this.events.emit({
           type: "project_changed",
           projectId,
           actor: session.actor,
           correlationId,
-          payload: { projectId, action: "updated" },
+          payload: {
+            projectId,
+            action: typeof p.archived === "boolean" ? "archived" : "updated",
+          },
         });
         return updated;
       }
@@ -595,10 +627,11 @@ export class DaemonRuntime {
         ]);
         const keysById = new Map(keys.map((key) => [key.id, key]));
         return occurrences
-          .filter(
-            (occurrence) =>
-              keysById.get(occurrence.configurationKeyId)?.source === "discovered",
-          )
+          .filter((occurrence) => {
+            const key = keysById.get(occurrence.configurationKeyId);
+            if (!key || key.source !== "discovered") return false;
+            return occurrence.scope !== "ignored";
+          })
           .map((occurrence) =>
             sanitizeOccurrence(
               occurrence,
@@ -689,6 +722,14 @@ export class DaemonRuntime {
         });
         return { key: sanitizeKey(updated), remoteStateAffected: false };
       }
+      case DaemonMethods.setConfigurationTargets:
+        return this.setConfigurationTargets(session, p, correlationId);
+      case DaemonMethods.removeConfigurationTarget:
+        return this.removeConfigurationTarget(session, p, correlationId);
+      case DaemonMethods.adoptDiscoveredConfiguration:
+        return this.adoptDiscoveredConfiguration(session, p, correlationId);
+      case DaemonMethods.ignoreDiscoveredConfiguration:
+        return this.ignoreDiscoveredConfiguration(session, p, correlationId);
       case DaemonMethods.revealSensitiveConfigurationValue: {
         requirePermission(session, "configuration:read_sensitive");
         throw new DaemonAppError(
@@ -823,26 +864,14 @@ export class DaemonRuntime {
 
       case DaemonMethods.generatePlanFromFinding:
         return this.generatePlanFromFinding(session, p, correlationId);
+      case DaemonMethods.generateChangePlan:
+        return this.generateChangePlan(session, p, correlationId);
       case DaemonMethods.listChangePlans: {
         requirePermission(session, "plans:read");
         const projectId = requireString(p, "projectId");
         requireProjectScope(session, projectId);
-        // ChangePlanService has getById; list via sqlite raw for project
-        const rows = this.db.raw
-          .prepare(
-            `SELECT id, plugin_id AS pluginId, project_id AS projectId,
-                    environment_id AS environmentId, status, created_at AS createdAt
-             FROM plugin_change_plans WHERE project_id = ? ORDER BY created_at DESC LIMIT 100`,
-          )
-          .all(projectId) as Array<{
-          id: string;
-          pluginId: string;
-          projectId: string;
-          environmentId?: string;
-          status: string;
-          createdAt: string;
-        }>;
-        return filterEnvironmentScoped(rows, session);
+        const plans = await this.changePlanService.listByProjectId(projectId);
+        return filterEnvironmentScoped(plans, session);
       }
       case DaemonMethods.getChangePlan: {
         requirePermission(session, "plans:read");
@@ -861,6 +890,8 @@ export class DaemonRuntime {
         return this.applyChangePlan(session, p, correlationId);
       case DaemonMethods.verifyChangePlan:
         return this.verifyChangePlan(session, p, correlationId);
+      case DaemonMethods.retryFailedChange:
+        return this.retryFailedChange(session, p, correlationId);
       case DaemonMethods.rejectChangePlan: {
         requirePermission(session, "plans:approve");
         const planId = requireString(p, "changePlanId");
@@ -1004,15 +1035,84 @@ export class DaemonRuntime {
         );
       }
 
-      case DaemonMethods.listIntegrations:
-      case DaemonMethods.getIntegration:
-      case DaemonMethods.listIntegrationResources:
-      case DaemonMethods.getIntegrationHealth:
-      case DaemonMethods.getEnvironmentResources: {
+      case DaemonMethods.listIntegrations: {
         requirePermission(session, "integrations:read");
         const projectId = optionalString(p, "projectId");
         if (projectId) requireProjectScope(session, projectId);
-        return [];
+        await this.exampleLocalHost.ensureReconciled();
+        const connections = projectId
+          ? await this.exampleLocalHost.connections.listByProjectId(projectId)
+          : (
+              await Promise.all(
+                (
+                  await this.projectService.list({ includeArchived: true })
+                ).map((project) =>
+                  this.exampleLocalHost.connections.listByProjectId(project.id),
+                ),
+              )
+            ).flat();
+        return connections.map((connection) => ({
+          id: connection.id,
+          pluginId: connection.pluginId,
+          projectId: connection.projectId,
+          name: connection.name,
+          status: connection.status,
+          lastSuccessfulSyncAt: connection.lastSuccessfulSyncAt,
+        }));
+      }
+      case DaemonMethods.getIntegration: {
+        requirePermission(session, "integrations:read");
+        const integrationId = requireString(p, "integrationId");
+        const connection =
+          await this.exampleLocalHost.connections.getById(integrationId);
+        if (!connection) return null;
+        if (connection.projectId) {
+          requireProjectScope(session, connection.projectId);
+        }
+        return connection;
+      }
+      case DaemonMethods.listIntegrationResources: {
+        requirePermission(session, "integrations:read");
+        const integrationId = requireString(p, "integrationId");
+        const connection =
+          await this.exampleLocalHost.connections.getById(integrationId);
+        if (!connection) return [];
+        if (connection.projectId) {
+          requireProjectScope(session, connection.projectId);
+        }
+        return this.exampleLocalHost.discovery.listByConnectionId(integrationId);
+      }
+      case DaemonMethods.getIntegrationHealth: {
+        requirePermission(session, "integrations:read");
+        const integrationId = requireString(p, "integrationId");
+        const connection =
+          await this.exampleLocalHost.connections.getById(integrationId);
+        if (!connection) {
+          throw new DaemonAppError("NOT_FOUND", "Integration not found");
+        }
+        if (connection.projectId) {
+          requireProjectScope(session, connection.projectId);
+        }
+        return {
+          integrationId,
+          status: connection.status,
+          lastSuccessfulSyncAt: connection.lastSuccessfulSyncAt,
+          lastErrorCode: connection.lastErrorCode,
+        };
+      }
+      case DaemonMethods.getEnvironmentResources: {
+        requirePermission(session, "integrations:read");
+        const projectId = requireString(p, "projectId");
+        const environmentId = requireString(p, "environmentId");
+        requireProjectScope(session, projectId);
+        requireEnvironmentScope(session, environmentId);
+        await this.requireEnvironmentInProject(projectId, environmentId);
+        const bindings =
+          await this.exampleLocalHost.bindings.listByProjectId(projectId);
+        return bindings.filter(
+          (binding) =>
+            !binding.environmentId || binding.environmentId === environmentId,
+        );
       }
       case DaemonMethods.syncProject:
       case DaemonMethods.syncEnvironment:
@@ -1020,29 +1120,38 @@ export class DaemonRuntime {
         requirePermission(session, "integrations:sync");
         const projectId = requireString(p, "projectId");
         requireProjectScope(session, projectId);
-        throw new DaemonAppError(
-          "PLUGIN_UNAVAILABLE",
-          "No daemon-owned provider discovery runtime is available for this integration",
-          { retryable: true, correlationId },
+        const environmentId = optionalString(p, "environmentId");
+        if (environmentId) {
+          requireEnvironmentScope(session, environmentId);
+          await this.requireEnvironmentInProject(projectId, environmentId);
+        }
+        const integrationId = optionalString(p, "integrationId");
+        return this.syncExampleLocal(
+          session,
+          projectId,
+          environmentId,
+          integrationId,
+          correlationId,
         );
       }
       case DaemonMethods.inspectResource: {
         requirePermission(session, "resources:read");
-        throw new DaemonAppError(
-          "PLUGIN_UNAVAILABLE",
-          "No daemon-owned provider inspection runtime is available for this resource",
-          { retryable: true, correlationId },
+        const resourceId = requireString(p, "resourceId");
+        const { binding } =
+          await this.exampleLocalHost.requireBinding(resourceId);
+        requireProjectScope(session, binding.projectId);
+        if (binding.environmentId) {
+          requireEnvironmentScope(session, binding.environmentId);
+        }
+        const observed = await this.exampleLocalHost.inspectBinding(
+          resourceId,
+          toPluginExecutionActor(session.actor),
         );
+        return { resourceBindingId: resourceId, observed };
       }
       case DaemonMethods.listPlugins: {
         requirePermission(session, "plugins:read");
-        return [
-          {
-            pluginId: "example-local",
-            status: "unavailable",
-            reason: "Out-of-process daemon plugin host is not connected",
-          },
-        ];
+        return this.exampleLocalHost.listPluginStatus();
       }
       case DaemonMethods.listPluginActions: {
         requirePermission(session, "plugins:read");
@@ -1233,10 +1342,12 @@ export class DaemonRuntime {
         preset: "7d",
         reason: optionalString(p, "reason"),
       });
+    } else if (method === DaemonMethods.reopenFinding) {
+      updated = await this.findingService.reopen(findingId, actor);
     } else {
       throw new DaemonAppError(
         "VALIDATION_FAILED",
-        "Reopening findings is not supported by the current lifecycle service",
+        `Unsupported finding mutation: ${method}`,
       );
     }
     this.events.emit({
@@ -1267,8 +1378,99 @@ export class DaemonRuntime {
       requireEnvironmentScope(session, finding.environmentId);
     }
 
+    const host = await this.exampleLocalHost.ensureProjectConnection(
+      finding.projectId,
+    );
+    const binding =
+      host.bindings.find((item) => item.id === finding.resourceBindingId) ??
+      host.bindings[0];
+    if (!binding) {
+      throw new DaemonAppError(
+        "NOT_FOUND",
+        "No example-local resource binding is available to plan against",
+      );
+    }
+
+    const observed = await this.exampleLocalHost.inspectBinding(
+      binding.id,
+      toPluginExecutionActor(session.actor),
+    );
+    const observedPort =
+      typeof observed.attributes.port === "number"
+        ? observed.attributes.port
+        : 3000;
+    const desiredPort = observedPort === 3000 ? 3010 : 3000;
+
+    const generated = await this.generateChangePlan(
+      session,
+      {
+        projectId: finding.projectId,
+        environmentId: finding.environmentId,
+        resourceBindingId: binding.id,
+        desiredAttributes: { port: desiredPort },
+        summaryHint: `Resolve finding: ${finding.title}`,
+      },
+      correlationId,
+    );
+    const planId =
+      generated &&
+      typeof generated === "object" &&
+      "plan" in generated &&
+      generated.plan &&
+      typeof generated.plan === "object" &&
+      "id" in generated.plan &&
+      typeof generated.plan.id === "string"
+        ? generated.plan.id
+        : undefined;
+    if (planId) {
+      await this.findingService.attachChangePlan(findingId, planId);
+    }
+    return generated;
+  }
+
+  private async generateChangePlan(
+    session: SessionContext,
+    p: Record<string, unknown>,
+    correlationId: string,
+  ) {
+    requirePermission(session, "plans:create");
+    const projectId = requireString(p, "projectId");
+    requireProjectScope(session, projectId);
+    const environmentId = optionalString(p, "environmentId");
+    if (environmentId) {
+      requireEnvironmentScope(session, environmentId);
+      await this.requireEnvironmentInProject(projectId, environmentId);
+    }
+
+    const resourceBindingId = optionalString(p, "resourceBindingId");
+    const desiredAttributes =
+      p.desiredAttributes &&
+      typeof p.desiredAttributes === "object" &&
+      !Array.isArray(p.desiredAttributes)
+        ? (p.desiredAttributes as Record<string, unknown>)
+        : undefined;
+
+    const host = await this.exampleLocalHost.ensureProjectConnection(projectId);
+    const binding = resourceBindingId
+      ? host.bindings.find((item) => item.id === resourceBindingId)
+      : host.bindings[0];
+    if (!binding) {
+      throw new DaemonAppError(
+        "NOT_FOUND",
+        resourceBindingId
+          ? `Resource binding not found: ${resourceBindingId}`
+          : "No resource binding available; sync the example-local connection first",
+      );
+    }
+    if (binding.projectId !== projectId) {
+      throw new DaemonAppError(
+        "PROJECT_SCOPE_DENIED",
+        "Resource binding does not belong to the requested project",
+      );
+    }
+
     const op = this.control.createOperation({
-      projectId: finding.projectId,
+      projectId,
       type: "change_plan_generation",
       actor: session.actor,
       correlationId,
@@ -1278,59 +1480,129 @@ export class DaemonRuntime {
       startedAt: new Date().toISOString(),
     });
 
-    const planId = `plan_${randomUUID()}`;
-    const plan = await this.changePlanService.create({
-      pluginId: "example-local",
-      connectionId: "conn_example_local",
-      projectId: finding.projectId,
-      environmentId: finding.environmentId,
-      resourceBindingId: "binding_example_local",
-      plan: {
-        id: planId,
-        pluginId: "example-local",
-        resourceId: "resource_example_local",
-        summary: `Resolve finding: ${finding.title}`,
-        operations: [
-          {
-            id: "apply-desired-config",
-            type: "update_attribute",
-            description: "Apply desired configuration to mock remote",
-            path: "attributes.debugMode",
-            before: true,
-            after: false,
-            requiresApproval: true,
-            destructive: false,
-          },
-        ],
-        warnings: [],
-        destructive: false,
-      },
-      createdBy: toPluginActor(session.actor),
-    });
+    try {
+      const actor = toPluginExecutionActor(session.actor);
+      const observed = await this.exampleLocalHost.inspectBinding(
+        binding.id,
+        actor,
+      );
+      const observedPort =
+        typeof observed.attributes.port === "number"
+          ? observed.attributes.port
+          : 3000;
+      const attributes =
+        desiredAttributes ??
+        ({
+          port: observedPort === 3000 ? 3010 : 3000,
+        } satisfies Record<string, unknown>);
 
-    this.control.updateOperation(op.id, {
-      status: "succeeded",
-      finishedAt: new Date().toISOString(),
-      resultSummary: { changePlanId: plan.id },
-      // store plan id
-    });
-    const completed = this.control.updateOperation(op.id, {
-      resultSummary: { changePlanId: plan.id },
-    });
-    // patch change_plan_id column
-    this.db.raw
-      .prepare(`UPDATE operations SET change_plan_id = ? WHERE id = ?`)
-      .run(plan.id, op.id);
+      let planPayload;
+      try {
+        const planned = await this.exampleLocalHost.planForBinding({
+          resourceBindingId: binding.id,
+          desiredAttributes: attributes,
+          actor,
+        });
+        planPayload = {
+          ...planned.plan,
+          id: `plan_${randomUUID()}`,
+          resourceId: binding.id,
+          summary: optionalString(p, "summaryHint") ?? planned.plan.summary,
+        };
+      } catch (error) {
+        if (!(error instanceof DaemonAppError)) throw error;
+        const before =
+          typeof observed.attributes.port === "number"
+            ? observed.attributes.port
+            : undefined;
+        const after =
+          typeof attributes.port === "number" ? attributes.port : undefined;
+        planPayload = {
+          id: `plan_${randomUUID()}`,
+          pluginId: binding.pluginId,
+          resourceId: binding.id,
+          summary:
+            optionalString(p, "summaryHint") ??
+            `Local plan for ${binding.displayName ?? binding.id}`,
+          operations:
+            before !== undefined && after !== undefined && before !== after
+              ? [
+                  {
+                    id: "set-port",
+                    type: "update_attribute",
+                    description: `Change port from ${before} to ${after}`,
+                    path: "attributes.port",
+                    before,
+                    after,
+                    requiresApproval: true,
+                    destructive: false,
+                  },
+                ]
+              : [],
+          warnings: [
+            `Plugin plan unavailable (${error.message}); used structured local plan`,
+          ],
+          destructive: false,
+        };
+      }
 
-    this.events.emit({
-      type: "operation_completed",
-      projectId: finding.projectId,
-      actor: session.actor,
-      correlationId,
-      payload: { operationId: op.id, changePlanId: plan.id },
-    });
+      try {
+        const existingDesired =
+          await this.exampleLocalHost.resourceState.getDesired(binding.id);
+        await this.exampleLocalHost.resourceState.saveDesired({
+          projectId,
+          environmentId: environmentId ?? binding.environmentId,
+          resourceBindingId: binding.id,
+          pluginId: binding.pluginId,
+          connectionId: binding.connectionId,
+          state: { attributes },
+          schemaVersion: "1.0.0",
+          createdBy: actor,
+          expectedRevision: existingDesired?.revision,
+        });
+      } catch {
+        // Desired-state persistence is best-effort for the in-memory plugin domain.
+      }
 
-    return { operation: { ...completed, changePlanId: plan.id }, plan };
+      const plan = await this.changePlanService.create({
+        pluginId: binding.pluginId,
+        connectionId: binding.connectionId,
+        projectId,
+        environmentId: environmentId ?? binding.environmentId,
+        resourceBindingId: binding.id,
+        plan: planPayload,
+        createdBy: toPluginActor(session.actor),
+      });
+
+      const completed = this.control.updateOperation(op.id, {
+        status: "succeeded",
+        finishedAt: new Date().toISOString(),
+        resultSummary: { changePlanId: plan.id },
+      });
+      this.db.raw
+        .prepare(`UPDATE operations SET change_plan_id = ? WHERE id = ?`)
+        .run(plan.id, op.id);
+      this.events.emit({
+        type: "operation_completed",
+        projectId,
+        actor: session.actor,
+        correlationId,
+        payload: { operationId: op.id, changePlanId: plan.id },
+      });
+      return { operation: completed, plan };
+    } catch (error) {
+      this.control.updateOperation(op.id, {
+        status: "failed",
+        finishedAt: new Date().toISOString(),
+        safeError: {
+          code: "PROVIDER_OPERATION_FAILED",
+          message:
+            error instanceof Error ? error.message : "Plan generation failed",
+          retryable: true,
+        },
+      });
+      throw error;
+    }
   }
 
   private async approveChangePlan(
@@ -1454,11 +1726,134 @@ export class DaemonRuntime {
     if (plan.environmentId) {
       requireEnvironmentScope(session, plan.environmentId);
     }
-    throw new DaemonAppError(
-      "PLUGIN_UNAVAILABLE",
-      "Remote apply is disabled until the daemon-owned out-of-process plugin host is available",
-      { retryable: true, correlationId },
+
+    if (plan.pluginId !== "example-local") {
+      throw new DaemonAppError(
+        "PLUGIN_UNAVAILABLE",
+        `No daemon-owned plugin host is available for plugin ${plan.pluginId}`,
+        { retryable: true, correlationId },
+      );
+    }
+
+    const binding = await this.pluginRepos.resourceBindings.getById(
+      plan.resourceBindingId,
     );
+    if (!binding) {
+      throw new DaemonAppError(
+        "NOT_FOUND",
+        `Resource binding not found for plan: ${plan.resourceBindingId}`,
+      );
+    }
+
+    const approved =
+      await this.changeApprovalService.buildApprovedChangePlan(planId);
+    const op = this.control.createOperation({
+      projectId: plan.projectId,
+      type: "change_apply",
+      actor: session.actor,
+      correlationId,
+      idempotencyKey: optionalString(p, "idempotencyKey"),
+    });
+    this.control.updateOperation(op.id, {
+      status: "running",
+      startedAt: new Date().toISOString(),
+    });
+    this.db.raw
+      .prepare(`UPDATE operations SET change_plan_id = ? WHERE id = ?`)
+      .run(plan.id, op.id);
+
+    const startedAt = new Date().toISOString();
+    await this.changeApprovalService.beginApply(planId);
+    const actor = toPluginExecutionActor(session.actor);
+
+    try {
+      const execution = await this.exampleLocalHost.applyPlan(
+        plan,
+        approved,
+        actor,
+      );
+      if (execution.status !== "succeeded") {
+        const apply = await this.changeApprovalService.completeApply({
+          changePlanId: planId,
+          executionId: execution.executionId,
+          status: "failed",
+          error: execution.error,
+          startedAt,
+        });
+        this.control.updateOperation(op.id, {
+          status: "failed",
+          finishedAt: new Date().toISOString(),
+          safeError: {
+            code: "PROVIDER_OPERATION_FAILED",
+            message: execution.error?.message ?? "Apply failed",
+            retryable: execution.error?.retryable ?? true,
+          },
+        });
+        return { operationId: op.id, apply, status: "failed" as const };
+      }
+
+      const apply = await this.changeApprovalService.completeApply({
+        changePlanId: planId,
+        executionId: execution.executionId,
+        status: "succeeded",
+        result: execution.data,
+        startedAt,
+      });
+      this.control.updateOperation(op.id, {
+        status: "succeeded",
+        finishedAt: new Date().toISOString(),
+        resultSummary: {
+          changePlanId: planId,
+          changeApplyId: apply.id,
+          appliedOperationIds: execution.data.appliedOperationIds,
+        },
+      });
+      this.events.emit({
+        type: "operation_completed",
+        projectId: plan.projectId,
+        actor: session.actor,
+        correlationId,
+        payload: {
+          operationId: op.id,
+          changePlanId: planId,
+          changeApplyId: apply.id,
+        },
+      });
+      return {
+        operationId: op.id,
+        apply,
+        result: execution.data,
+        status: "succeeded" as const,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Apply failed unexpectedly";
+      await this.changeApprovalService
+        .completeApply({
+          changePlanId: planId,
+          executionId: `failed_${randomUUID()}`,
+          status: "failed",
+          error: {
+            code: "execution_failed",
+            message,
+            pluginId: plan.pluginId,
+            capability: "apply",
+            retryable: true,
+          },
+          startedAt,
+        })
+        .catch(() => undefined);
+      this.control.updateOperation(op.id, {
+        status: "failed",
+        finishedAt: new Date().toISOString(),
+        safeError: {
+          code: "PROVIDER_OPERATION_FAILED",
+          message,
+          retryable: true,
+        },
+      });
+      throw error;
+    }
   }
 
   private async verifyChangePlan(
@@ -1474,11 +1869,446 @@ export class DaemonRuntime {
     if (plan.environmentId) {
       requireEnvironmentScope(session, plan.environmentId);
     }
-    throw new DaemonAppError(
-      "PLUGIN_UNAVAILABLE",
-      "Remote verification is disabled until the daemon-owned out-of-process plugin host is available",
-      { retryable: true, correlationId },
+
+    if (plan.pluginId !== "example-local") {
+      throw new DaemonAppError(
+        "PLUGIN_UNAVAILABLE",
+        `No daemon-owned plugin host is available for plugin ${plan.pluginId}`,
+        { retryable: true, correlationId },
+      );
+    }
+
+    const applies = await this.pluginRepos.changeApplies.listByPlanId(planId);
+    const latestApply = applies.at(-1);
+    if (!latestApply?.result) {
+      throw new DaemonAppError(
+        "VALIDATION_FAILED",
+        "Cannot verify: no completed apply result exists for this plan",
+      );
+    }
+
+    const approved =
+      await this.changeApprovalService.buildApprovedChangePlan(planId);
+    const execution = await this.exampleLocalHost.verifyPlan(
+      plan,
+      approved,
+      latestApply.result,
+      toPluginExecutionActor(session.actor),
     );
+
+    if (execution.status !== "succeeded") {
+      const verification = await this.changeApprovalService.recordVerification({
+        changeApplyId: latestApply.id,
+        executionId: execution.executionId,
+        status: "failed",
+        error: execution.error,
+      });
+      return { verification, status: "failed" as const };
+    }
+
+    const verification = await this.changeApprovalService.recordVerification({
+      changeApplyId: latestApply.id,
+      executionId: execution.executionId,
+      status: execution.data.ok ? "verified" : "not_verified",
+      result: execution.data,
+    });
+
+    const resolvedFindingIds: string[] = [];
+    if (execution.data.ok) {
+      const linked = await this.findingService.list({
+        projectId: plan.projectId,
+        statuses: ["open", "acknowledged"],
+      });
+      for (const finding of linked) {
+        if (finding.changePlanId !== planId) continue;
+        const resolved = await this.findingService.resolve(
+          finding.id,
+          toFindingActor(session.actor),
+          `Verified change plan ${planId}`,
+        );
+        resolvedFindingIds.push(resolved.id);
+        this.events.emit({
+          type: "finding_changed",
+          projectId: plan.projectId,
+          actor: session.actor,
+          correlationId,
+          payload: {
+            findingId: resolved.id,
+            environmentId: resolved.environmentId,
+            status: resolved.status,
+            action: "resolved_by_verification",
+            changePlanId: planId,
+          },
+        });
+      }
+    }
+
+    this.events.emit({
+      type: "operation_completed",
+      projectId: plan.projectId,
+      actor: session.actor,
+      correlationId,
+      payload: {
+        changePlanId: planId,
+        changeApplyId: latestApply.id,
+        verificationId: verification.id,
+        verified: execution.data.ok,
+        resolvedFindingIds,
+      },
+    });
+    return {
+      verification,
+      result: execution.data,
+      status: execution.data.ok ? ("verified" as const) : ("not_verified" as const),
+      resolvedFindingIds,
+    };
+  }
+
+  private async retryFailedChange(
+    session: SessionContext,
+    p: Record<string, unknown>,
+    correlationId: string,
+  ) {
+    requirePermission(session, "changes:apply");
+    const planId = requireString(p, "changePlanId");
+    const plan = await this.changePlanService.getById(planId);
+    if (!plan) throw new DaemonAppError("NOT_FOUND", "Change plan not found");
+    requireProjectScope(session, plan.projectId);
+    if (plan.environmentId) {
+      requireEnvironmentScope(session, plan.environmentId);
+    }
+
+    if (plan.status === "applying") {
+      throw new DaemonAppError(
+        "VALIDATION_FAILED",
+        "Cannot retry an interrupted apply; verify the provider state first",
+        { retryable: false },
+      );
+    }
+    if (plan.status !== "failed") {
+      throw new DaemonAppError(
+        "VALIDATION_FAILED",
+        `Only failed change plans can be retried (status=${plan.status})`,
+      );
+    }
+
+    const applies = await this.pluginRepos.changeApplies.listByPlanId(planId);
+    const latestApply = applies.at(-1);
+    if (!latestApply) {
+      throw new DaemonAppError(
+        "VALIDATION_FAILED",
+        "Cannot retry: no apply record exists for this failed plan",
+      );
+    }
+
+    const interruptMessage =
+      latestApply.error?.message?.includes("interrupted") ||
+      latestApply.error?.message?.includes("verification required before retry");
+    if (interruptMessage) {
+      throw new DaemonAppError(
+        "VALIDATION_FAILED",
+        "Interrupted applies cannot be blindly retried; verify first",
+        { retryable: false },
+      );
+    }
+    if (latestApply.status !== "failed") {
+      throw new DaemonAppError(
+        "VALIDATION_FAILED",
+        "retryFailed only retries applies that completed with status failed",
+      );
+    }
+
+    await this.pluginRepos.changePlans.setStatus(planId, "approved");
+    return this.applyChangePlan(
+      session,
+      { changePlanId: planId, idempotencyKey: optionalString(p, "idempotencyKey") },
+      correlationId,
+    );
+  }
+
+  private async syncExampleLocal(
+    session: SessionContext,
+    projectId: string,
+    environmentId: string | undefined,
+    integrationId: string | undefined,
+    correlationId: string,
+  ) {
+    const actor = toPluginExecutionActor(session.actor);
+    let host;
+    if (integrationId) {
+      const connection =
+        await this.exampleLocalHost.connections.getById(integrationId);
+      if (!connection || connection.projectId !== projectId) {
+        throw new DaemonAppError(
+          "NOT_FOUND",
+          "Integration connection not found for project",
+        );
+      }
+      if (connection.pluginId !== "example-local") {
+        throw new DaemonAppError(
+          "PLUGIN_UNAVAILABLE",
+          `No daemon-owned provider runtime for plugin ${connection.pluginId}`,
+          { retryable: true, correlationId },
+        );
+      }
+      host = await this.exampleLocalHost.syncConnection(connection, actor);
+    } else {
+      host = await this.exampleLocalHost.ensureProjectConnection(projectId);
+    }
+
+    if (environmentId) {
+      // Environment sync uses the same discovery; bindings may be environment-scoped later.
+      void environmentId;
+    }
+
+    this.events.emit({
+      type: "operation_completed",
+      projectId,
+      actor: session.actor,
+      correlationId,
+      payload: {
+        type: "sync",
+        connectionId: host.connection.id,
+        discovered: host.discovered.length,
+        bindings: host.bindings.length,
+      },
+    });
+
+    return {
+      connectionId: host.connection.id,
+      pluginId: host.connection.pluginId,
+      discovered: host.discovered,
+      bindings: host.bindings,
+      remoteStateAffected: false,
+    };
+  }
+
+  private async setConfigurationTargets(
+    session: SessionContext,
+    p: Record<string, unknown>,
+    correlationId: string,
+  ) {
+    requirePermission(session, "configuration:write");
+    const projectId = requireString(p, "projectId");
+    requireProjectScope(session, projectId);
+    const configurationKeyId = requireString(p, "configurationKeyId");
+    await this.requireConfigurationKeyInProject(projectId, configurationKeyId);
+    const resourceBindingId = requireString(p, "resourceBindingId");
+    await this.exampleLocalHost.requireBinding(resourceBindingId);
+
+    const occurrenceIds = Array.isArray(p.occurrenceIds)
+      ? (p.occurrenceIds as unknown[]).filter(
+          (id): id is string => typeof id === "string" && id.length > 0,
+        )
+      : undefined;
+
+    const occurrences = occurrenceIds
+      ? await Promise.all(
+          occurrenceIds.map(async (id) => {
+            const occurrence = await this.configurationService.getOccurrence(id);
+            if (!occurrence || occurrence.projectId !== projectId) {
+              throw new DaemonAppError(
+                "NOT_FOUND",
+                `Configuration occurrence not found: ${id}`,
+              );
+            }
+            if (occurrence.configurationKeyId !== configurationKeyId) {
+              throw new DaemonAppError(
+                "VALIDATION_FAILED",
+                "Occurrence does not belong to the requested configuration key",
+              );
+            }
+            return occurrence;
+          }),
+        )
+      : (
+          await this.configurationService.listOccurrencesByKey(configurationKeyId)
+        ).filter((occurrence) => occurrence.projectId === projectId);
+
+    if (occurrences.length === 0) {
+      throw new DaemonAppError(
+        "NOT_FOUND",
+        "No configuration occurrences available to target",
+      );
+    }
+
+    const updated = [];
+    for (const occurrence of occurrences) {
+      updated.push(
+        await this.configurationService.updateOccurrence(occurrence.id, {
+          resourceBindingId,
+        }),
+      );
+    }
+
+    this.events.emit({
+      type: "configuration_changed",
+      projectId,
+      actor: session.actor,
+      correlationId,
+      payload: {
+        configurationKeyId,
+        action: "targets_set",
+        resourceBindingId,
+        occurrenceIds: updated.map((item) => item.id),
+      },
+    });
+    return {
+      configurationKeyId,
+      resourceBindingId,
+      occurrences: updated.map((occurrence) =>
+        sanitizeOccurrence(occurrence, false),
+      ),
+    };
+  }
+
+  private async removeConfigurationTarget(
+    session: SessionContext,
+    p: Record<string, unknown>,
+    correlationId: string,
+  ) {
+    requirePermission(session, "configuration:write");
+    const projectId = requireString(p, "projectId");
+    requireProjectScope(session, projectId);
+    const occurrenceId = requireString(p, "occurrenceId");
+    const occurrence =
+      await this.configurationService.getOccurrence(occurrenceId);
+    if (!occurrence || occurrence.projectId !== projectId) {
+      throw new DaemonAppError("NOT_FOUND", "Configuration occurrence not found");
+    }
+    const updated = await this.configurationService.updateOccurrence(
+      occurrenceId,
+      { resourceBindingId: null },
+    );
+    this.events.emit({
+      type: "configuration_changed",
+      projectId,
+      actor: session.actor,
+      correlationId,
+      payload: {
+        configurationKeyId: occurrence.configurationKeyId,
+        action: "target_removed",
+        occurrenceId,
+      },
+    });
+    return { occurrence: sanitizeOccurrence(updated, false) };
+  }
+
+  private async adoptDiscoveredConfiguration(
+    session: SessionContext,
+    p: Record<string, unknown>,
+    correlationId: string,
+  ) {
+    requirePermission(session, "configuration:write");
+    const projectId = requireString(p, "projectId");
+    requireProjectScope(session, projectId);
+    const occurrenceId = requireString(p, "occurrenceId");
+    const occurrence =
+      await this.configurationService.getOccurrence(occurrenceId);
+    if (!occurrence || occurrence.projectId !== projectId) {
+      throw new DaemonAppError("NOT_FOUND", "Configuration occurrence not found");
+    }
+    const key = await this.configurationService.getKey(
+      occurrence.configurationKeyId,
+    );
+    if (!key) {
+      throw new DaemonAppError("NOT_FOUND", "Configuration key not found");
+    }
+
+    const managed = await this.configurationService.upsertKeyByName(
+      projectId,
+      key.name,
+      {
+        description: key.description,
+        valueType: key.valueType,
+        required: key.required,
+        sensitive: key.sensitive,
+        source: "manual",
+      },
+    );
+
+    const clearedIgnore = await this.configurationService.updateOccurrence(
+      occurrenceId,
+      {
+        scope: occurrence.scope === "ignored" ? null : occurrence.scope,
+        resourceBindingId:
+          optionalString(p, "resourceBindingId") ?? occurrence.resourceBindingId,
+      },
+    );
+
+    const environmentId =
+      optionalString(p, "environmentId") ?? occurrence.environmentId;
+    let desired = null;
+    if (
+      environmentId &&
+      occurrence.observedValue !== undefined &&
+      !key.sensitive
+    ) {
+      requireEnvironmentScope(session, environmentId);
+      await this.requireEnvironmentInProject(projectId, environmentId);
+      const existingDesired = await this.desiredStateService.getDesired(
+        managed.id,
+        environmentId,
+      );
+      desired = await this.desiredStateService.saveDesired({
+        configurationKeyId: managed.id,
+        environmentId,
+        projectId,
+        desiredValue: occurrence.observedValue,
+        updatedBy: actorToConfigActor(session.actor),
+        expectedRevision: existingDesired?.revision,
+      });
+    }
+
+    this.events.emit({
+      type: "configuration_changed",
+      projectId,
+      actor: session.actor,
+      correlationId,
+      payload: {
+        configurationKeyId: managed.id,
+        occurrenceId,
+        action: "adopted",
+      },
+    });
+
+    return {
+      key: sanitizeKey(managed),
+      occurrence: sanitizeOccurrence(clearedIgnore, managed.sensitive),
+      desired: desired ? sanitizeDesired(desired) : null,
+    };
+  }
+
+  private async ignoreDiscoveredConfiguration(
+    session: SessionContext,
+    p: Record<string, unknown>,
+    correlationId: string,
+  ) {
+    requirePermission(session, "configuration:write");
+    const projectId = requireString(p, "projectId");
+    requireProjectScope(session, projectId);
+    const occurrenceId = requireString(p, "occurrenceId");
+    const occurrence =
+      await this.configurationService.getOccurrence(occurrenceId);
+    if (!occurrence || occurrence.projectId !== projectId) {
+      throw new DaemonAppError("NOT_FOUND", "Configuration occurrence not found");
+    }
+    const updated = await this.configurationService.updateOccurrence(
+      occurrenceId,
+      { scope: "ignored" },
+    );
+    this.events.emit({
+      type: "configuration_changed",
+      projectId,
+      actor: session.actor,
+      correlationId,
+      payload: {
+        configurationKeyId: occurrence.configurationKeyId,
+        occurrenceId,
+        action: "ignored",
+      },
+    });
+    return { occurrence: sanitizeOccurrence(updated, false) };
   }
 
   private async decideApproval(
@@ -1613,6 +2443,7 @@ export class DaemonRuntime {
         credentialReferenceId: `keyring:${id}`,
       });
     }
+    // Re-issue when keyring has an orphan secret or the hash metadata is gone.
     if (!this.credentials.resolve(id)) {
       this.credentials.issue(id);
     }
@@ -1681,11 +2512,31 @@ function countBy<T extends Record<K, string>, K extends keyof T>(
   return counts;
 }
 
+function resolveProjectScopes(
+  client: { permissionProfileId: string; projectScopes: string[] } | undefined,
+): string[] | "*" {
+  if (!client) return "*";
+  // Built-in desktop/cli clients are provisioned with an empty scope list and
+  // an administrator profile — treat that as unrestricted project access.
+  if (
+    client.permissionProfileId === "administrator" ||
+    client.projectScopes.length === 0
+  ) {
+    return "*";
+  }
+  return client.projectScopes;
+}
+
 function filterProjects<T extends { id: string }>(
   projects: T[],
   session: SessionContext,
 ): T[] {
-  if (session.projectScopes === "*") return projects;
+  if (
+    session.projectScopes === "*" ||
+    session.client?.permissionProfileId === "administrator"
+  ) {
+    return projects;
+  }
   return projects.filter((p) => session.projectScopes.includes(p.id));
 }
 

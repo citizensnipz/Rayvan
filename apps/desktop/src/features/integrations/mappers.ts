@@ -125,8 +125,10 @@ export function resolveIntegrationStatus(
 
 export function mapIconFromManifest(manifest: PluginManifest): IntegrationIconViewModel {
   const icon = manifest.presentation?.icon;
-  const label = icon?.label ?? manifest.name;
-  const initials = icon?.initials ?? manifest.name.slice(0, 2).toUpperCase();
+  const fallbackName = manifest.name?.trim() || manifest.id || "Plugin";
+  const label = icon?.label ?? fallbackName;
+  const initials =
+    icon?.initials ?? fallbackName.slice(0, 2).toUpperCase();
   return { iconId: icon?.iconId, initials, label };
 }
 

@@ -1,11 +1,14 @@
 import type {
   FindingActor,
+  FindingDetection,
   FindingLifecycleEventRecord,
   FindingRecord,
 } from "@rayvan/core";
 import {
   acknowledgeFinding,
   dismissFinding,
+  reopenFinding,
+  resolveFinding,
   suppressFinding,
   type FindingLifecycleEventRepository,
   type FindingQuery,
@@ -110,6 +113,58 @@ export class FindingLifecycleService {
     }
   }
 
+  /**
+   * Reopen a dismissed/resolved/suppressed finding.
+   * When `detection` is omitted, one is rebuilt from the existing record.
+   */
+  async reopen(
+    findingId: string,
+    actor: FindingActor,
+    detection?: FindingDetection,
+    now: string = new Date().toISOString(),
+  ): Promise<FindingRecord> {
+    assertFindingActor(actor);
+    const existing = await this.requireFinding(findingId);
+    const rebuilt = detection ?? detectionFromFinding(existing);
+    try {
+      const result = reopenFinding(existing, rebuilt, actor, now);
+      await this.persistMutation(result.record, result.event);
+      return result.record;
+    } catch (error) {
+      throw this.mapLifecycleError(error);
+    }
+  }
+
+  async resolve(
+    findingId: string,
+    actor: FindingActor,
+    reason?: string,
+    now: string = new Date().toISOString(),
+  ): Promise<FindingRecord> {
+    assertFindingActor(actor);
+    const existing = await this.requireFinding(findingId);
+    try {
+      const result = resolveFinding(existing, actor, now, "automatic", reason);
+      await this.persistMutation(result.record, result.event);
+      return result.record;
+    } catch (error) {
+      throw this.mapLifecycleError(error);
+    }
+  }
+
+  async attachChangePlan(
+    findingId: string,
+    changePlanId: string,
+  ): Promise<FindingRecord> {
+    const existing = await this.requireFinding(findingId);
+    const next: FindingRecord = {
+      ...existing,
+      changePlanId,
+    };
+    await this.findings.save(next);
+    return next;
+  }
+
   private async requireFinding(id: string): Promise<FindingRecord> {
     const existing = await this.findings.getById(id);
     if (!existing) {
@@ -145,11 +200,42 @@ export class FindingLifecycleService {
     if (error instanceof Error && error.message.startsWith("Cannot acknowledge")) {
       return new InvalidFindingStatusTransitionError(error.message);
     }
+    if (error instanceof Error && error.message.startsWith("Cannot dismiss")) {
+      return new InvalidFindingStatusTransitionError(error.message);
+    }
+    if (error instanceof Error && error.message.startsWith("Cannot suppress")) {
+      return new InvalidFindingStatusTransitionError(error.message);
+    }
     if (error instanceof Error) {
       return new FindingPersistenceError(error.message, error);
     }
     return new FindingPersistenceError("Finding lifecycle mutation failed", error);
   }
+}
+
+function detectionFromFinding(record: FindingRecord): FindingDetection {
+  return {
+    ruleId: record.ruleId,
+    projectId: record.projectId,
+    severity: record.severity,
+    title: record.title,
+    summary: record.summary,
+    description: record.description,
+    scope: {
+      environmentId: record.environmentId,
+      integrationId: record.integrationId,
+      connectionId: record.connectionId,
+      discoveredResourceId: record.discoveredResourceId,
+      resourceBindingId: record.resourceBindingId,
+      configurationKeyId: record.configurationKeyId,
+      changePlanId: record.changePlanId,
+      deploymentId: record.deploymentId,
+    },
+    evidence: record.evidence,
+    remediation: record.remediation,
+    fingerprintParts: [record.fingerprint],
+    metadata: record.metadata,
+  };
 }
 
 /** Alias preferred by some call sites. */
