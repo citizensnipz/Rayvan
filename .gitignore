@@ -46,6 +46,9 @@ data/
 # Credentials / secrets
 secrets/
 credentials/
+# Source modules named credentials/ (not secret material)
+!packages/local-database/src/plugins/credentials/
+!packages/local-database/src/plugins/credentials/**
 *.pem
 *.key
 *.p12
