@@ -2,6 +2,7 @@ import type {
   AuthenticateContext,
   ApplyContext,
   DiscoveryContext,
+  EvaluateFindingsContext,
   InspectContext,
   PlanContext,
   VerifyContext,
@@ -11,6 +12,7 @@ import type {
   AuthenticateResult,
   ChangePlan,
   DiscoveredResource,
+  EvaluateFindingsResult,
   ObservedResourceState,
   VerificationResult,
 } from "./contracts/index.js";
@@ -36,9 +38,14 @@ export type VerifyHandler = (
   context: VerifyContext,
 ) => Promise<VerificationResult>;
 
+export type EvaluateFindingsHandler = (
+  context: EvaluateFindingsContext,
+) => Promise<EvaluateFindingsResult>;
+
 /**
  * Plugin contract with optional lifecycle handlers.
  * Declare a capability in the manifest only when the matching handler exists.
+ * `evaluateFindings` returns detections only — never write Finding records.
  */
 export interface RayvanPlugin {
   manifest: PluginManifest;
@@ -49,4 +56,5 @@ export interface RayvanPlugin {
   plan?: PlanHandler;
   apply?: ApplyHandler;
   verify?: VerifyHandler;
+  evaluateFindings?: EvaluateFindingsHandler;
 }

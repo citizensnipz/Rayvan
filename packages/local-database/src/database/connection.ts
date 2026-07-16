@@ -8,6 +8,8 @@ import {
   V3_PLUGIN_PERSISTENCE_SQL,
   V4_ENVIRONMENTS_AND_CONFIGURATION_SQL,
   V5_DESIRED_APPLIED_CONFIGURATION_SQL,
+  V6_FINDINGS_SQL,
+  V7_DAEMON_CONTROL_PLANE_SQL,
 } from "./migrations.js";
 
 interface MigrationStep {
@@ -21,6 +23,8 @@ const MIGRATION_STEPS: MigrationStep[] = [
   { version: 3, sql: V3_PLUGIN_PERSISTENCE_SQL },
   { version: 4, sql: V4_ENVIRONMENTS_AND_CONFIGURATION_SQL },
   { version: 5, sql: V5_DESIRED_APPLIED_CONFIGURATION_SQL },
+  { version: 6, sql: V6_FINDINGS_SQL },
+  { version: 7, sql: V7_DAEMON_CONTROL_PLANE_SQL },
 ];
 
 export class LocalDatabaseConnection {

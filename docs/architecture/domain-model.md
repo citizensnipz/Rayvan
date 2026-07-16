@@ -22,7 +22,13 @@ Secret / sensitive desired values store only `secretValueRef` and fingerprints i
 
 ## Findings
 
-**Findings** represent issues Rayvan detects: missing configuration, drift, deployment failures, integration errors, security concerns, or health problems.
+**Findings** are durable issue records Rayvan detects and tracks over time: configuration gaps, drift, environment/resource mapping problems, integration health, and change apply failures.
+
+- Identity is a stable **fingerprint** (`ruleId` + project + structural parts) — not titles or timestamps — so wording changes do not fork the same issue.
+- Evaluators emit `{ detections, evaluatedRuleIds }`; the findings-engine matches, creates, updates, reopens, and resolves only for rule IDs that were fully evaluated (rules skipped for missing input data are not eligible for auto-resolve). Cancelled evaluation runs persist the run record only — they do not create, update, or resolve findings.
+- Product categories include `configuration`, `drift`, `environment`, `resource`, `mapping`, `integration`, `permission`, `deployment`, and related taxonomy in `@rayvan/core`.
+- Pure evaluation lives in `@rayvan/findings-engine`; persistence adapters belong in local-database (schema v6: `findings`, `finding_lifecycle_events`, `finding_evaluation_runs` — not dual product paths from config-engine derived findings).
+- Desktop Findings and Environments workspaces read `FindingRecord` / `FindingSummary` via gateways — they must not compute or persist findings in React.
 
 ## Actions
 

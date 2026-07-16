@@ -7,11 +7,12 @@ import type {
   EnvironmentKind,
   EnvironmentPresentation,
   EnvironmentStatus,
+  FindingRecord,
+  FindingSummary,
 } from "@rayvan/core";
 import type {
   ConfigurationApplyPlan,
   ConfigurationApplyResult,
-  ConfigurationDerivedFinding,
   ConfigurationMatrixViewModel,
   EnvironmentConfigurationStatusViewModel,
 } from "@rayvan/config-engine";
@@ -212,7 +213,14 @@ export interface EnvironmentsGateway {
   ): Promise<EnvironmentMappingSuggestionRecord>;
 
   getMatrix(projectId: string): Promise<ConfigurationMatrixViewModel>;
-  getDerivedFindings(projectId: string): Promise<ConfigurationDerivedFinding[]>;
+
+  /** Open + acknowledged findings from the findings store (not config-engine derived). */
+  listOpenFindings(projectId: string): Promise<FindingRecord[]>;
+  getFindingsSummary(projectId: string): Promise<FindingSummary>;
+  getEnvironmentFindingsSummary(
+    projectId: string,
+    environmentId: string,
+  ): Promise<FindingSummary>;
 
   syncWithIntegrations(
     projectId: string,

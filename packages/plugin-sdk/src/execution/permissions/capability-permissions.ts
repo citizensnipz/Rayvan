@@ -12,4 +12,5 @@ export const DEFAULT_CAPABILITY_PERMISSIONS: PluginCapabilityPermissionPolicy =
     plan: [],
     apply: [],
     verify: [],
+    evaluate_findings: [],
   };

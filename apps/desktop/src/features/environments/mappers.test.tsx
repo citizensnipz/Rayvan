@@ -117,13 +117,24 @@ describe("environment mappers", () => {
       resources: [],
       findings: [
         {
-          id: "finding-1",
-          projectId: "project-1",
-          environmentId: "env-1",
+          id: "finding-1" as import("@rayvan/core").FindingId,
+          projectId: "project-1" as import("@rayvan/core").ProjectId,
+          ruleId: "rayvan.configuration.missing-required",
+          source: { type: "rayvan" },
+          environmentId: "env-1" as import("@rayvan/core").EnvironmentId,
           severity: "error",
-          category: "missing_configuration",
+          category: "configuration",
           title: "Missing",
-          description: "Missing key",
+          summary: "Missing key",
+          status: "open",
+          fingerprint: "fp-test-1",
+          fingerprintVersion: "1",
+          evidence: [{ type: "message", message: "missing" }],
+          firstDetectedAt: "2026-01-01T00:00:00.000Z",
+          lastDetectedAt: "2026-01-01T00:00:00.000Z",
+          occurrenceCount: 1,
+          metadata: {},
+          schemaVersion: "1",
         },
       ],
       matrix,
@@ -135,6 +146,7 @@ describe("environment mappers", () => {
     expect(card.resourceCount).toBe(1);
     expect(card.integrationCount).toBe(1);
     expect(card.findingsCount).toBe(1);
+    expect(card.findingsLabel).toMatch(/1 open finding/i);
     expect(card.health.missing).toBe(1);
   });
 

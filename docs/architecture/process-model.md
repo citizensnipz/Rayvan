@@ -1,29 +1,43 @@
 # Process Model
 
-Rayvan is designed as a set of cooperating local processes. The exact process model may evolve, but the initial shape is:
+Rayvan is designed as a set of cooperating local processes:
 
 ```text
-Rayvan desktop process
-├── React webview
-├── Tauri Rust host
-├── local MCP server
+rayvand
 └── provider plugin processes
     ├── GitHub plugin
     ├── Vercel plugin
     └── Supabase plugin
+
+Rayvan desktop process
+├── React webview
+└── Tauri Rust daemon client
+
+MCP host
+└── rayvan-mcp stdio adapter
 ```
+
+`rayvand` continues running when the desktop closes. The initial policy has no
+automatic idle shutdown.
 
 ## Desktop shell
 
-The desktop application hosts the React UI and Tauri backend in one user-facing process tree. Tauri commands mediate access to native services.
+The desktop application hosts the React UI and Tauri backend in one user-facing
+process tree. Tauri launches or attaches to `rayvand` and relays daemon commands
+and events. It must not remain a writable production database owner after the
+daemon migration.
 
 ## MCP server
 
-The MCP server may run as a separate local Node.js process started by the desktop host or an external tool configuration. It communicates over stdio and exposes placeholder tools during early development.
+The MCP server is a separate process launched by an MCP host. It communicates
+with the host over stdio and with `rayvand` over user-scoped local IPC. It may
+start the daemon when the configured local client identity is valid.
 
 ## Provider plugins
 
-Each provider plugin is intended to run as its own local process. Rust owns process lifecycle through `crates/plugin-host`. TypeScript in `packages/plugin-client` defines the typed client protocol without owning process spawning.
+Each provider plugin runs as its own local process. `rayvand` owns process
+lifecycle through `crates/plugin-host`. TypeScript in `packages/plugin-client`
+defines the typed client protocol without owning process spawning.
 
 ## Evolution
 

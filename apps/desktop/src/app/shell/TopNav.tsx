@@ -2,6 +2,7 @@ import { useMemo, useState, type CSSProperties } from "react";
 import type { ProjectId } from "@rayvan/core";
 import { Button } from "@rayvan/ui";
 
+import rayvanLogoMed from "../../assets/brand/rayvan-logo-med.png";
 import { useProjects } from "../../features/projects/ProjectsContext.js";
 import { useResolvedCurrentProject } from "../CurrentProjectContext.js";
 import { useAppNavigation } from "../navigation/AppNavigationContext.js";
@@ -17,6 +18,19 @@ const navStyle: CSSProperties = {
 };
 
 const brandStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.55rem",
+  margin: 0,
+};
+
+const brandLogoStyle: CSSProperties = {
+  display: "block",
+  height: "1.75rem",
+  width: "auto",
+};
+
+const brandNameStyle: CSSProperties = {
   margin: 0,
   fontFamily: '"Quicksand", sans-serif',
   fontSize: "1.25rem",
@@ -77,7 +91,15 @@ export function TopNav() {
 
   return (
     <header style={navStyle}>
-      <h1 style={brandStyle}>Rayvan</h1>
+      <div style={brandStyle}>
+        <img
+          src={rayvanLogoMed}
+          alt=""
+          aria-hidden="true"
+          style={brandLogoStyle}
+        />
+        <h1 style={brandNameStyle}>Rayvan</h1>
+      </div>
       {selectorLabel ? (
         <div style={{ position: "relative" }}>
           <Button

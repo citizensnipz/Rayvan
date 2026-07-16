@@ -2,7 +2,6 @@ import type { ComponentType } from "react";
 
 import { ActionsPage } from "../features/actions/ActionsPage.js";
 import { AgentMcpPage } from "../features/agent-mcp/AgentMcpPage.js";
-import { ConfigurationPage } from "../features/configuration/ConfigurationPage.js";
 import { DeploymentsPage } from "../features/deployments/DeploymentsPage.js";
 import { EnvironmentsPage } from "../features/environments/EnvironmentsPage.js";
 import { FindingsPage } from "../features/findings/FindingsPage.js";
@@ -15,7 +14,6 @@ export const SECTION_PAGES: Record<AppSection, ComponentType> = {
   overview: OverviewPage,
   environments: EnvironmentsPage,
   integrations: IntegrationsPage,
-  configuration: ConfigurationPage,
   deployments: DeploymentsPage,
   findings: FindingsPage,
   actions: ActionsPage,

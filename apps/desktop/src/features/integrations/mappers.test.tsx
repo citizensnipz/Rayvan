@@ -3,12 +3,14 @@ import type {
   PluginConnectionRecord,
   PluginPermissionGrantRecord,
 } from "@rayvan/local-database";
+import type { FindingSummary } from "@rayvan/core";
 import type { PluginManifest } from "@rayvan/plugin-sdk";
 import { describe, expect, it } from "vitest";
 
 import {
   mapConnectionToCardViewModel,
   mapConnectionToDetailViewModel,
+  mapFindingsFromIntegrationSummary,
   mapIconFromManifest,
   mapInstalledPluginToLibraryViewModel,
   resolveIntegrationStatus,
@@ -133,6 +135,48 @@ describe("mapConnectionToCardViewModel", () => {
   it("returns no fields when metadata.uiCard is absent", () => {
     const card = mapConnectionToCardViewModel(buildConnection(), buildInstalled());
     expect(card.fields).toEqual([]);
+  });
+
+  it("maps findings summary onto the card view-model", () => {
+    const summary: FindingSummary = {
+      openCount: 2,
+      acknowledgedCount: 1,
+      bySeverity: { critical: 1, error: 1, warning: 1, info: 0 },
+      byCategory: { integration: 3 },
+      highestSeverity: "critical",
+      hasRemediableFindings: true,
+    };
+    const card = mapConnectionToCardViewModel(
+      buildConnection(),
+      buildInstalled(),
+      summary,
+    );
+
+    expect(card.findingsCount).toBe(3);
+    expect(card.findingsLabel).toMatch(/3 open findings · highest Critical/i);
+    expect(card.highestSeverity).toBe("critical");
+  });
+
+  it("omits findings fields when no summary is provided", () => {
+    const card = mapConnectionToCardViewModel(buildConnection(), buildInstalled());
+    expect(card.findingsCount).toBeUndefined();
+    expect(card.findingsLabel).toBeUndefined();
+    expect(card.highestSeverity).toBeUndefined();
+  });
+});
+
+describe("mapFindingsFromIntegrationSummary", () => {
+  it("formats a singular open finding label", () => {
+    const result = mapFindingsFromIntegrationSummary({
+      openCount: 1,
+      acknowledgedCount: 0,
+      bySeverity: { critical: 0, error: 1, warning: 0, info: 0 },
+      byCategory: {},
+      highestSeverity: "error",
+      hasRemediableFindings: false,
+    });
+    expect(result.findingsCount).toBe(1);
+    expect(result.findingsLabel).toBe("1 open finding · highest Error");
   });
 });
 

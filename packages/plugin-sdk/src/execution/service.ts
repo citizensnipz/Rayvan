@@ -4,6 +4,7 @@ import type {
   AuthenticateResult,
   ChangePlan,
   DiscoveredResource,
+  EvaluateFindingsResult,
   ObservedResourceState,
   VerificationResult,
 } from "../contracts/index.js";
@@ -19,6 +20,8 @@ import {
   validateAuthenticateResult,
   validateChangePlan,
   validateDiscoveredResource,
+  validateEvaluateFindingsContext,
+  validateEvaluateFindingsResult,
   validateObservedResourceState,
   validateVerificationResult,
 } from "../validation/index.js";
@@ -34,6 +37,7 @@ import type {
   ApplyExecutionRequest,
   AuthenticateExecutionRequest,
   DiscoverExecutionRequest,
+  EvaluateFindingsExecutionRequest,
   InspectExecutionRequest,
   PlanExecutionRequest,
   PluginExecutionRequestBase,
@@ -90,6 +94,9 @@ export interface IPluginExecutionService {
   verify(
     request: VerifyExecutionRequest,
   ): Promise<PluginExecutionResult<VerificationResult>>;
+  evaluateFindings(
+    request: EvaluateFindingsExecutionRequest,
+  ): Promise<PluginExecutionResult<EvaluateFindingsResult>>;
 }
 
 export class PluginExecutionService implements IPluginExecutionService {
@@ -227,6 +234,32 @@ export class PluginExecutionService implements IPluginExecutionService {
       },
       validateOutput: (output) =>
         validateVerificationResult(output, request.pluginId),
+    });
+  }
+
+  evaluateFindings(
+    request: EvaluateFindingsExecutionRequest,
+  ): Promise<PluginExecutionResult<EvaluateFindingsResult>> {
+    return this.executeCapability({
+      request,
+      capability: "evaluate_findings",
+      input: request.context,
+      validateInput: () => {
+        this.assertRequestBase(request);
+        this.assertMatchingPluginId(request.pluginId, request.context.pluginId);
+        if (
+          request.projectId !== undefined &&
+          request.projectId !== request.context.projectId
+        ) {
+          throw new PluginValidationError(
+            `request.projectId "${request.projectId}" does not match context.projectId "${request.context.projectId}"`,
+            { pluginId: request.pluginId },
+          );
+        }
+        validateEvaluateFindingsContext(request.context);
+      },
+      validateOutput: (output) =>
+        validateEvaluateFindingsResult(output, request.pluginId),
     });
   }
 

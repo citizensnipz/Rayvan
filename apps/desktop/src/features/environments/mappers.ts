@@ -1,6 +1,5 @@
-import type { Environment } from "@rayvan/core";
+import type { Environment, FindingRecord, FindingSeverity, FindingSummary } from "@rayvan/core";
 import type {
-  ConfigurationDerivedFinding,
   ConfigurationMatrixViewModel,
 } from "@rayvan/config-engine";
 import type {
@@ -23,6 +22,68 @@ import {
 
 function emptyHealth(): EnvironmentHealthSummary {
   return { healthy: 0, missing: 0, mismatched: 0, locked: 0 };
+}
+
+const SEVERITY_LABELS: Record<FindingSeverity, string> = {
+  critical: "Critical",
+  error: "Error",
+  warning: "Warning",
+  info: "Informational",
+};
+
+export function mapFindingsCountForEnvironment(
+  findings: FindingRecord[],
+  environmentId: string,
+  summary?: FindingSummary | null,
+): { findingsCount: number; findingsLabel: string; highestSeverity?: FindingSeverity } {
+  if (summary) {
+    const findingsCount = summary.openCount + summary.acknowledgedCount;
+    const severityText = summary.highestSeverity
+      ? SEVERITY_LABELS[summary.highestSeverity]
+      : undefined;
+    const findingsLabel =
+      findingsCount === 0
+        ? "0 open findings"
+        : severityText
+          ? `${findingsCount} open finding${findingsCount === 1 ? "" : "s"} · highest ${severityText}`
+          : `${findingsCount} open finding${findingsCount === 1 ? "" : "s"}`;
+    return {
+      findingsCount,
+      findingsLabel,
+      highestSeverity: summary.highestSeverity,
+    };
+  }
+  const envFindings = findings.filter(
+    (finding) =>
+      finding.environmentId === environmentId &&
+      (finding.status === "open" || finding.status === "acknowledged"),
+  );
+  const findingsCount = envFindings.length;
+  let highestSeverity: FindingSeverity | undefined;
+  const rank: Record<FindingSeverity, number> = {
+    info: 0,
+    warning: 1,
+    error: 2,
+    critical: 3,
+  };
+  for (const finding of envFindings) {
+    if (
+      highestSeverity === undefined ||
+      rank[finding.severity] > rank[highestSeverity]
+    ) {
+      highestSeverity = finding.severity;
+    }
+  }
+  const severityText = highestSeverity
+    ? SEVERITY_LABELS[highestSeverity]
+    : undefined;
+  const findingsLabel =
+    findingsCount === 0
+      ? "0 open findings"
+      : severityText
+        ? `${findingsCount} open finding${findingsCount === 1 ? "" : "s"} · highest ${severityText}`
+        : `${findingsCount} open finding${findingsCount === 1 ? "" : "s"}`;
+  return { findingsCount, findingsLabel, highestSeverity };
 }
 
 export function mapMatrixHealthByEnvironment(
@@ -64,7 +125,8 @@ export function mapEnvironmentToCardViewModel(input: {
   environment: Environment;
   bindings: ResourceBindingRecord[];
   resources: DiscoveredResourceRecord[];
-  findings: ConfigurationDerivedFinding[];
+  findings: FindingRecord[];
+  findingsSummary?: FindingSummary | null;
   matrix: ConfigurationMatrixViewModel | null;
   syncState: EnvironmentSyncState | null;
   keyCount: number;
@@ -76,9 +138,12 @@ export function mapEnvironmentToCardViewModel(input: {
       binding.environmentId === environment.id && binding.bindingStatus === "active",
   );
   const pluginIds = new Set(activeBindings.map((binding) => binding.pluginId));
-  const findingsCount = input.findings.filter(
-    (finding) => finding.environmentId === environment.id,
-  ).length;
+  const { findingsCount, findingsLabel, highestSeverity } =
+    mapFindingsCountForEnvironment(
+      input.findings,
+      environment.id,
+      input.findingsSummary,
+    );
   const health =
     mapMatrixHealthByEnvironment(input.matrix).get(environment.id) ?? emptyHealth();
 
@@ -137,6 +202,8 @@ export function mapEnvironmentToCardViewModel(input: {
     integrationCount: pluginIds.size,
     configurationKeyCount: input.keyCount,
     findingsCount,
+    findingsLabel,
+    highestFindingSeverity: highestSeverity,
     lastSyncLabel,
     health,
     configAggregate,

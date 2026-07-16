@@ -10,4 +10,5 @@ export const DEFAULT_PLUGIN_TIMEOUTS: Readonly<
   plan: 30_000,
   apply: 120_000,
   verify: 60_000,
+  evaluate_findings: 30_000,
 };

@@ -93,6 +93,8 @@ function createDemoPlugin(options?: {
   plan?: RayvanPlugin["plan"];
   apply?: RayvanPlugin["apply"];
   verify?: RayvanPlugin["verify"];
+  evaluateFindings?: RayvanPlugin["evaluateFindings"];
+  capabilities?: PluginManifest["capabilities"];
   hangMs?: number;
 }): RayvanPlugin {
   const hangMs = options?.hangMs;
@@ -113,60 +115,82 @@ function createDemoPlugin(options?: {
     });
   };
 
+  const capabilities =
+    options?.capabilities ??
+    ([
+      "discover",
+      "inspect",
+      "plan",
+      "apply",
+      "verify",
+      ...(options?.evaluateFindings ? (["evaluate_findings"] as const) : []),
+    ] as PluginManifest["capabilities"]);
+
   return {
     manifest: baseManifest({
       id: "demo",
-      capabilities: ["discover", "inspect", "plan", "apply", "verify"],
+      capabilities,
       permissions: options?.permissions ?? [],
     }),
     discover:
       options?.discover ??
-      (async () => {
-        await wait();
-        return [
-          {
-            providerResourceId: "svc-1",
-            resourceType: "test.resource",
-            name: "API",
-            metadata: {},
-            schemaVersion: "1.0.0",
-          },
-        ] satisfies DiscoveredResource[];
-      }),
+      (capabilities.includes("discover")
+        ? async () => {
+            await wait();
+            return [
+              {
+                providerResourceId: "svc-1",
+                resourceType: "test.resource",
+                name: "API",
+                metadata: {},
+                schemaVersion: "1.0.0",
+              },
+            ] satisfies DiscoveredResource[];
+          }
+        : undefined),
     inspect:
       options?.inspect ??
-      (async () => {
-        await wait();
-        return observedState();
-      }),
+      (capabilities.includes("inspect")
+        ? async () => {
+            await wait();
+            return observedState();
+          }
+        : undefined),
     plan:
       options?.plan ??
-      (async () => {
-        await wait();
-        return changePlanFixture();
-      }),
+      (capabilities.includes("plan")
+        ? async () => {
+            await wait();
+            return changePlanFixture();
+          }
+        : undefined),
     apply:
       options?.apply ??
-      (async () => {
-        await wait();
-        return {
-          ok: true,
-          message: "Applied",
-          appliedOperationIds: ["op-1"],
-          resultingState: observedState(),
-        } satisfies ApplyResult;
-      }),
+      (capabilities.includes("apply")
+        ? async () => {
+            await wait();
+            return {
+              ok: true,
+              message: "Applied",
+              appliedOperationIds: ["op-1"],
+              resultingState: observedState(),
+            } satisfies ApplyResult;
+          }
+        : undefined),
     verify:
       options?.verify ??
-      (async () => {
-        await wait();
-        return {
-          ok: true,
-          message: "Verified",
-          observed: observedState(),
-          mismatches: [],
-        } satisfies VerificationResult;
-      }),
+      (capabilities.includes("verify")
+        ? async () => {
+            await wait();
+            return {
+              ok: true,
+              message: "Verified",
+              observed: observedState(),
+              mismatches: [],
+            } satisfies VerificationResult;
+          }
+        : undefined),
+    evaluateFindings: options?.evaluateFindings,
   };
 }
 
@@ -291,6 +315,101 @@ describe("PluginExecutionService", () => {
     expect(verify.status).toBe("succeeded");
     expect(verify.startedAt).toBe(new Date(1_300).toISOString());
     expect(verify.finishedAt).toBe(new Date(1_300).toISOString());
+  });
+
+  it("runs evaluate_findings and validates detections", async () => {
+    const { executionService } = createPluginExecutionStack({
+      plugins: [
+        createDemoPlugin({
+          capabilities: ["evaluate_findings"],
+          evaluateFindings: async () => ({
+            detections: [
+              {
+                ruleId: "demo.port-ready",
+                severity: "info",
+                title: "Service ready",
+                summary: "Observed resource is ready",
+                scope: { resourceBindingId: "res-1" },
+                evidence: [
+                  {
+                    type: "resource_state",
+                    resourceBindingId: "res-1",
+                    state: "ready",
+                  },
+                ],
+                fingerprintParts: ["demo", "port-ready", "res-1"],
+              },
+            ],
+            warnings: [],
+          }),
+        }),
+      ],
+      idFactory: () => "exec-findings",
+    });
+
+    const result = await executionService.evaluateFindings({
+      pluginId: "demo",
+      projectId: "project-1",
+      actor,
+      context: {
+        pluginId: "demo",
+        projectId: "project-1",
+        connectionId: "conn-1",
+        environments: [{ id: "env-1" }],
+        resources: [{ resourceBindingId: "res-1" }],
+        observedStates: [],
+      },
+    });
+
+    expect(result.status).toBe("succeeded");
+    if (result.status === "succeeded") {
+      expect(result.data.detections).toHaveLength(1);
+      expect(result.data.detections[0]?.ruleId).toBe("demo.port-ready");
+    }
+  });
+
+  it("rejects evaluate_findings output with secret evidence", async () => {
+    const { executionService } = createPluginExecutionStack({
+      plugins: [
+        createDemoPlugin({
+          capabilities: ["evaluate_findings"],
+          evaluateFindings: async () => ({
+            detections: [
+              {
+                ruleId: "demo.leaky",
+                title: "Leak",
+                summary: "Bad evidence",
+                scope: {},
+                evidence: [
+                  {
+                    type: "message",
+                    message: "api_key=sk-live-abcdefghijklmnopqrstuvwxyz",
+                  },
+                ],
+                fingerprintParts: ["demo", "leaky"],
+              },
+            ],
+            warnings: [],
+          }),
+        }),
+      ],
+    });
+
+    const result = await executionService.evaluateFindings({
+      pluginId: "demo",
+      actor,
+      context: {
+        pluginId: "demo",
+        projectId: "project-1",
+        connectionId: "conn-1",
+        environments: [],
+        resources: [],
+        observedStates: [],
+      },
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("validation_failed");
   });
 
   it("returns not_found for a missing plugin", async () => {

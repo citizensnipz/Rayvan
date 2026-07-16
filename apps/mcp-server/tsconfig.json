@@ -4,13 +4,16 @@
     "outDir": "dist",
     "rootDir": "src",
     "lib": ["ES2022"],
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@rayvan/daemon-client": ["../../packages/daemon-client/src/index.ts"],
+      "@rayvan/daemon-contracts": ["../../packages/daemon-contracts/src/index.ts"]
+    }
   },
   "include": ["src"],
   "references": [
-    { "path": "../../packages/core" },
-    { "path": "../../packages/config-engine" },
-    { "path": "../../packages/action-engine" },
-    { "path": "../../packages/shared" }
+    { "path": "../../packages/daemon-contracts" },
+    { "path": "../../packages/daemon-client" }
   ]
 }

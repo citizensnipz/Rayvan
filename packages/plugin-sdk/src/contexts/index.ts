@@ -3,6 +3,7 @@ import type {
   ApprovedChangePlan,
   DesiredResourceState,
   ObservedResourceState,
+  PluginSafeFindingValue,
   ResourceBinding,
 } from "../contracts/index.js";
 
@@ -50,4 +51,48 @@ export interface VerifyContext {
   resource: ResourceBinding;
   approvedPlan: ApprovedChangePlan;
   applyResult: ApplyResult;
+}
+
+/** Minimal environment snapshot for findings evaluation. */
+export interface PluginFindingEnvironmentContext {
+  id: string;
+  name?: string;
+  kind?: string;
+}
+
+/** Minimal resource snapshot for findings evaluation. */
+export interface PluginFindingResourceContext {
+  resourceBindingId?: string;
+  discoveredResourceId?: string;
+  resourceType?: string;
+  name?: string;
+  environmentId?: string;
+  providerResourceId?: string;
+}
+
+/** Minimal observed-state snapshot for findings evaluation. */
+export interface PluginFindingObservedStateContext {
+  resourceBindingId?: string;
+  discoveredResourceId?: string;
+  configurationKeyId?: string;
+  environmentId?: string;
+  label?: string;
+  value: PluginSafeFindingValue;
+  inSync?: boolean;
+  observedAt?: string;
+}
+
+/**
+ * Host-provided evaluation input for `evaluate_findings`.
+ * Plugins return detections only; Finding persistence stays with the host.
+ */
+export interface EvaluateFindingsContext {
+  pluginId: string;
+  projectId: string;
+  connectionId: string;
+  integrationId?: string;
+  environments: PluginFindingEnvironmentContext[];
+  resources: PluginFindingResourceContext[];
+  observedStates: PluginFindingObservedStateContext[];
+  lastEvaluatedAt?: string;
 }

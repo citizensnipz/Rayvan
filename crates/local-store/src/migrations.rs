@@ -1,4 +1,4 @@
-pub const CURRENT_SCHEMA_VERSION: u32 = 5;
+pub const CURRENT_SCHEMA_VERSION: u32 = 7;
 
 pub const V1_PROJECTS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -40,6 +40,17 @@ pub const V4_ENVIRONMENTS_CONFIGURATION_SQL: &str =
 pub const V5_DESIRED_APPLIED_CONFIGURATION_SQL: &str =
     include_str!("../migrations/v5_desired_applied_configuration.sql");
 
+/// Findings persistence SQL (also mirrored in TypeScript).
+/// Edit `migrations/v6_findings.sql`, then sync TS via
+/// `node packages/local-database/scripts/sync-v6-sql-from-rust.mjs`.
+pub const V6_FINDINGS_SQL: &str = include_str!("../migrations/v6_findings.sql");
+
+/// Daemon control-plane SQL (also mirrored in TypeScript).
+/// Edit `migrations/v7_daemon_control_plane.sql`, then sync TS via
+/// `node packages/local-database/scripts/sync-v7-sql-from-rust.mjs`.
+pub const V7_DAEMON_CONTROL_PLANE_SQL: &str =
+    include_str!("../migrations/v7_daemon_control_plane.sql");
+
 pub struct MigrationSet {
     pub version: u32,
     pub description: &'static str,
@@ -71,6 +82,16 @@ pub const MIGRATIONS: &[MigrationSet] = &[
         version: 5,
         description: "Desired and applied configuration state",
         sql: V5_DESIRED_APPLIED_CONFIGURATION_SQL,
+    },
+    MigrationSet {
+        version: 6,
+        description: "Findings persistence",
+        sql: V6_FINDINGS_SQL,
+    },
+    MigrationSet {
+        version: 7,
+        description: "Daemon control plane (clients, operations, approvals, audit)",
+        sql: V7_DAEMON_CONTROL_PLANE_SQL,
     },
 ];
 
@@ -114,6 +135,23 @@ mod tests {
         assert!(V5_DESIRED_APPLIED_CONFIGURATION_SQL.contains(
             "UNIQUE (configuration_key_id, environment_id, resource_binding_id)"
         ));
-        assert_eq!(CURRENT_SCHEMA_VERSION, 5);
+    }
+
+    #[test]
+    fn v6_sql_defines_findings() {
+        assert!(V6_FINDINGS_SQL.contains("CREATE TABLE IF NOT EXISTS findings"));
+        assert!(V6_FINDINGS_SQL.contains("finding_lifecycle_events"));
+        assert!(V6_FINDINGS_SQL.contains("finding_evaluation_runs"));
+        assert!(V6_FINDINGS_SQL.contains("UNIQUE (project_id, fingerprint)"));
+    }
+
+    #[test]
+    fn v7_sql_defines_daemon_control_plane() {
+        assert!(V7_DAEMON_CONTROL_PLANE_SQL.contains("local_clients"));
+        assert!(V7_DAEMON_CONTROL_PLANE_SQL.contains("operations"));
+        assert!(V7_DAEMON_CONTROL_PLANE_SQL.contains("approval_requests"));
+        assert!(V7_DAEMON_CONTROL_PLANE_SQL.contains("mcp_audit_events"));
+        assert!(V7_DAEMON_CONTROL_PLANE_SQL.contains("plugin_mcp_actions"));
+        assert_eq!(CURRENT_SCHEMA_VERSION, 7);
     }
 }

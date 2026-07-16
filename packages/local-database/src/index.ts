@@ -4,5 +4,6 @@ export * from "./projects/service.js";
 export * from "./projects/validation.js";
 export * from "./environments/index.js";
 export * from "./configuration/index.js";
+export * from "./findings/index.js";
 export * from "./database/migrations.js";
 export * from "./plugins/index.js";

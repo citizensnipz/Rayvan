@@ -11,6 +11,9 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/shared" },
-    { "path": "../../packages/ui" }
+    { "path": "../../packages/ui" },
+    { "path": "../../packages/findings-engine" },
+    { "path": "../../packages/local-database" },
+    { "path": "../../packages/config-engine" }
   ]
 }

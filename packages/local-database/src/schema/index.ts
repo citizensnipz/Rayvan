@@ -1,5 +1,5 @@
 /**
- * Tables that currently exist in the local SQLite schema (v5).
+ * Tables that currently exist in the local SQLite schema (v7).
  * Aspirational Core entities (integrations, action_plans, …)
  * are intentionally omitted until they have migrations.
  */
@@ -28,6 +28,19 @@ export const PHYSICAL_TABLES = [
   "configuration_occurrences",
   "desired_configuration_values",
   "applied_configuration_states",
+  "findings",
+  "finding_lifecycle_events",
+  "finding_evaluation_runs",
+  "daemon_metadata",
+  "local_clients",
+  "mcp_permission_profiles",
+  "operations",
+  "operation_events",
+  "approval_requests",
+  "mcp_audit_events",
+  "resource_locks",
+  "idempotency_records",
+  "plugin_mcp_actions",
 ] as const;
 
 /** @deprecated Prefer PHYSICAL_TABLES — kept as an alias for existing imports. */
@@ -39,7 +52,7 @@ export interface DatabaseSchemaVersion {
 }
 
 export const CURRENT_SCHEMA_VERSION: DatabaseSchemaVersion = {
-  version: 5,
+  version: 7,
   description:
-    "Projects, app settings, plugin persistence, environments, configuration, desired and applied configuration state",
+    "Projects, app settings, plugin persistence, environments, configuration, desired/applied state, findings, and daemon control plane",
 };

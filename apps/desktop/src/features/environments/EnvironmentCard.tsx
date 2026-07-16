@@ -131,8 +131,11 @@ export function EnvironmentCard({ card, onAction }: EnvironmentCardProps) {
         </div>
         <div>
           <dt>Findings</dt>
-          <dd style={{ margin: 0, fontWeight: 600, color: "var(--color-text)" }}>
-            {card.findingsCount}
+          <dd
+            style={{ margin: 0, fontWeight: 600, color: "var(--color-text)" }}
+            aria-label={card.findingsLabel}
+          >
+            {card.findingsLabel}
           </dd>
         </div>
       </dl>

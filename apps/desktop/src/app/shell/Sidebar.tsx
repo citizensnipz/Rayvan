@@ -4,6 +4,7 @@ import { NavItem } from "@rayvan/ui";
 import { useResolvedCurrentProject } from "../CurrentProjectContext.js";
 import { useAppNavigation } from "../navigation/AppNavigationContext.js";
 import { APP_SECTION_DEFINITIONS } from "../navigation/sections.js";
+import { SectionIcon } from "./sidebar-icons.js";
 
 const asideStyle: CSSProperties = {
   borderRight: "1px solid var(--color-border)",
@@ -14,6 +15,12 @@ const asideStyle: CSSProperties = {
   gap: "0.25rem",
   minHeight: 0,
   overflow: "auto",
+};
+
+const itemContentStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.6rem",
 };
 
 export function Sidebar() {
@@ -41,7 +48,10 @@ export function Sidebar() {
                   disabled={disabled}
                   onClick={() => setActiveSection(section.id)}
                 >
-                  {section.label}
+                  <span style={itemContentStyle}>
+                    <SectionIcon section={section.id} />
+                    {section.label}
+                  </span>
                 </NavItem>
               </li>
             );

@@ -1,3 +1,4 @@
+import type { FindingSeverity } from "@rayvan/core";
 import type {
   PluginForegroundMode,
   PluginThemeSurface,
@@ -60,6 +61,11 @@ export interface PluginIntegrationCardViewModel {
   statusLabel: string;
   fields: IntegrationField[];
   actions: IntegrationCardAction[];
+  /** Open + acknowledged findings for this connection (from Findings gateway). */
+  findingsCount?: number;
+  /** Accessible text label — never colour-only severity. */
+  findingsLabel?: string;
+  highestSeverity?: FindingSeverity;
 }
 
 export interface IntegrationFieldGroup {

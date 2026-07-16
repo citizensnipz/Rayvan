@@ -15,7 +15,14 @@ export const CAPABILITY_HANDLER_KEYS = {
   plan: "plan",
   apply: "apply",
   verify: "verify",
+  evaluate_findings: "evaluateFindings",
 } as const satisfies Record<
   PluginCapability,
-  Exclude<PluginCapability, never>
+  | "authenticate"
+  | "discover"
+  | "inspect"
+  | "plan"
+  | "apply"
+  | "verify"
+  | "evaluateFindings"
 >;

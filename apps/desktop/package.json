@@ -15,6 +15,7 @@
   "dependencies": {
     "@rayvan/config-engine": "workspace:*",
     "@rayvan/core": "workspace:*",
+    "@rayvan/findings-engine": "workspace:*",
     "@rayvan/local-database": "workspace:*",
     "@rayvan/plugin-sdk": "workspace:*",
     "@rayvan/shared": "workspace:*",

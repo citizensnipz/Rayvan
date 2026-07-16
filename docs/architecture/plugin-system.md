@@ -69,7 +69,7 @@ Every plugin exports a versioned `PluginManifest` with:
 ## Capabilities
 
 ```text
-authenticate | discover | inspect | plan | apply | verify
+authenticate | discover | inspect | plan | apply | verify | evaluate_findings
 ```
 
 - `authenticate` — connection/credential readiness check (not an OAuth broker)
@@ -78,6 +78,7 @@ authenticate | discover | inspect | plan | apply | verify
 - `plan` — produce a serializable `ChangePlan`
 - `apply` — execute a host-approved plan
 - `verify` — confirm post-apply state
+- `evaluate_findings` — emit serializable finding detections only (host persists Findings)
 
 ## Resource model
 

@@ -21,6 +21,7 @@ export type {
   ApplyExecutionRequest,
   AuthenticateExecutionRequest,
   DiscoverExecutionRequest,
+  EvaluateFindingsExecutionRequest,
   InspectExecutionRequest,
   PlanExecutionRequest,
   PluginExecutionRequest,

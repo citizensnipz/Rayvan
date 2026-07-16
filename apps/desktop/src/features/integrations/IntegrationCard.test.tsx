@@ -90,6 +90,40 @@ describe("IntegrationCard", () => {
     );
     expect(screen.getByText("Error")).toBeInTheDocument();
   });
+
+  it("renders findings label as accessible text when findings are present", () => {
+    render(
+      <IntegrationCard
+        card={buildCard({
+          findingsCount: 2,
+          findingsLabel: "2 open findings · highest Critical",
+          highestSeverity: "critical",
+        })}
+        onOpen={vi.fn()}
+        onAction={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText("2 open findings · highest Critical"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("2 open findings · highest Critical")).toBeInTheDocument();
+  });
+
+  it("does not render findings text when findingsCount is zero", () => {
+    render(
+      <IntegrationCard
+        card={buildCard({
+          findingsCount: 0,
+          findingsLabel: "0 open findings",
+        })}
+        onOpen={vi.fn()}
+        onAction={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("0 open findings")).not.toBeInTheDocument();
+  });
 });
 
 describe("IntegrationIcon fallback", () => {
