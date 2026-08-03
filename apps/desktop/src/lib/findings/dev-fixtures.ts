@@ -363,13 +363,13 @@ function coreFixtures(project: string, context?: FindingsSeedContext): FindingRe
       severity: "error",
       title: "Connection expired: GitHub",
       summary: "The GitHub connection credentials have expired.",
-      pluginId: "github",
+      pluginId: "io.rayvan.github",
       evidence: [
         {
           type: "connection_error",
           connectionId: connId(
             project,
-            "github",
+            "io.rayvan.github",
             context?.connectionIdsByPluginId,
           ),
           errorCode: "credential_expired",
@@ -380,7 +380,7 @@ function coreFixtures(project: string, context?: FindingsSeedContext): FindingRe
         type: "reauthenticate",
         connectionId: connId(
           project,
-          "github",
+          "io.rayvan.github",
           context?.connectionIdsByPluginId,
         ),
         label: "Reauthenticate GitHub",
@@ -575,9 +575,9 @@ function pluginFixtures(project: string, context?: FindingsSeedContext): Finding
       ruleId: "github.workflow.required-check-failed",
       source: {
         type: "plugin",
-        pluginId: "github",
+        pluginId: "io.rayvan.github",
         pluginVersion: "0.0.0-mock",
-        connectionId: connId(project, "github", context?.connectionIdsByPluginId),
+        connectionId: connId(project, "io.rayvan.github", context?.connectionIdsByPluginId),
       },
       category: "integration",
       severity: "error",
@@ -585,7 +585,7 @@ function pluginFixtures(project: string, context?: FindingsSeedContext): Finding
       summary: "Mock detection: required status check did not pass.",
       description:
         "DEVELOPMENT FIXTURE — plugin evaluate_findings capability simulation.",
-      pluginId: "github",
+      pluginId: "io.rayvan.github",
       evidence: [
         {
           type: "message",
@@ -596,7 +596,7 @@ function pluginFixtures(project: string, context?: FindingsSeedContext): Finding
         type: "open_integration",
         connectionId: connId(
           project,
-          "github",
+          "io.rayvan.github",
           context?.connectionIdsByPluginId,
         ),
         label: "Open GitHub integration",
@@ -755,10 +755,10 @@ export function buildDevFindingsProjectContext(
     applied: [],
     connections: [
       {
-        id: connId(project, "github", context?.connectionIdsByPluginId),
-        pluginId: "github",
+        id: connId(project, "io.rayvan.github", context?.connectionIdsByPluginId),
+        pluginId: "io.rayvan.github",
         projectId: project,
-        name: "GitHub",
+        name: "io.rayvan.github",
         status: "expired",
       },
       {
@@ -772,7 +772,7 @@ export function buildDevFindingsProjectContext(
     installedPlugins: [
       {
         id: `${project}:plugin:github`,
-        pluginId: "github",
+        pluginId: "io.rayvan.github",
         pluginVersion: "0.0.0-mock",
         status: "installed",
         enabled: true,

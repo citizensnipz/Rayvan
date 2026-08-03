@@ -21,30 +21,50 @@ function toInstalledPlugin(plugin: {
   enabled?: boolean;
   publisher?: string;
   description?: string;
+  trustStatus?: string;
+  trustLabel?: string;
   presentation?: InstalledPluginRecord["manifestSnapshot"]["presentation"];
+  setup?: InstalledPluginRecord["manifestSnapshot"]["setup"];
 }): InstalledPluginRecord | null {
   const pluginId = plugin.pluginId ?? plugin.id;
   if (!pluginId) {
     return null;
   }
+  const installedId = plugin.id ?? pluginId;
   const name = plugin.name?.trim() || pluginId;
   const version = plugin.version ?? "0.0.0";
   const now = new Date().toISOString();
-  const initials = name
-    .split(/[\s-_]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("")
-    .slice(0, 2) || pluginId.slice(0, 2).toUpperCase();
+  const initials =
+    name
+      .split(/[\s-_]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("")
+      .slice(0, 2) || pluginId.slice(0, 2).toUpperCase();
+
+  const isPackage = plugin.host === "out_of_process";
+  const trustStatus =
+    plugin.trustStatus === "signed" ||
+    plugin.trustStatus === "unsigned_development"
+      ? plugin.trustStatus
+      : undefined;
 
   return {
-    id: pluginId,
+    id: installedId,
     pluginId,
     pluginVersion: version,
     manifestVersion: "1",
     rayvanApiVersion: "1",
-    source: { type: "built_in" },
+    source: isPackage
+      ? {
+          type: "package",
+          packageId: pluginId,
+          trustStatus,
+          trustLabel: plugin.trustLabel,
+          hostKind: "out_of_process",
+        }
+      : { type: "built_in" },
     status: plugin.status === "disabled" ? "disabled" : "installed",
     enabled: plugin.enabled !== false && plugin.status !== "unavailable",
     installedAt: now,
@@ -63,7 +83,7 @@ function toInstalledPlugin(plugin: {
       resourceTypes: [],
       presentation: plugin.presentation ?? {
         icon: {
-          iconId: pluginId,
+          iconId: pluginId.includes("github") ? "github" : pluginId,
           initials,
           label: name,
         },
@@ -73,13 +93,42 @@ function toInstalledPlugin(plugin: {
         },
         supportsMultipleConnections: false,
       },
+      setup: plugin.setup,
     },
+  };
+}
+
+function toConnectionRecord(integration: {
+  id: string;
+  pluginId: string;
+  installedPluginId?: string;
+  projectId: string;
+  name: string;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+  lastSuccessfulSyncAt?: string;
+}): PluginConnectionRecord {
+  const now = new Date().toISOString();
+  return {
+    id: integration.id,
+    pluginId: integration.pluginId,
+    installedPluginId: integration.installedPluginId ?? integration.pluginId,
+    projectId: integration.projectId,
+    name: integration.name,
+    status: integration.status as PluginConnectionRecord["status"],
+    createdAt: integration.createdAt ?? now,
+    updatedAt: integration.updatedAt ?? now,
+    lastSuccessfulSyncAt: integration.lastSuccessfulSyncAt,
+    metadata: {},
+    schemaVersion: "1",
   };
 }
 
 /**
  * Daemon-backed integrations gateway. Lists plugins/connections from
- * `rayvand`; create/grant throw until richer plugin APIs are wired.
+ * `rayvand`. Create/setup go through plugin daemon methods; permission
+ * grants are not yet persisted via daemon RPC (accepted as a soft no-op).
  */
 export function createDaemonPluginIntegrationsGateway(): PluginIntegrationsGateway {
   return {
@@ -96,7 +145,10 @@ export function createDaemonPluginIntegrationsGateway(): PluginIntegrationsGatew
         enabled?: boolean;
         publisher?: string;
         description?: string;
+        trustStatus?: string;
+        trustLabel?: string;
         presentation?: InstalledPluginRecord["manifestSnapshot"]["presentation"];
+        setup?: InstalledPluginRecord["manifestSnapshot"]["setup"];
       }>;
       return plugins
         .map((plugin) => toInstalledPlugin(plugin))
@@ -122,26 +174,15 @@ export function createDaemonPluginIntegrationsGateway(): PluginIntegrationsGatew
       )) as Array<{
         id: string;
         pluginId: string;
+        installedPluginId?: string;
         projectId: string;
         name: string;
         status: string;
+        createdAt?: string;
+        updatedAt?: string;
         lastSuccessfulSyncAt?: string;
       }>;
-      const now = new Date().toISOString();
-      return integrations.map(
-        (integration) =>
-          ({
-            id: integration.id,
-            pluginId: integration.pluginId,
-            installedPluginId: integration.pluginId,
-            projectId: integration.projectId,
-            name: integration.name,
-            status: integration.status,
-            createdAt: now,
-            updatedAt: now,
-            lastSuccessfulSyncAt: integration.lastSuccessfulSyncAt,
-          }) as PluginConnectionRecord,
-      );
+      return integrations.map((integration) => toConnectionRecord(integration));
     },
 
     async getConnection(
@@ -163,19 +204,61 @@ export function createDaemonPluginIntegrationsGateway(): PluginIntegrationsGatew
     async createConnection(
       input: CreateIntegrationConnectionInput,
     ): Promise<PluginConnectionRecord> {
-      void input;
-      throw new Error(
-        "Creating integrations through the daemon is not wired in the desktop gateway yet",
-      );
+      const installed = await this.getInstalledPlugin(input.installedPluginId);
+      if (!installed) {
+        throw new Error(`Installed plugin ${input.installedPluginId} not found`);
+      }
+
+      const authMethods = installed.manifestSnapshot.setup?.authMethods ?? [];
+      const wantsPat =
+        Boolean(input.secretToken?.trim()) &&
+        (input.authMethod === "pat" || authMethods.includes("pat"));
+
+      if (wantsPat && input.secretToken) {
+        const session = (await desktopDaemon.startPluginSetup({
+          pluginId: installed.pluginId,
+          projectId: input.projectId,
+          authMethod: "pat",
+        })) as { id: string };
+
+        await desktopDaemon.stepPluginSetup({
+          sessionId: session.id,
+          stepId: "pat-input",
+          authMethod: "pat",
+          connectionName: input.name,
+          secretToken: input.secretToken.trim(),
+          statePatch: { connectionName: input.name },
+        });
+
+        await desktopDaemon.completePluginSetup(session.id);
+
+        const connections = await this.listConnectionsByProject(input.projectId);
+        const created = connections
+          .filter((connection) => connection.pluginId === installed.pluginId)
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+        if (!created) {
+          throw new Error(
+            "GitHub connection was created but could not be loaded",
+          );
+        }
+        return created;
+      }
+
+      return (await desktopDaemon.createPluginConnection({
+        pluginId: installed.pluginId,
+        projectId: input.projectId,
+        name: input.name,
+        metadata: input.metadata,
+      })) as PluginConnectionRecord;
     },
 
     async grantPermissions(
       input: GrantIntegrationPermissionsInput,
     ): Promise<PluginPermissionGrantRecord[]> {
+      // Daemon permission-grant RPC is not wired yet; UI still collects the
+      // intended grants so the configure step stays consistent with fixtures.
       void input;
-      throw new Error(
-        "Granting plugin permissions through the daemon is not wired in the desktop gateway yet",
-      );
+      return [];
     },
 
     async markConnected(connectionId: string): Promise<PluginConnectionRecord> {

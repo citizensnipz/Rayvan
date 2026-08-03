@@ -5,10 +5,18 @@ import {
 } from "../errors/index.js";
 import type { PluginCapability, PluginManifest } from "../manifest/index.js";
 import type { RayvanPlugin } from "../plugin.js";
-import { validatePlugin } from "../validation/index.js";
+import { validatePlugin, validatePluginManifest } from "../validation/index.js";
+
+export interface PluginRegisterOptions {
+  /**
+   * When true, only the manifest is validated. Use for OOP plugins whose
+   * handlers live in a child process (OutOfProcessPluginRuntime).
+   */
+  handlersExternal?: boolean;
+}
 
 export interface PluginRegistry {
-  register(plugin: RayvanPlugin): void;
+  register(plugin: RayvanPlugin, options?: PluginRegisterOptions): void;
   unregister(pluginId: string): void;
   get(pluginId: string): RayvanPlugin | undefined;
   list(): PluginManifest[];
@@ -22,8 +30,12 @@ export interface PluginRegistry {
 export class InProcessPluginRegistry implements PluginRegistry {
   private readonly plugins = new Map<string, RayvanPlugin>();
 
-  register(plugin: RayvanPlugin): void {
-    validatePlugin(plugin);
+  register(plugin: RayvanPlugin, options?: PluginRegisterOptions): void {
+    if (options?.handlersExternal) {
+      validatePluginManifest(plugin.manifest);
+    } else {
+      validatePlugin(plugin);
+    }
 
     const pluginId = plugin.manifest.id;
     if (this.plugins.has(pluginId)) {

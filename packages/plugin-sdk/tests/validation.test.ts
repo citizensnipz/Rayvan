@@ -63,6 +63,47 @@ describe("plugin model validation", () => {
     expect(() => validatePluginManifest(validManifest)).not.toThrow();
   });
 
+  it("accepts reverse-DNS plugin ids and optional package fields", () => {
+    expect(() =>
+      validatePluginManifest({
+        ...validManifest,
+        id: "io.rayvan.github",
+        publisherInfo: {
+          name: "Rayvan",
+          url: "https://rayvan.dev",
+        },
+        entrypoints: [
+          {
+            runtime: "native",
+            binary: "rayvan-plugin-github",
+            protocolVersion: "1",
+          },
+        ],
+        networkHosts: ["api.github.com", "github.com"],
+        setup: {
+          authMethods: ["github_device_flow", "pat"],
+          steps: [
+            {
+              id: "choose-auth",
+              title: "Choose authentication",
+              widget: "auth_method_select",
+            },
+          ],
+        },
+        findingRules: [
+          {
+            id: "io.rayvan.github.unused-variable",
+            name: "Unused variable",
+            description: "Variable declared but unused in workflows",
+            category: "configuration",
+            defaultSeverity: "warning",
+          },
+        ],
+        capabilities: ["discover", "inspect", "evaluate_findings"],
+      }),
+    ).not.toThrow();
+  });
+
   it("accepts controlled presentation metadata", () => {
     expect(() =>
       validatePluginManifest({

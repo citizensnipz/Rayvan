@@ -9,7 +9,7 @@ describe("createDevPluginIntegrationsGateway", () => {
 
     const installed = await gateway.listInstalledPlugins();
     expect(installed.map((plugin) => plugin.pluginId).sort()).toEqual(
-      ["example-local", "github", "runpod", "sentry", "supabase", "vercel"].sort(),
+      ["example-local", "io.rayvan.github", "runpod", "sentry", "supabase", "vercel"].sort(),
     );
 
     const connections = await gateway.listConnectionsByProject("project-1");

@@ -573,16 +573,26 @@ export const RAYVAN_TOOLS: readonly ToolDefinition[] = [
   {
     name: "list_plugins",
     method: DaemonMethods.listPlugins,
-    description: "List locally available daemon plugins.",
+    description:
+      "List installed daemon plugins (built-in and packaged, including io.rayvan.github when installed).",
     inputSchema: empty,
     risk: "read",
   },
   {
     name: "list_plugin_actions",
     method: DaemonMethods.listPluginActions,
-    description: "List actions exposed by daemon plugins.",
+    description:
+      "List plugin MCP actions (deferred / empty in v0.1 — capabilities are the source of truth).",
     inputSchema: z.object({ plugin_id: z.string().optional() }).strict(),
     risk: "read",
+  },
+  {
+    name: "install_plugin_from_path",
+    method: DaemonMethods.installPluginFromPath,
+    description:
+      "Install a platform-specific .rayvan-plugin package from a local filesystem path via the daemon.",
+    inputSchema: z.object({ path: z.string().min(1) }).strict(),
+    risk: "local_mutation",
   },
   {
     name: "get_mcp_client_scope",

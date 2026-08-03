@@ -164,7 +164,7 @@ describe("IntegrationsWorkspace", () => {
     const dialog = screen.getByRole("dialog", { name: "Add integration" });
     await within(dialog).findByText("RunPod");
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Configure" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Set up" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Add integration" }));
 
     await waitFor(() => {

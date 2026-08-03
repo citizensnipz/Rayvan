@@ -715,6 +715,67 @@ describe("State", () => {
     expect((await stack.state.getObserved(resource!.id))?.state.port).toBe(3001);
     expect((await stack.state.getDesired(binding.id))?.state.port).toBe(4001);
   });
+
+  it("allows Actions-style variable names via array attributes", async () => {
+    const stack = createStack();
+    const [installed] = await stack.installation.reconcileBuiltIns([
+      { manifest: manifest() },
+    ]);
+    const connection = await stack.connections.create({
+      installedPluginId: installed!.id,
+      name: "Conn",
+      status: "connected",
+    });
+    const [resource] = await stack.discovery.sync({
+      connectionId: connection.id,
+      installedPluginId: installed!.id,
+      pluginId: "example.local",
+      items: [
+        {
+          providerResourceId: "svc-1",
+          resourceType: "local.service",
+          name: "API",
+          metadata: {},
+          pluginVersion: "1.0.0",
+          schemaVersion: "1",
+        },
+      ],
+    });
+
+    // Provider config names like API_TOKEN must persist when stored as
+    // [{ name, value }] rather than { API_TOKEN: "..." } map keys.
+    await expect(
+      stack.state.recordObserved({
+        discoveredResourceId: resource!.id,
+        pluginId: "example.local",
+        connectionId: connection.id,
+        state: {
+          variables: [{ name: "API_TOKEN", value: "repo-config-value" }],
+        },
+        pluginVersion: "1.0.0",
+        schemaVersion: "1",
+        observedAt: "2026-01-01T00:03:00.000Z",
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        variables: [{ name: "API_TOKEN", value: "repo-config-value" }],
+      },
+    });
+
+    await expect(
+      stack.state.recordObserved({
+        discoveredResourceId: resource!.id,
+        pluginId: "example.local",
+        connectionId: connection.id,
+        state: {
+          variables: { API_TOKEN: "repo-config-value" },
+        },
+        pluginVersion: "1.0.0",
+        schemaVersion: "1",
+        observedAt: "2026-01-01T00:04:00.000Z",
+      }),
+    ).rejects.toBeInstanceOf(PluginDomainError);
+  });
 });
 
 describe("Plans and approvals", () => {

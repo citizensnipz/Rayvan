@@ -1,4 +1,4 @@
-pub const CURRENT_SCHEMA_VERSION: u32 = 7;
+pub const CURRENT_SCHEMA_VERSION: u32 = 8;
 
 pub const V1_PROJECTS_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -51,6 +51,10 @@ pub const V6_FINDINGS_SQL: &str = include_str!("../migrations/v6_findings.sql");
 pub const V7_DAEMON_CONTROL_PLANE_SQL: &str =
     include_str!("../migrations/v7_daemon_control_plane.sql");
 
+/// Plugin package setup sessions (also mirrored in TypeScript).
+pub const V8_PLUGIN_PACKAGES_SETUP_SQL: &str =
+    include_str!("../migrations/v8_plugin_packages_setup.sql");
+
 pub struct MigrationSet {
     pub version: u32,
     pub description: &'static str,
@@ -92,6 +96,11 @@ pub const MIGRATIONS: &[MigrationSet] = &[
         version: 7,
         description: "Daemon control plane (clients, operations, approvals, audit)",
         sql: V7_DAEMON_CONTROL_PLANE_SQL,
+    },
+    MigrationSet {
+        version: 8,
+        description: "Plugin package setup sessions",
+        sql: V8_PLUGIN_PACKAGES_SETUP_SQL,
     },
 ];
 
@@ -152,6 +161,11 @@ mod tests {
         assert!(V7_DAEMON_CONTROL_PLANE_SQL.contains("approval_requests"));
         assert!(V7_DAEMON_CONTROL_PLANE_SQL.contains("mcp_audit_events"));
         assert!(V7_DAEMON_CONTROL_PLANE_SQL.contains("plugin_mcp_actions"));
-        assert_eq!(CURRENT_SCHEMA_VERSION, 7);
+    }
+
+    #[test]
+    fn v8_sql_defines_plugin_setup_sessions() {
+        assert!(V8_PLUGIN_PACKAGES_SETUP_SQL.contains("plugin_setup_sessions"));
+        assert_eq!(CURRENT_SCHEMA_VERSION, 8);
     }
 }

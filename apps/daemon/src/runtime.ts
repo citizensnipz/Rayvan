@@ -34,8 +34,6 @@ import {
   FindingSummaryService,
   SqliteFindingRepository,
   SqliteFindingLifecycleEventRepository,
-  createInMemoryPluginPersistence,
-  type InMemoryPluginPersistence,
   MIGRATION_VERSION,
 } from "@rayvan/local-database";
 import {
@@ -46,8 +44,15 @@ import {
   SqliteConfigurationOccurrenceRepository,
   SqliteDesiredConfigurationValueRepository,
   SqliteAppliedConfigurationStateRepository,
+  createSqlitePluginPersistence,
+  type PluginPersistenceBundle,
 } from "@rayvan/local-database/sqlite";
-import { createPluginExecutionStack } from "@rayvan/plugin-sdk";
+import { OutOfProcessPluginRuntime } from "@rayvan/plugin-client";
+import {
+  CompositePluginRuntime,
+  createPluginExecutionStack,
+  PluginExecutionService,
+} from "@rayvan/plugin-sdk";
 import { plugin as exampleLocalPlugin } from "@rayvan/plugin-example-local";
 
 import type { SessionContext } from "./auth/session.js";
@@ -61,9 +66,9 @@ import { DaemonAppError, toDaemonError } from "./errors.js";
 import { ControlPlaneRepository } from "./repos/control-plane.js";
 import { EventBus } from "./services/event-bus.js";
 import {
-  ExampleLocalHost,
+  PluginHost,
   toPluginExecutionActor,
-} from "./services/example-local-host.js";
+} from "./services/plugin-host.js";
 import { DaemonSecretStore } from "./services/secrets.js";
 
 const DAEMON_VERSION = "0.0.1";
@@ -95,8 +100,11 @@ export class DaemonRuntime {
   readonly changePlanService: ChangePlanService;
   readonly changeApprovalService: ChangeApprovalService;
   readonly pluginStack: ReturnType<typeof createPluginExecutionStack>;
-  readonly pluginRepos: InMemoryPluginPersistence;
-  readonly exampleLocalHost: ExampleLocalHost;
+  readonly pluginRepos: PluginPersistenceBundle;
+  readonly pluginHost: PluginHost;
+  /** @deprecated Use pluginHost */
+  readonly exampleLocalHost: PluginHost;
+  private readonly oopRuntimes = new Map<string, OutOfProcessPluginRuntime>();
   private readonly connectedSessions = new Map<string, SessionContext>();
   private readonly allowUnauthenticatedTestClient: boolean;
   private shuttingDown = false;
@@ -136,7 +144,7 @@ export class DaemonRuntime {
     const applied = new SqliteAppliedConfigurationStateRepository(this.db);
     const findings = new SqliteFindingRepository(this.db);
     const lifecycle = new SqliteFindingLifecycleEventRepository(this.db);
-    this.pluginRepos = createInMemoryPluginPersistence();
+    this.pluginRepos = createSqlitePluginPersistence(this.db);
 
     this.projectService = new ProjectService(projects);
     this.environmentService = new EnvironmentService(environments);
@@ -156,16 +164,40 @@ export class DaemonRuntime {
       this.pluginRepos.changeVerifications,
     );
 
-    // Transitional: daemon hosts the TS plugin stack in-process until
-    // crates/plugin-host (out-of-process) is the connected runtime.
-    this.pluginStack = createPluginExecutionStack({
+    // Built-ins stay in-process; packaged plugins use OutOfProcessPluginRuntime.
+    const baseStack = createPluginExecutionStack({
       plugins: [exampleLocalPlugin],
     });
-    this.exampleLocalHost = new ExampleLocalHost(
-      this.pluginRepos,
-      this.pluginStack,
+    const composite = new CompositePluginRuntime(
+      this.oopRuntimes,
+      baseStack.runtime,
     );
-    void this.exampleLocalHost.ensureReconciled();
+    this.pluginStack = {
+      ...baseStack,
+      runtime: composite,
+      executionService: new PluginExecutionService({
+        registry: baseStack.registry,
+        runtime: composite,
+        permissionResolver: baseStack.permissionResolver,
+        eventSink: baseStack.eventSink,
+      }),
+    };
+
+    this.pluginHost = new PluginHost(this.pluginRepos, this.pluginStack, {
+      dataDir: this.dataDir,
+    });
+    this.exampleLocalHost = this.pluginHost;
+    void this.pluginHost.ensureReconciled();
+    void this.restoreOopRuntimes();
+  }
+
+  private async restoreOopRuntimes(): Promise<void> {
+    const installed = await this.pluginHost.installation.list();
+    for (const record of installed) {
+      if (record.source.type !== "package" || !record.enabled) continue;
+      if (!record.source.binaryPath) continue;
+      await this.registerInstalledOopPlugin(record);
+    }
   }
 
   recoverIncompleteOperations(): void {
@@ -1054,9 +1086,12 @@ export class DaemonRuntime {
         return connections.map((connection) => ({
           id: connection.id,
           pluginId: connection.pluginId,
+          installedPluginId: connection.installedPluginId,
           projectId: connection.projectId,
           name: connection.name,
           status: connection.status,
+          createdAt: connection.createdAt,
+          updatedAt: connection.updatedAt,
           lastSuccessfulSyncAt: connection.lastSuccessfulSyncAt,
         }));
       }
@@ -1151,17 +1186,178 @@ export class DaemonRuntime {
       }
       case DaemonMethods.listPlugins: {
         requirePermission(session, "plugins:read");
-        return this.exampleLocalHost.listPluginStatus();
+        return this.pluginHost.listPluginStatus();
       }
       case DaemonMethods.listPluginActions: {
         requirePermission(session, "plugins:read");
-        // Extension point: structured plugin MCP actions (none registered yet).
+        // Deferred: parallel action catalog is not SoT for v0.1.
         return [];
+      }
+      case DaemonMethods.installPluginFromPath: {
+        requirePermission(session, "plugins:manage");
+        const packagePath = requireString(p, "path");
+        const record = await this.pluginHost.installFromPath(packagePath);
+        await this.registerInstalledOopPlugin(record);
+        return {
+          pluginId: record.pluginId,
+          version: record.pluginVersion,
+          enabled: record.enabled,
+          status: record.status,
+          source: record.source,
+          trustLabel:
+            record.source.type === "package"
+              ? record.source.trustLabel
+              : undefined,
+        };
+      }
+      case DaemonMethods.uninstallPlugin: {
+        requirePermission(session, "plugins:manage");
+        const pluginId = requireString(p, "pluginId");
+        const runtime = this.oopRuntimes.get(pluginId);
+        if (runtime) {
+          await runtime.stop();
+          this.oopRuntimes.delete(pluginId);
+        }
+        return this.pluginHost.uninstallPlugin(pluginId);
+      }
+      case DaemonMethods.enablePlugin: {
+        requirePermission(session, "plugins:manage");
+        return this.pluginHost.setPluginEnabled(
+          requireString(p, "pluginId"),
+          true,
+        );
+      }
+      case DaemonMethods.disablePlugin: {
+        requirePermission(session, "plugins:manage");
+        return this.pluginHost.setPluginEnabled(
+          requireString(p, "pluginId"),
+          false,
+        );
+      }
+      case DaemonMethods.startPluginSetup: {
+        requirePermission(session, "plugins:manage");
+        return this.pluginHost.setupSessions.start({
+          pluginId: requireString(p, "pluginId"),
+          projectId: optionalString(p, "projectId"),
+          authMethod: optionalString(p, "authMethod") as
+            | "github_device_flow"
+            | "pat"
+            | undefined,
+        });
+      }
+      case DaemonMethods.stepPluginSetup: {
+        requirePermission(session, "plugins:manage");
+        const sessionId = requireString(p, "sessionId");
+        const stepId = requireString(p, "stepId");
+        const authMethod = optionalString(p, "authMethod") as
+          | "github_device_flow"
+          | "pat"
+          | undefined;
+        const statePatch =
+          p.statePatch && typeof p.statePatch === "object"
+            ? (p.statePatch as Record<string, unknown>)
+            : undefined;
+        // Secrets (PAT / tokens) are accepted only to store via CredentialStore.
+        const secretToken =
+          typeof p.secretToken === "string" ? p.secretToken : undefined;
+        const updated = await this.pluginHost.setupSessions.step({
+          sessionId,
+          stepId,
+          authMethod,
+          statePatch,
+        });
+        if (secretToken && updated.projectId) {
+          const connectionName =
+            typeof p.connectionName === "string" && p.connectionName.trim()
+              ? p.connectionName.trim()
+              : `${updated.pluginId} connection`;
+          const connection = await this.pluginHost.createConnection({
+            pluginId: updated.pluginId,
+            projectId: updated.projectId,
+            name: connectionName,
+            metadata: {
+              setupSessionId: updated.id,
+              authMethod: updated.authMethod,
+            },
+          });
+          await this.pluginHost.storeConnectionAccessToken({
+            pluginId: updated.pluginId,
+            connectionId: connection.id,
+            credentialType: updated.authMethod ?? "pat",
+            accessToken: secretToken,
+          });
+        }
+        return {
+          id: updated.id,
+          pluginId: updated.pluginId,
+          status: updated.status,
+          currentStepId: updated.currentStepId,
+          authMethod: updated.authMethod,
+          state: updated.state,
+        };
+      }
+      case DaemonMethods.completePluginSetup: {
+        requirePermission(session, "plugins:manage");
+        const completed = await this.pluginHost.setupSessions.complete(
+          requireString(p, "sessionId"),
+        );
+        return {
+          id: completed.id,
+          pluginId: completed.pluginId,
+          status: completed.status,
+          projectId: completed.projectId,
+        };
+      }
+      case DaemonMethods.createPluginConnection: {
+        requirePermission(session, "plugins:manage");
+        return this.pluginHost.createConnection({
+          pluginId: requireString(p, "pluginId"),
+          projectId: requireString(p, "projectId"),
+          name: requireString(p, "name"),
+          metadata:
+            p.metadata && typeof p.metadata === "object"
+              ? (p.metadata as Record<string, unknown>)
+              : undefined,
+        });
       }
 
       default:
         throw new DaemonAppError("METHOD_NOT_FOUND", `Unknown method: ${method}`);
     }
+  }
+
+  private async registerInstalledOopPlugin(record: {
+    pluginId: string;
+    source: import("@rayvan/local-database").InstalledPluginRecord["source"];
+    manifestSnapshot: import("@rayvan/plugin-sdk").PluginManifest;
+  }): Promise<void> {
+    if (record.source.type !== "package" || !record.source.binaryPath) {
+      return;
+    }
+
+    const previous = this.oopRuntimes.get(record.pluginId);
+    if (previous) {
+      await previous.stop();
+      this.oopRuntimes.delete(record.pluginId);
+    }
+    if (this.pluginStack.registry.get(record.pluginId)) {
+      this.pluginStack.registry.unregister(record.pluginId);
+    }
+
+    const runtime = new OutOfProcessPluginRuntime({
+      pluginId: record.pluginId,
+      executable: process.execPath,
+      args: [record.source.binaryPath],
+    });
+    this.oopRuntimes.set(record.pluginId, runtime);
+    this.pluginHost.registerOopRuntime(record.pluginId, runtime);
+    this.pluginStack.registry.register(
+      {
+        manifest: record.manifestSnapshot,
+        executionMode: "out_of_process",
+      },
+      { handlersExternal: true },
+    );
   }
 
   private async requireEnvironmentInProject(

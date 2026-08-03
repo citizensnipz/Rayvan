@@ -141,6 +141,24 @@ export const desktopDaemon = {
   listIntegrations: (projectId?: string) =>
     daemonRequest(DaemonMethods.listIntegrations, { projectId }),
   listPlugins: () => daemonRequest(DaemonMethods.listPlugins),
+  installPluginFromPath: (path: string) =>
+    daemonRequest<{
+      pluginId: string;
+      version: string;
+      enabled: boolean;
+      status: string;
+      trustLabel?: string;
+    }>(DaemonMethods.installPluginFromPath, { path }),
+  uninstallPlugin: (pluginId: string) =>
+    daemonRequest(DaemonMethods.uninstallPlugin, { pluginId }),
+  startPluginSetup: (params: Record<string, unknown>) =>
+    daemonRequest(DaemonMethods.startPluginSetup, params),
+  stepPluginSetup: (params: Record<string, unknown>) =>
+    daemonRequest(DaemonMethods.stepPluginSetup, params),
+  completePluginSetup: (sessionId: string) =>
+    daemonRequest(DaemonMethods.completePluginSetup, { sessionId }),
+  createPluginConnection: (params: Record<string, unknown>) =>
+    daemonRequest(DaemonMethods.createPluginConnection, params),
   listOperations: (params?: Record<string, unknown>) =>
     daemonRequest<OperationRecord[]>(DaemonMethods.listOperations, params ?? {}),
   listApprovals: (params?: Record<string, unknown>) =>

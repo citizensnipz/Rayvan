@@ -10,6 +10,7 @@ import {
   V5_DESIRED_APPLIED_CONFIGURATION_SQL,
   V6_FINDINGS_SQL,
   V7_DAEMON_CONTROL_PLANE_SQL,
+  V8_PLUGIN_PACKAGES_SETUP_SQL,
 } from "./migrations.js";
 
 interface MigrationStep {
@@ -25,6 +26,7 @@ const MIGRATION_STEPS: MigrationStep[] = [
   { version: 5, sql: V5_DESIRED_APPLIED_CONFIGURATION_SQL },
   { version: 6, sql: V6_FINDINGS_SQL },
   { version: 7, sql: V7_DAEMON_CONTROL_PLANE_SQL },
+  { version: 8, sql: V8_PLUGIN_PACKAGES_SETUP_SQL },
 ];
 
 export class LocalDatabaseConnection {

@@ -171,7 +171,7 @@ describe("environment mappers", () => {
         },
         {
           id: "res-2",
-          pluginId: "github",
+          pluginId: "io.rayvan.github",
           installedPluginId: "inst-2",
           connectionId: "conn-2",
           providerResourceId: "branch:develop",

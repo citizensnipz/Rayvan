@@ -10,6 +10,7 @@ import {
   V5_DESIRED_APPLIED_CONFIGURATION_SQL,
   V6_FINDINGS_SQL,
   V7_DAEMON_CONTROL_PLANE_SQL,
+  V8_PLUGIN_PACKAGES_SETUP_SQL,
 } from "../src/database/migrations.js";
 
 describe("V3 plugin persistence SQL parity", () => {
@@ -32,7 +33,6 @@ describe("V3 plugin persistence SQL parity", () => {
     expect(rustMigrations).toContain(
       'include_str!("../migrations/v3_plugin_persistence.sql")',
     );
-    expect(rustMigrations).toContain("CURRENT_SCHEMA_VERSION: u32 = 7");
   });
 });
 
@@ -133,7 +133,6 @@ describe("V7 daemon control plane SQL parity", () => {
     expect(rustMigrations).toContain(
       'include_str!("../migrations/v7_daemon_control_plane.sql")',
     );
-    expect(rustMigrations).toContain("CURRENT_SCHEMA_VERSION: u32 = 7");
   });
 
   it("defines daemon control-plane tables", () => {
@@ -142,5 +141,33 @@ describe("V7 daemon control plane SQL parity", () => {
     expect(V7_DAEMON_CONTROL_PLANE_SQL).toContain("approval_requests");
     expect(V7_DAEMON_CONTROL_PLANE_SQL).toContain("mcp_audit_events");
     expect(V7_DAEMON_CONTROL_PLANE_SQL).toContain("plugin_mcp_actions");
+  });
+});
+
+describe("V8 plugin packages setup SQL parity", () => {
+  it("matches the shared Rust migration SQL file byte-for-byte", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const rustSqlPath = join(
+      here,
+      "../../../crates/local-store/migrations/v8_plugin_packages_setup.sql",
+    );
+    const rustSql = readFileSync(rustSqlPath, "utf8").replace(/\r\n/g, "\n");
+    expect(V8_PLUGIN_PACKAGES_SETUP_SQL.replace(/\r\n/g, "\n")).toBe(rustSql);
+  });
+
+  it("Rust migrations.rs includes the shared SQL file at schema v8", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const rustMigrations = readFileSync(
+      join(here, "../../../crates/local-store/src/migrations.rs"),
+      "utf8",
+    );
+    expect(rustMigrations).toContain(
+      'include_str!("../migrations/v8_plugin_packages_setup.sql")',
+    );
+    expect(rustMigrations).toContain("CURRENT_SCHEMA_VERSION: u32 = 8");
+  });
+
+  it("defines plugin_setup_sessions", () => {
+    expect(V8_PLUGIN_PACKAGES_SETUP_SQL).toContain("plugin_setup_sessions");
   });
 });

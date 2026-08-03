@@ -52,19 +52,39 @@ In-process handlers are not forcibly interrupted mid-flight; abort/timeout stop 
 
 ### Runtime
 
-Today's runtime is in-process (`InProcessPluginRuntime`). The service depends on the `PluginRuntime` interface so a future subprocess host can replace the transport without changing callers.
+Built-in plugins (for example `example-local`) use `InProcessPluginRuntime`. Externally installed packages use `OutOfProcessPluginRuntime` (`@rayvan/plugin-client`) behind a `CompositePluginRuntime`. OOP transport is framed JSON-RPC 2.0 (4-byte big-endian length + UTF-8 JSON) over stdin/stdout; stderr is logs only. Capability methods: `initialize`, `shutdown`, `authenticate`, `discover`, `inspect`, `plan`, `apply`, `verify`, `evaluate_findings`, `cancel`. Process spawn/stop/kill-on-cancel is owned by `crates/plugin-host` (Rust) and the TypeScript OOP runtime.
 
 ## Manifest
 
 Every plugin exports a versioned `PluginManifest` with:
 
-- Stable plugin `id`
+- Stable plugin `id` (kebab-case or reverse-DNS, e.g. `io.rayvan.github`)
 - Human-readable `name` and optional `description`
-- `version` and `publisher`
+- `version` and `publisher` (string; optional richer `publisherInfo`)
 - `rayvanApiVersion` (currently `"1"`)
 - Optional `minimumRayvanVersion`
 - Declared `capabilities` and `permissions`
 - Declared `resourceTypes`
+- Optional `entrypoints`, `networkHosts`, and data-only `setup` contributions (UI owns widgets)
+
+## Package format (v1)
+
+`.rayvan-plugin` archives are **platform-specific** ZIP (deflate) files:
+
+```text
+manifest.json
+bin/<runtime-name>[.exe]
+SHA256SUMS
+SIGNATURE.ed25519   # optional; omit for unsigned/dev
+assets/             # optional
+```
+
+- Filename: `<plugin-id>-<version>-<target-triple>.rayvan-plugin`
+- Triples: `x86_64-pc-windows-msvc`, `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`
+- SHA256SUMS covers package payload files (`manifest.json`, `bin/*`, `assets/*`); Ed25519 signature covers SHA256SUMS bytes (`SIGNATURE.ed25519` optional)
+- Unsigned packages are **opt-in only**: set `allowUnsignedPlugins: true` or `RAYVAN_ALLOW_UNSIGNED_PLUGINS=1` / `true`. Default is deny. Allowed unsigned packages are labeled `Unsigned (development)`; signature failure is a hard reject
+- Install verifies zip entry paths (no `..` / absolute / drive-rooted names), enforces archive size/entry caps, requires the package target triple to match the host, and extracts via a staging directory then atomic rename
+- Pack/verify/install helpers live in `@rayvan/plugin-package`
 
 ## Capabilities
 
@@ -175,9 +195,10 @@ The same repository interfaces can back a remote store. Local SQLite remains the
 ## Current status
 
 - Foundational SDK, registry, validation, errors, execution service, and example plugin are implemented
-- Local plugin persistence (models, repos, services, adapters, migrations v3) is implemented in `@rayvan/local-database` / `rayvan-local-store`
-- Official provider plugins (`github`, `vercel`, `supabase`, `runpod`) are placeholders with empty capabilities
-- Dynamic loading, marketplace, signing, sandboxing, OAuth, Tauri command wiring, and environments FK are not implemented
+- Local plugin persistence (models, repos, services, adapters, migrations through v8) is implemented in `@rayvan/local-database` / `rayvan-local-store`
+- Externally installable GitHub provider (`io.rayvan.github`) ships Actions repository variables vertical (discover→inspect→plan→apply→verify), device-flow/PAT setup, package install, and OOP runtime
+- Official provider plugins `vercel`, `supabase`, `runpod` remain placeholders
+- Public marketplace, mandatory signing UX, universal multi-arch ZIP, seccomp sandbox, and full GitHub surface are deferred
 
 See also:
 

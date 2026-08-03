@@ -14,12 +14,10 @@
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "eslint \"src\" \"tests\" --no-error-on-unmatched-pattern",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@rayvan/core": "workspace:*",
-    "@rayvan/plugin-sdk": "workspace:*",
-    "@rayvan/shared": "workspace:*"
+    "@rayvan/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^3.2.3"

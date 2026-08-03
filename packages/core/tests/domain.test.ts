@@ -26,7 +26,7 @@ describe("@rayvan/core domain types", () => {
     const approved: ApprovedActionPlan = {
       id: actionPlanId("plan-2"),
       projectId: projectId("project-1"),
-      pluginId: "github",
+      pluginId: "io.rayvan.github",
       status: "approved",
       summary: "Rotate deploy key",
       operations: [],

@@ -57,15 +57,35 @@ export const SUPABASE_MANIFEST: PluginManifest = {
 };
 
 export const GITHUB_MANIFEST: PluginManifest = {
-  id: "github",
+  id: "io.rayvan.github",
   name: "GitHub",
-  description: "Connect Rayvan to GitHub repositories and pull requests.",
-  version: "0.0.1",
+  description:
+    "Connect Rayvan to GitHub repositories and manage Actions variables.",
+  version: "0.1.0",
   publisher: "rayvan",
   rayvanApiVersion: RAYVAN_PLUGIN_API_VERSION,
-  capabilities: [],
-  permissions: [],
-  resourceTypes: [],
+  capabilities: [
+    "authenticate",
+    "discover",
+    "inspect",
+    "plan",
+    "apply",
+    "verify",
+    "evaluate_findings",
+  ],
+  permissions: ["network", "read_secrets", "write_remote_configuration"],
+  resourceTypes: [
+    {
+      id: "github.repository",
+      name: "GitHub Repository",
+      schemaVersion: "1.0.0",
+    },
+    {
+      id: "github.actions_repository_variables",
+      name: "Actions Repository Variables",
+      schemaVersion: "1.0.0",
+    },
+  ],
   presentation: {
     icon: { iconId: "github", initials: "GH", label: "GitHub" },
     theme: {

@@ -136,14 +136,14 @@ const RESOURCE_SPECS: readonly ResourceSeedSpec[] = [
     bindToEnv: "Production",
   },
   {
-    pluginId: "github",
+    pluginId: "io.rayvan.github",
     providerResourceId: "branch:main",
     resourceType: "branch",
     name: "GitHub main",
     bindToEnv: "Production",
   },
   {
-    pluginId: "github",
+    pluginId: "io.rayvan.github",
     providerResourceId: "branch:develop",
     resourceType: "branch",
     name: "GitHub develop",
@@ -481,7 +481,7 @@ const OCCURRENCE_SPECS: readonly OccurrenceSeedSpec[] = [
   {
     keyName: "GITHUB_TOKEN",
     envName: "Production",
-    pluginId: "github",
+    pluginId: "io.rayvan.github",
     resourceProviderId: "branch:main",
     valueAccess: "name_only",
   },
