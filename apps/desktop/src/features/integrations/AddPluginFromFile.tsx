@@ -1,150 +1,131 @@
-import { useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Button } from "@rayvan/ui";
 
-interface ParsedManifestMetadata {
-  id: string;
-  name: string;
+import { desktopDaemon } from "../../lib/daemon/client.js";
+
+export interface InstalledPluginFromFile {
+  pluginId: string;
   version: string;
-  publisher: string;
+  trustLabel?: string;
 }
 
-type FileParseResult =
-  | { kind: "manifest"; metadata: ParsedManifestMetadata }
-  | { kind: "unsupported"; reason: string };
-
-function looksLikeManifestMetadata(value: unknown): value is ParsedManifestMetadata {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === "string" &&
-    typeof record.name === "string" &&
-    typeof record.version === "string" &&
-    typeof record.publisher === "string"
-  );
-}
-
-function hasSupportedExtension(fileName: string): boolean {
-  const lower = fileName.toLowerCase();
-  return lower.endsWith(".rayvan-plugin") || lower.endsWith(".json");
-}
-
-/** `File.text()` is not implemented by every runtime (notably jsdom); `FileReader` is. */
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
-    reader.readAsText(file);
-  });
+interface AddPluginFromFileProps {
+  onInstalled?: (installed: InstalledPluginFromFile) => void;
 }
 
 /**
- * Parses a `.rayvan-plugin` file's manifest metadata only, as text/JSON.
- * Never evaluates, imports, or otherwise executes file contents — this
- * screen exists purely to demonstrate the intended UX for local development
- * builds where external plugin execution is disabled.
+ * Installs a platform-specific `.rayvan-plugin` package via the daemon.
+ * The webview never imports or executes plugin code — only a filesystem path
+ * is sent to `plugins.installFromPath`.
  */
-async function parsePluginFile(file: File): Promise<FileParseResult> {
-  if (!hasSupportedExtension(file.name)) {
-    return {
-      kind: "unsupported",
-      reason:
-        "Unsupported file type. Only .rayvan-plugin (or metadata .json) files are supported.",
-    };
-  }
+export function AddPluginFromFile({ onInstalled }: AddPluginFromFileProps) {
+  const [path, setPath] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<InstalledPluginFromFile | null>(null);
 
-  const text = await readFileAsText(file);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return {
-      kind: "unsupported",
-      reason: "File could not be parsed as plugin manifest metadata.",
-    };
-  }
-
-  if (!looksLikeManifestMetadata(parsed)) {
-    return {
-      kind: "unsupported",
-      reason: "File does not contain recognizable plugin manifest metadata.",
-    };
-  }
-
-  return { kind: "manifest", metadata: parsed };
-}
-
-export function AddPluginFromFile() {
-  const [result, setResult] = useState<FileParseResult | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-
-  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) {
+  async function handleInstall(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = path.trim();
+    if (!trimmed) {
+      setError("Enter the absolute path to a .rayvan-plugin file.");
       return;
     }
-    setFileName(file.name);
-    const parseResult = await parsePluginFile(file);
-    setResult(parseResult);
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const installed = await desktopDaemon.installPluginFromPath(trimmed);
+      const next = {
+        pluginId: installed.pluginId,
+        version: installed.version,
+        trustLabel: installed.trustLabel,
+      };
+      setResult(next);
+      onInstalled?.(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handlePathChange(event: ChangeEvent<HTMLInputElement>) {
+    setPath(event.target.value);
+    setError(null);
+    setResult(null);
   }
 
   return (
     <div>
       <p style={{ color: "var(--color-text-secondary)" }}>
-        Add a plugin from a local <code>.rayvan-plugin</code> file. Only manifest
-        metadata is read &mdash; no plugin code is executed.
+        Install a platform-specific <code>.rayvan-plugin</code> package through
+        the Rayvan daemon. Plugin code never runs in the desktop renderer.
+        Unsigned development packages require{" "}
+        <code>RAYVAN_ALLOW_UNSIGNED_PLUGINS=1</code> (enabled automatically for
+        desktop debug builds).
       </p>
 
-      <Button
-        type="button"
-        onClick={() => document.getElementById("plugin-file-input")?.click()}
-      >
-        Choose file&hellip;
-      </Button>
-      <input
-        id="plugin-file-input"
-        type="file"
-        aria-label="Choose plugin file"
-        accept=".rayvan-plugin,application/json"
-        style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          padding: 0,
-          margin: 0,
-          overflow: "hidden",
-          clip: "rect(0,0,0,0)",
-          whiteSpace: "nowrap",
-          border: 0,
-        }}
-        onChange={handleFileChange}
-      />
+      <form onSubmit={handleInstall} style={{ marginTop: "1rem" }}>
+        <label
+          htmlFor="plugin-package-path"
+          style={{ display: "block", marginBottom: "0.35rem" }}
+        >
+          Package path
+        </label>
+        <input
+          id="plugin-package-path"
+          type="text"
+          value={path}
+          onChange={handlePathChange}
+          placeholder="C:\\path\\to\\io.rayvan.github-0.1.0-….rayvan-plugin"
+          style={{
+            width: "100%",
+            padding: "0.5rem 0.65rem",
+            borderRadius: "6px",
+            border: "1px solid var(--color-border)",
+            background: "var(--color-surface-muted)",
+            color: "var(--color-text)",
+          }}
+        />
+        <div style={{ marginTop: "0.75rem" }}>
+          <Button type="submit" disabled={busy}>
+            {busy ? "Installing…" : "Install package"}
+          </Button>
+        </div>
+      </form>
 
-      {fileName ? (
-        <p style={{ marginTop: "0.75rem", color: "var(--color-text-muted)" }}>
-          Selected: {fileName}
-        </p>
-      ) : null}
-
-      {result?.kind === "manifest" ? (
+      {result ? (
         <div role="status" style={{ marginTop: "0.75rem" }}>
           <p>
-            Detected plugin <strong>{result.metadata.name}</strong> (v
-            {result.metadata.version}) by {result.metadata.publisher}.
+            Installed <strong>{result.pluginId}</strong> v{result.version}.
           </p>
+          {result.trustLabel ? (
+            <p style={{ color: "var(--color-text-secondary)" }}>
+              Trust: {result.trustLabel}
+            </p>
+          ) : null}
           <p style={{ color: "var(--color-text-secondary)" }}>
-            External plugin execution is not enabled in this build. This plugin
-            cannot be installed or run from a file yet.
+            The package is on this machine but not connected to the project yet.
           </p>
+          {onInstalled ? (
+            <div style={{ marginTop: "0.75rem" }}>
+              <Button type="button" onClick={() => onInstalled(result)}>
+                Set up {result.pluginId.includes("github") ? "GitHub" : "plugin"}
+              </Button>
+            </div>
+          ) : (
+            <p style={{ color: "var(--color-text-secondary)" }}>
+              Next: use Add from library to authenticate and create a project
+              connection.
+            </p>
+          )}
         </div>
       ) : null}
 
-      {result?.kind === "unsupported" ? (
+      {error ? (
         <p role="alert" style={{ marginTop: "0.75rem", color: "var(--color-danger)" }}>
-          {result.reason}
+          {error}
         </p>
       ) : null}
     </div>

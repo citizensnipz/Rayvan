@@ -488,7 +488,7 @@ describe("buildConfigurationDerivedFindings", () => {
         configurationKeyId: driftKey.id,
         environmentId: ENV_DEV,
         valueAccess: "name_only",
-        pluginId: "github",
+        pluginId: "io.rayvan.github",
       }),
     ];
 

@@ -263,6 +263,14 @@ function badgeFor(installed: InstalledPluginRecord): LibraryPluginBadge {
   if (installed.source.type === "built_in") {
     return "built-in";
   }
+  if (installed.source.type === "package") {
+    if (installed.source.trustStatus === "unsigned_development") {
+      return "unsigned-dev";
+    }
+    if (installed.source.trustStatus === "signed") {
+      return "signed";
+    }
+  }
   if (installed.manifestSnapshot.publisher === "rayvan") {
     return "official";
   }
@@ -296,5 +304,6 @@ export function mapInstalledPluginToLibraryViewModel(
     supportsMultipleConnections,
     existingConnectionCount,
     eligible: existingConnectionCount === 0 || supportsMultipleConnections,
+    requiresSecretToken: (manifest.setup?.authMethods ?? []).includes("pat"),
   };
 }

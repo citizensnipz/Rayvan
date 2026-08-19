@@ -103,7 +103,12 @@ export interface PluginIntegrationDetailViewModel {
   };
 }
 
-export type LibraryPluginBadge = "built-in" | "official" | null;
+export type LibraryPluginBadge =
+  | "built-in"
+  | "official"
+  | "unsigned-dev"
+  | "signed"
+  | null;
 
 export interface LibraryPluginViewModel {
   installedPluginId: string;
@@ -119,6 +124,8 @@ export interface LibraryPluginViewModel {
   existingConnectionCount: number;
   /** Eligible when not yet configured for this project, or when multi-connection is supported. */
   eligible: boolean;
+  /** True when the plugin declares PAT as a setup auth method. */
+  requiresSecretToken: boolean;
 }
 
 export type IntegrationTab =

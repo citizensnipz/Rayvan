@@ -35,6 +35,7 @@ export type {
   PluginExecutionStatus,
   SerializedPluginExecutionError,
 } from "./results.js";
+export { CompositePluginRuntime } from "./runtime/composite.js";
 export { InProcessPluginRuntime } from "./runtime/in-process.js";
 export type {
   PluginRuntime,

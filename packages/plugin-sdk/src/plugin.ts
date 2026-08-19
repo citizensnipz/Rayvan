@@ -50,6 +50,13 @@ export type EvaluateFindingsHandler = (
 export interface RayvanPlugin {
   manifest: PluginManifest;
 
+  /**
+   * When `"out_of_process"`, handlers may be omitted; the host
+   * {@link PluginRuntime} (e.g. OutOfProcessPluginRuntime) executes them.
+   * Defaults to in-process handler requirements.
+   */
+  executionMode?: "in_process" | "out_of_process";
+
   authenticate?: AuthenticateHandler;
   discover?: DiscoverHandler;
   inspect?: InspectHandler;

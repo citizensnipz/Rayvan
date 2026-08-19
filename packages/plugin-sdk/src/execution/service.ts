@@ -367,16 +367,18 @@ export class PluginExecutionService implements IPluginExecutionService {
       });
     }
 
-    const handlerKey = CAPABILITY_HANDLER_KEYS[capability];
-    if (typeof plugin[handlerKey] !== "function") {
-      return finish("failed", {
-        error: this.makeError(
-          "missing_handler",
-          `Plugin "${request.pluginId}" is missing handler for capability "${capability}"`,
-          request.pluginId,
-          capability,
-        ),
-      });
+    if (plugin.executionMode !== "out_of_process") {
+      const handlerKey = CAPABILITY_HANDLER_KEYS[capability];
+      if (typeof plugin[handlerKey] !== "function") {
+        return finish("failed", {
+          error: this.makeError(
+            "missing_handler",
+            `Plugin "${request.pluginId}" is missing handler for capability "${capability}"`,
+            request.pluginId,
+            capability,
+          ),
+        });
+      }
     }
 
     const requiredPermissions = [

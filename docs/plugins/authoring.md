@@ -111,18 +111,27 @@ Registration validates the manifest, rejects duplicate plugin IDs, and fails if 
 - Do not create approvals, persist audit events, or access the Core database from plugin code.
 - Do not call `PluginExecutionService` or other `src/execution/` host APIs from plugin code. Export handlers only; the host invokes them through the execution service.
 
+## Packaging an OOP plugin
+
+1. Implement `RayvanPlugin` under `plugins/<name>` (developer-mode unpacked layout).
+2. Provide a Node launcher entrypoint that calls `serveRayvanPlugin` from `@rayvan/plugin-client` (binary name e.g. `rayvan-plugin-github`).
+3. Pack with `@rayvan/plugin-package` into a per-triple `.rayvan-plugin` ZIP.
+4. Install via daemon `plugins.installFromPath` (Desktop **Add from file** or MCP).
+
+Setup contributions are data-only (`manifest.setup`); Rayvan UI owns widgets. Auth secrets must go through `CredentialStore` — never plaintext in SQLite, logs, MCP, or UI.
+
 ## Current limitations
 
-- No dynamic import of arbitrary user JavaScript
-- No marketplace, remote installation, or plugin signing
-- No sandboxing or process isolation yet
-- No OAuth flows in the SDK
-- No UI-heavy plugin rendering contract yet
-- Provider plugins other than `example-local` are placeholders
+- No marketplace / remote catalog
+- Signing is optional for local development only when explicitly opted in (`RAYVAN_ALLOW_UNSIGNED_PLUGINS=1` or `allowUnsignedPlugins: true`); mandatory signing UX deferred
+- Packages are platform-specific (no universal multi-arch ZIP yet)
+- No seccomp / full sandbox
+- No plugin React components in the renderer
+- Parallel `listPluginActions` catalog is deferred (capabilities remain SoT)
 
 ## Planned future support
 
-- External plugin packages with the same contract
-- Process-hosted plugins via `crates/plugin-host` and `@rayvan/plugin-client`
-- Sandboxing, signatures, and mediated installation
+- Public marketplace and mandatory signing UX
+- Universal multi-arch packages
+- Stronger process sandboxing
 - Richer permission enforcement and secret scoping

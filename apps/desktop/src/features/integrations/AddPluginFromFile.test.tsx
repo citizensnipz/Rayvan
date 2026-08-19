@@ -1,80 +1,73 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddPluginFromFile } from "./AddPluginFromFile.js";
 
-function selectFile(input: HTMLElement, file: File) {
-  fireEvent.change(input, { target: { files: [file] } });
-}
+const installPluginFromPath = vi.fn();
+
+vi.mock("../../lib/daemon/client.js", () => ({
+  desktopDaemon: {
+    installPluginFromPath: (...args: unknown[]) =>
+      installPluginFromPath(...args),
+  },
+}));
 
 describe("AddPluginFromFile", () => {
-  it("rejects files with an unsupported extension", async () => {
+  beforeEach(() => {
+    installPluginFromPath.mockReset();
+  });
+
+  it("requires a package path before installing", async () => {
     render(<AddPluginFromFile />);
-    const input = screen.getByLabelText("Choose plugin file") as HTMLInputElement;
-    const file = new File(["not a plugin"], "malware.exe", { type: "application/octet-stream" });
-
-    selectFile(input, file);
-
+    fireEvent.click(screen.getByRole("button", { name: /Install package/i }));
     expect(
-      await screen.findByText(
-        /Unsupported file type\. Only \.rayvan-plugin \(or metadata \.json\) files are supported\./i,
-      ),
+      await screen.findByText(/Enter the absolute path/i),
     ).toBeInTheDocument();
+    expect(installPluginFromPath).not.toHaveBeenCalled();
   });
 
-  it("rejects JSON that does not look like plugin manifest metadata", async () => {
-    render(<AddPluginFromFile />);
-    const input = screen.getByLabelText("Choose plugin file") as HTMLInputElement;
-    const file = new File([JSON.stringify({ hello: "world" })], "not-a-plugin.rayvan-plugin", {
-      type: "application/json",
+  it("installs via the daemon and offers setup", async () => {
+    const onInstalled = vi.fn();
+    installPluginFromPath.mockResolvedValue({
+      pluginId: "io.rayvan.github",
+      version: "0.1.0",
+      trustLabel: "Unsigned (development)",
     });
 
-    selectFile(input, file);
-
-    expect(
-      await screen.findByText(/does not contain recognizable plugin manifest metadata/i),
-    ).toBeInTheDocument();
-  });
-
-  it("never executes file contents, even when they look like executable code", async () => {
-    const globalWithFlag = globalThis as { __executed?: boolean };
-    globalWithFlag.__executed = false;
-
-    render(<AddPluginFromFile />);
-    const input = screen.getByLabelText("Choose plugin file") as HTMLInputElement;
-    const maliciousSource = "globalThis.__executed = true;";
-    const file = new File([maliciousSource], "payload.rayvan-plugin", {
-      type: "application/octet-stream",
+    render(<AddPluginFromFile onInstalled={onInstalled} />);
+    fireEvent.change(screen.getByLabelText("Package path"), {
+      target: {
+        value:
+          "C:\\plugins\\io.rayvan.github-0.1.0-x86_64-pc-windows-msvc.rayvan-plugin",
+      },
     });
-
-    selectFile(input, file);
-
-    await screen.findByRole("alert");
-    expect(globalWithFlag.__executed).toBe(false);
-    delete globalWithFlag.__executed;
-  });
-
-  it("shows a development-only message for a recognized manifest without installing or executing it", async () => {
-    render(<AddPluginFromFile />);
-    const input = screen.getByLabelText("Choose plugin file") as HTMLInputElement;
-    const manifest = {
-      id: "acme-plugin",
-      name: "Acme Plugin",
-      version: "1.0.0",
-      publisher: "acme",
-    };
-    const file = new File([JSON.stringify(manifest)], "acme.rayvan-plugin", {
-      type: "application/json",
-    });
-
-    selectFile(input, file);
+    fireEvent.click(screen.getByRole("button", { name: /Install package/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Detected plugin/i)).toBeInTheDocument();
+      expect(installPluginFromPath).toHaveBeenCalledWith(
+        "C:\\plugins\\io.rayvan.github-0.1.0-x86_64-pc-windows-msvc.rayvan-plugin",
+      );
     });
-    expect(screen.getByText("Acme Plugin", { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText(/Installed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Unsigned \(development\)/i)).toBeInTheDocument();
+    expect(onInstalled).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Set up GitHub/i }));
+    expect(onInstalled).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces daemon install errors without executing package contents", async () => {
+    installPluginFromPath.mockRejectedValue(
+      new Error("Signature verification failed"),
+    );
+
+    render(<AddPluginFromFile />);
+    fireEvent.change(screen.getByLabelText("Package path"), {
+      target: { value: "D:\\bad.rayvan-plugin" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Install package/i }));
+
     expect(
-      screen.getByText(/external plugin execution is not enabled in this build/i),
+      await screen.findByText(/Signature verification failed/i),
     ).toBeInTheDocument();
   });
 });

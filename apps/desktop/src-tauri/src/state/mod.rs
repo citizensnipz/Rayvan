@@ -172,6 +172,12 @@ fn spawn_daemon(app: &AppHandle, endpoint: &str) -> Result<(), DaemonConnectionE
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
+    #[cfg(debug_assertions)]
+    {
+        // Local development packages are typically unsigned; opt in for
+        // desktop-spawned daemons only (packaged builds stay deny-by-default).
+        command.env("RAYVAN_ALLOW_UNSIGNED_PLUGINS", "1");
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

@@ -72,7 +72,14 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
   const [tabs, setTabs] = useState<IntegrationTab[]>([{ kind: "home" }]);
   const [activeTabKey, setActiveTabKey] = useState<string>(HOME_TAB_KEY);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [setupInstalledPluginId, setSetupInstalledPluginId] = useState<
+    string | null
+  >(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const closeAddDialog = useCallback(() => {
+    setDialogOpen(false);
+    setSetupInstalledPluginId(null);
+  }, []);
 
   const refreshForProject = useCallback(
     async (activeProjectId: string, generation: number) => {
@@ -186,6 +193,7 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
     const map = new Map<string, InstalledPluginRecord>();
     for (const installed of installedPlugins) {
       map.set(installed.id, installed);
+      map.set(installed.pluginId, installed);
     }
     return map;
   }, [installedPlugins]);
@@ -194,7 +202,9 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
     () =>
       connections
         .map((connection) => {
-          const installed = installedByPluginId.get(connection.installedPluginId);
+          const installed =
+            installedByPluginId.get(connection.installedPluginId) ??
+            installedByPluginId.get(connection.pluginId);
           return installed
             ? mapConnectionToCardViewModel(
                 connection,
@@ -213,6 +223,12 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
         .map((installed) => mapInstalledPluginToLibraryViewModel(installed, connections))
         .filter((plugin) => plugin.eligible),
     [installedPlugins, connections],
+  );
+
+  const availableToSetup = useMemo(
+    () =>
+      libraryPlugins.filter((plugin) => plugin.existingConnectionCount === 0),
+    [libraryPlugins],
   );
 
   const loadGrants = useCallback(
@@ -282,6 +298,8 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
         installedPluginId: submission.installedPluginId,
         projectId,
         name: submission.connectionName,
+        authMethod: submission.authMethod,
+        secretToken: submission.secretToken,
       });
 
       if (submission.permissions.length > 0) {
@@ -296,11 +314,21 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
 
       await refresh();
       setDialogOpen(false);
+      setSetupInstalledPluginId(null);
       setBanner(`${submission.connectionName} was connected successfully.`);
       openTab(connection.id, connection.name);
     },
     [gateway, installedByPluginId, openTab, projectId, refresh],
   );
+
+  const handlePackageInstalled = useCallback(async () => {
+    await refresh();
+  }, [refresh]);
+
+  const openSetupForPlugin = useCallback((installedPluginId: string) => {
+    setSetupInstalledPluginId(installedPluginId);
+    setDialogOpen(true);
+  }, []);
 
   const handleDisconnect = useCallback(
     (connectionId: string) => {
@@ -376,9 +404,14 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
         <IntegrationsHome
           cards={cards}
           canAddIntegration={projectId !== null}
+          availableToSetup={availableToSetup}
           onOpen={openTab}
           onAction={handleCardAction}
-          onAddIntegration={() => setDialogOpen(true)}
+          onAddIntegration={() => {
+            setSetupInstalledPluginId(null);
+            setDialogOpen(true);
+          }}
+          onSetupPlugin={openSetupForPlugin}
         />
         {loading && cards.length === 0 ? (
           <p style={{ color: "var(--color-text-secondary)" }}>Loading integrations&hellip;</p>
@@ -409,9 +442,11 @@ export function IntegrationsWorkspace({ projectId }: IntegrationsWorkspaceProps)
 
       <AddIntegrationDialog
         open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
+        onClose={closeAddDialog}
         plugins={libraryPlugins}
         onSubmit={handleAddSubmission}
+        onPackageInstalled={handlePackageInstalled}
+        setupInstalledPluginId={setupInstalledPluginId}
       />
     </section>
   );

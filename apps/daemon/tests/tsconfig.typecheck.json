@@ -16,6 +16,8 @@
       "@rayvan/local-database/sqlite": ["packages/local-database/src/sqlite.ts"],
       "@rayvan/plugin-example-local": ["plugins/example-local/src/index.ts"],
       "@rayvan/plugin-sdk": ["packages/plugin-sdk/src/index.ts"],
+      "@rayvan/plugin-client": ["packages/plugin-client/src/index.ts"],
+      "@rayvan/plugin-package": ["packages/plugin-package/src/index.ts"],
       "@rayvan/shared": ["packages/shared/src/index.ts"]
     }
   },

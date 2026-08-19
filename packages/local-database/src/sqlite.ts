@@ -6,3 +6,7 @@ export * from "./configuration/sqlite-occurrence-repository.js";
 export * from "./configuration/sqlite-desired-repository.js";
 export * from "./configuration/sqlite-applied-repository.js";
 export * from "./plugins/sqlite/repositories.js";
+export * from "./plugins/sqlite/setup-sessions.js";
+export * from "./plugins/repositories/sqlite-persistence.js";
+export * from "./plugins/services/setup-session.js";
+export * from "./plugins/services/package-install.js";

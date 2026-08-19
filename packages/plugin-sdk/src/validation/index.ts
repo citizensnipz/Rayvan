@@ -39,16 +39,24 @@ import {
   PLUGIN_CAPABILITIES,
   PLUGIN_FOREGROUND_MODES,
   PLUGIN_PERMISSIONS,
+  PLUGIN_SETUP_AUTH_METHODS,
+  PLUGIN_SETUP_WIDGETS,
   PLUGIN_THEME_SURFACES,
   type PluginCapability,
+  type PluginEntrypointDefinition,
   type PluginManifest,
   type PluginPermission,
   type PluginPresentationDefinition,
+  type PluginPublisherInfo,
   type PluginResourceTypeDefinition,
+  type PluginSetupContribution,
 } from "../manifest/index.js";
 import type { RayvanPlugin } from "../plugin.js";
 
-const PLUGIN_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
+/** Kebab-case (`example-local`) or reverse-DNS (`io.rayvan.github`). */
+const PLUGIN_ID_PATTERN = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$/;
+const HOSTNAME_PATTERN =
+  /^(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$|^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
 const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const RESOURCE_TYPE_ID_PATTERN = /^[a-z][a-z0-9._-]*$/;
@@ -398,6 +406,142 @@ export function validatePluginManifest(manifest: PluginManifest): void {
   if (manifest.presentation !== undefined) {
     validatePluginPresentation(manifest.presentation, pluginId);
   }
+
+  if (manifest.publisherInfo !== undefined) {
+    validatePublisherInfo(manifest.publisherInfo, pluginId);
+  }
+
+  if (manifest.entrypoints !== undefined) {
+    if (!Array.isArray(manifest.entrypoints)) {
+      throw new PluginValidationError(
+        "manifest.entrypoints must be an array when provided",
+        { pluginId },
+      );
+    }
+    for (let i = 0; i < manifest.entrypoints.length; i += 1) {
+      validateEntrypoint(manifest.entrypoints[i]!, pluginId, i);
+    }
+  }
+
+  if (manifest.networkHosts !== undefined) {
+    if (!Array.isArray(manifest.networkHosts)) {
+      throw new PluginValidationError(
+        "manifest.networkHosts must be an array when provided",
+        { pluginId },
+      );
+    }
+    for (const host of manifest.networkHosts) {
+      assertNonEmptyString(host, "manifest.networkHosts[]", pluginId);
+      if (!HOSTNAME_PATTERN.test(host)) {
+        throw new PluginValidationError(
+          `manifest.networkHosts[] "${host}" is not a valid hostname`,
+          { pluginId },
+        );
+      }
+    }
+    assertUniqueStrings(manifest.networkHosts, "network host", pluginId);
+  }
+
+  if (manifest.setup !== undefined) {
+    validateSetupContribution(manifest.setup, pluginId);
+  }
+}
+
+function validatePublisherInfo(
+  info: PluginPublisherInfo,
+  pluginId: string,
+): void {
+  assertNonEmptyString(info.name, "publisherInfo.name", pluginId);
+  if (info.url !== undefined) {
+    assertNonEmptyString(info.url, "publisherInfo.url", pluginId);
+  }
+  if (info.supportUrl !== undefined) {
+    assertNonEmptyString(info.supportUrl, "publisherInfo.supportUrl", pluginId);
+  }
+}
+
+function validateEntrypoint(
+  entry: PluginEntrypointDefinition,
+  pluginId: string,
+  index: number,
+): void {
+  const field = `entrypoints[${index}]`;
+  if (entry.runtime !== "native") {
+    throw new PluginValidationError(
+      `${field}.runtime must be "native"`,
+      { pluginId },
+    );
+  }
+  assertNonEmptyString(entry.binary, `${field}.binary`, pluginId);
+  if (!/^[a-zA-Z0-9._-]+$/.test(entry.binary)) {
+    throw new PluginValidationError(
+      `${field}.binary contains invalid characters`,
+      { pluginId },
+    );
+  }
+  assertNonEmptyString(
+    entry.protocolVersion,
+    `${field}.protocolVersion`,
+    pluginId,
+  );
+}
+
+function validateSetupContribution(
+  setup: PluginSetupContribution,
+  pluginId: string,
+): void {
+  if (!Array.isArray(setup.authMethods) || setup.authMethods.length === 0) {
+    throw new PluginValidationError(
+      "setup.authMethods must be a non-empty array",
+      { pluginId },
+    );
+  }
+  for (const method of setup.authMethods) {
+    if (
+      !(PLUGIN_SETUP_AUTH_METHODS as readonly string[]).includes(method)
+    ) {
+      throw new PluginValidationError(
+        `setup.authMethods contains unsupported method "${String(method)}"`,
+        { pluginId },
+      );
+    }
+  }
+  assertUniqueStrings(setup.authMethods, "setup auth method", pluginId);
+
+  if (!Array.isArray(setup.steps) || setup.steps.length === 0) {
+    throw new PluginValidationError(
+      "setup.steps must be a non-empty array",
+      { pluginId },
+    );
+  }
+  for (let i = 0; i < setup.steps.length; i += 1) {
+    const step = setup.steps[i]!;
+    const field = `setup.steps[${i}]`;
+    assertNonEmptyString(step.id, `${field}.id`, pluginId);
+    assertNonEmptyString(step.title, `${field}.title`, pluginId);
+    if (
+      !(PLUGIN_SETUP_WIDGETS as readonly string[]).includes(step.widget)
+    ) {
+      throw new PluginValidationError(
+        `${field}.widget has unsupported value "${String(step.widget)}"`,
+        { pluginId },
+      );
+    }
+    if (
+      step.description !== undefined &&
+      typeof step.description !== "string"
+    ) {
+      throw new PluginValidationError(
+        `${field}.description must be a string when provided`,
+        { pluginId },
+      );
+    }
+  }
+  assertUniqueStrings(
+    setup.steps.map((step) => step.id),
+    "setup step id",
+    pluginId,
+  );
 }
 
 function validatePluginPresentation(

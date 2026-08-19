@@ -34,6 +34,14 @@ export default defineConfig({
         replacement: workspace("packages/plugin-sdk/src/index.ts"),
       },
       {
+        find: "@rayvan/plugin-client",
+        replacement: workspace("packages/plugin-client/src/index.ts"),
+      },
+      {
+        find: "@rayvan/plugin-package",
+        replacement: workspace("packages/plugin-package/src/index.ts"),
+      },
+      {
         find: "@rayvan/plugin-example-local",
         replacement: workspace("plugins/example-local/src/index.ts"),
       },

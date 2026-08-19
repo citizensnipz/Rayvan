@@ -7,8 +7,7 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../../packages/core" },
     { "path": "../../packages/plugin-sdk" },
-    { "path": "../../packages/shared" }
+    { "path": "../../packages/plugin-client" }
   ]
 }

@@ -11,10 +11,29 @@ import type {
   VerificationResult,
 } from "@rayvan/plugin-sdk";
 
+export type PluginPackageTrustStatus =
+  | "signed"
+  | "unsigned_development"
+  | "rejected";
+
+export type PluginHostKind = "in_process" | "out_of_process";
+
 export type PluginInstallSource =
   | { type: "built_in" }
   | { type: "local"; path: string }
-  | { type: "package"; packageId: string; registry?: string };
+  | {
+      type: "package";
+      packageId: string;
+      registry?: string;
+      packagePath?: string;
+      installPath?: string;
+      binaryPath?: string;
+      trustStatus?: PluginPackageTrustStatus;
+      trustLabel?: string;
+      targetTriple?: string;
+      hostKind?: PluginHostKind;
+      signerFingerprint?: string;
+    };
 
 export type InstalledPluginStatus =
   | "installed"

@@ -1,6 +1,6 @@
 {
   "name": "@rayvan/plugin-github",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -9,17 +9,21 @@
       "import": "./dist/index.js"
     }
   },
+  "bin": {
+    "rayvan-plugin-github": "./dist/bin/rayvan-plugin-github.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "lint": "eslint \"src\" \"tests\" --no-error-on-unmatched-pattern",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "write-manifest-json": "node ./scripts/write-manifest-json.mjs",
+    "pack:plugin": "pnpm build && pnpm write-manifest-json && node ../../packages/plugin-package/dist/cli/pack.js --manifest ./dist/manifest.json --binary ./dist/bin/rayvan-plugin-github.js --triple x86_64-pc-windows-msvc --out ./dist/packages"
   },
   "dependencies": {
-    "@rayvan/core": "workspace:*",
-    "@rayvan/plugin-sdk": "workspace:*",
-    "@rayvan/shared": "workspace:*"
+    "@rayvan/plugin-client": "workspace:*",
+    "@rayvan/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^3.2.3"

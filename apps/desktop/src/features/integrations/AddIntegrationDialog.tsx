@@ -8,7 +8,10 @@ import {
 } from "react";
 import { Button } from "@rayvan/ui";
 
-import { AddPluginFromFile } from "./AddPluginFromFile.js";
+import {
+  AddPluginFromFile,
+  type InstalledPluginFromFile,
+} from "./AddPluginFromFile.js";
 import {
   InstalledPluginLibrary,
   type AddIntegrationSubmission,
@@ -50,6 +53,10 @@ interface AddIntegrationDialogProps {
   onClose: () => void;
   plugins: LibraryPluginViewModel[];
   onSubmit: (submission: AddIntegrationSubmission) => Promise<void>;
+  /** Refresh installed plugins after a package install. */
+  onPackageInstalled?: (installed: InstalledPluginFromFile) => Promise<void> | void;
+  /** Open directly into library setup for this installed plugin id. */
+  setupInstalledPluginId?: string | null;
 }
 
 export function AddIntegrationDialog({
@@ -57,24 +64,37 @@ export function AddIntegrationDialog({
   onClose,
   plugins,
   onSubmit,
+  onPackageInstalled,
+  setupInstalledPluginId = null,
 }: AddIntegrationDialogProps) {
   const [screen, setScreen] = useState<DialogScreen>("choose");
+  const [focusInstalledPluginId, setFocusInstalledPluginId] = useState<
+    string | null
+  >(null);
   const titleId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) {
       return;
     }
-    setScreen("choose");
+    if (setupInstalledPluginId) {
+      setScreen("library");
+      setFocusInstalledPluginId(setupInstalledPluginId);
+    } else {
+      setScreen("choose");
+      setFocusInstalledPluginId(null);
+    }
     const previous = document.activeElement as HTMLElement | null;
     closeButtonRef.current?.focus();
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
       }
     }
 
@@ -83,10 +103,17 @@ export function AddIntegrationDialog({
       document.removeEventListener("keydown", onKeyDown);
       previous?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open, setupInstalledPluginId]);
 
   if (!open) {
     return null;
+  }
+
+  async function handlePackageInstalled(installed: InstalledPluginFromFile) {
+    await onPackageInstalled?.(installed);
+    // Prefer pluginId — installed record UUID may not be in the plugins list yet.
+    setFocusInstalledPluginId(installed.pluginId);
+    setScreen("library");
   }
 
   function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
@@ -114,11 +141,7 @@ export function AddIntegrationDialog({
   }
 
   return (
-    <div
-      style={overlayStyle}
-      role="presentation"
-      onClick={onClose}
-    >
+    <div style={overlayStyle} role="presentation" onClick={onClose}>
       <div
         ref={dialogRef}
         style={dialogStyle}
@@ -128,7 +151,13 @@ export function AddIntegrationDialog({
         onClick={(event) => event.stopPropagation()}
         onKeyDown={handleDialogKeyDown}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <h2 id={titleId} style={{ marginTop: 0, marginBottom: 0 }}>
             Add integration
           </h2>
@@ -161,11 +190,21 @@ export function AddIntegrationDialog({
 
         {screen === "library" ? (
           <div style={{ marginTop: "1rem" }}>
-            <Button type="button" onClick={() => setScreen("choose")}>
+            <Button
+              type="button"
+              onClick={() => {
+                setFocusInstalledPluginId(null);
+                setScreen("choose");
+              }}
+            >
               &larr; Back
             </Button>
             <div style={{ marginTop: "1rem" }}>
-              <InstalledPluginLibrary plugins={plugins} onSubmit={onSubmit} />
+              <InstalledPluginLibrary
+                plugins={plugins}
+                onSubmit={onSubmit}
+                initialInstalledPluginId={focusInstalledPluginId}
+              />
             </div>
           </div>
         ) : null}
@@ -176,7 +215,7 @@ export function AddIntegrationDialog({
               &larr; Back
             </Button>
             <div style={{ marginTop: "1rem" }}>
-              <AddPluginFromFile />
+              <AddPluginFromFile onInstalled={handlePackageInstalled} />
             </div>
           </div>
         ) : null}

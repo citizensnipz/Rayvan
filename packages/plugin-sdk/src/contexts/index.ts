@@ -12,9 +12,20 @@ import type {
  * Do not pass database clients, UI state, loggers, or service containers.
  */
 
+/**
+ * Host-injected credential material for a single invocation.
+ * Plugins must not persist, log, or return these values.
+ */
+export interface PluginInvocationCredentials {
+  accessToken?: string;
+}
+
 export interface AuthenticateContext {
   pluginId: string;
   integrationId: string;
+  /** Host-injected; never persist or echo back. */
+  credentials?: PluginInvocationCredentials;
+  connectionMetadata?: Record<string, unknown>;
 }
 
 export interface DiscoveryContext {
@@ -22,12 +33,16 @@ export interface DiscoveryContext {
   integrationId: string;
   projectId?: string;
   environmentId?: string;
+  credentials?: PluginInvocationCredentials;
+  connectionMetadata?: Record<string, unknown>;
 }
 
 export interface InspectContext {
   pluginId: string;
   integrationId: string;
   resource: ResourceBinding;
+  credentials?: PluginInvocationCredentials;
+  connectionMetadata?: Record<string, unknown>;
 }
 
 export interface PlanContext {
@@ -36,6 +51,8 @@ export interface PlanContext {
   resource: ResourceBinding;
   observed: ObservedResourceState;
   desired: DesiredResourceState;
+  credentials?: PluginInvocationCredentials;
+  connectionMetadata?: Record<string, unknown>;
 }
 
 export interface ApplyContext {
@@ -43,6 +60,8 @@ export interface ApplyContext {
   integrationId: string;
   resource: ResourceBinding;
   approvedPlan: ApprovedChangePlan;
+  credentials?: PluginInvocationCredentials;
+  connectionMetadata?: Record<string, unknown>;
 }
 
 export interface VerifyContext {
@@ -51,6 +70,8 @@ export interface VerifyContext {
   resource: ResourceBinding;
   approvedPlan: ApprovedChangePlan;
   applyResult: ApplyResult;
+  credentials?: PluginInvocationCredentials;
+  connectionMetadata?: Record<string, unknown>;
 }
 
 /** Minimal environment snapshot for findings evaluation. */

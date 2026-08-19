@@ -94,6 +94,14 @@ export const DaemonMethods = {
   // Plugins
   listPlugins: "plugins.list",
   listPluginActions: "plugins.listActions",
+  installPluginFromPath: "plugins.installFromPath",
+  uninstallPlugin: "plugins.uninstall",
+  enablePlugin: "plugins.enable",
+  disablePlugin: "plugins.disable",
+  startPluginSetup: "plugins.setup.start",
+  stepPluginSetup: "plugins.setup.step",
+  completePluginSetup: "plugins.setup.complete",
+  createPluginConnection: "plugins.connections.create",
 } as const;
 
 export type DaemonMethod = (typeof DaemonMethods)[keyof typeof DaemonMethods];

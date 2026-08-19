@@ -28,6 +28,8 @@
     "@rayvan/findings-engine": "workspace:*",
     "@rayvan/local-database": "workspace:*",
     "@rayvan/plugin-sdk": "workspace:*",
+    "@rayvan/plugin-client": "workspace:*",
+    "@rayvan/plugin-package": "workspace:*",
     "@rayvan/shared": "workspace:*",
     "@rayvan/plugin-example-local": "workspace:*"
   },

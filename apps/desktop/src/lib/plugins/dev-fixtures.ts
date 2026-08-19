@@ -117,7 +117,7 @@ const SEED_CONNECTIONS: readonly SeedConnectionSpec[] = [
     grantPermissions: true,
   },
   {
-    pluginId: "github",
+    pluginId: "io.rayvan.github",
     connectionName: "Rayvan",
     externalAccountName: "Rayvan",
     status: "connected",

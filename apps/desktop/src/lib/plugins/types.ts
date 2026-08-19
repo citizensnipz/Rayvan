@@ -18,6 +18,9 @@ export interface CreateIntegrationConnectionInput {
   externalAccountId?: string;
   externalAccountName?: string;
   metadata?: Record<string, unknown>;
+  /** Optional auth for plugins that declare setup (e.g. GitHub PAT). */
+  authMethod?: "pat" | "github_device_flow";
+  secretToken?: string;
 }
 
 export interface GrantIntegrationPermissionsInput {
