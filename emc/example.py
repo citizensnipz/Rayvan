@@ -26,10 +26,16 @@ def main() -> None:
     print(f"Token IDs shape: {tuple(token_ids.shape)}")
     print(f"Output logits shape: {tuple(result.logits.shape)}")
     for cycle in result.trace:
-        weights = [round(weight, 4) for weight in cycle.router_weights.tolist()]
+        if cycle.selected_indices is None:
+            raise RuntimeError("EMC trace did not include per-token routes")
+        selected = cycle.selected_indices[0, -1].tolist()
+        weights = [
+            round(weight, 4) for weight in cycle.router_weights[0, -1].tolist()
+        ]
         print(
-            f"Cycle {cycle.cycle}: modules {list(cycle.selected_modules)} "
-            f"weights {weights} latent {cycle.latent_shape}"
+            f"Cycle {cycle.cycle}: final-token modules {selected} "
+            f"weights {weights} active union {list(cycle.selected_modules)} "
+            f"latent {cycle.latent_shape}"
         )
 
 

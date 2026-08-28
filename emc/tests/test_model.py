@@ -45,12 +45,17 @@ def test_router_selects_exactly_configured_top_k_modules() -> None:
     latent = torch.randn(2, 5, config.latent_dim)
 
     routing = router(latent)
-    expected_indices = torch.topk(routing.scores, k=3).indices
+    expected_indices = torch.topk(routing.scores, k=3, dim=-1).indices
 
-    assert routing.selected_indices.shape == (3,)
-    assert routing.selected_indices.unique().numel() == 3
+    assert routing.selected_indices.shape == (2, 5, 3)
+    assert all(
+        indices.unique().numel() == 3
+        for indices in routing.selected_indices.reshape(-1, 3)
+    )
     assert torch.equal(routing.selected_indices, expected_indices)
-    torch.testing.assert_close(routing.selected_weights.sum(), torch.tensor(1.0))
+    torch.testing.assert_close(
+        routing.selected_weights.sum(dim=-1), torch.ones(2, 5)
+    )
 
 
 def test_different_inputs_can_produce_different_routing_decisions() -> None:
@@ -80,7 +85,8 @@ def test_selected_modules_have_independent_weights_and_shaped_updates() -> None:
     model = EMCModel(config)
     latent = torch.randn(2, 5, config.latent_dim)
 
-    updates = model.execute_selected_modules(latent, torch.tensor([0, 2]))
+    selected_indices = torch.tensor([0, 2]).expand(2, 5, 2)
+    updates = model.execute_selected_modules(latent, selected_indices)
     first_parameters = {
         id(parameter) for parameter in model.emc_modules[0].parameters()
     }
@@ -88,7 +94,7 @@ def test_selected_modules_have_independent_weights_and_shaped_updates() -> None:
         id(parameter) for parameter in model.emc_modules[2].parameters()
     }
 
-    assert updates.shape == (2, 2, 5, config.latent_dim)
+    assert updates.shape == (2, 5, 2, config.latent_dim)
     assert first_parameters.isdisjoint(second_parameters)
 
 
@@ -97,10 +103,10 @@ def test_integrator_preserves_shared_latent_shape() -> None:
     integrator = Integrator(config)
     latent = torch.randn(2, 5, config.latent_dim)
     module_updates = torch.randn(
-        config.modules_per_cycle, 2, 5, config.latent_dim
+        2, 5, config.modules_per_cycle, config.latent_dim
     )
     routing_weights = torch.softmax(
-        torch.randn(config.modules_per_cycle), dim=-1
+        torch.randn(2, 5, config.modules_per_cycle), dim=-1
     )
 
     integrated = integrator(latent, module_updates, routing_weights)
@@ -133,9 +139,20 @@ def test_shared_latent_circulates_through_every_cycle() -> None:
     for cycle in range(1, config.num_cycles):
         torch.testing.assert_close(router_inputs[cycle], integrated_states[cycle - 1])
     for cycle_trace in result.trace:
-        assert len(cycle_trace.selected_modules) == config.modules_per_cycle
-        assert cycle_trace.router_scores.shape == (config.num_modules,)
-        assert cycle_trace.router_weights.shape == (config.modules_per_cycle,)
+        assert config.modules_per_cycle <= len(cycle_trace.selected_modules)
+        assert len(cycle_trace.selected_modules) <= config.num_modules
+        assert cycle_trace.router_scores.shape == (2, 5, config.num_modules)
+        assert cycle_trace.router_weights.shape == (
+            2,
+            5,
+            config.modules_per_cycle,
+        )
+        assert cycle_trace.selected_indices is not None
+        assert cycle_trace.selected_indices.shape == (
+            2,
+            5,
+            config.modules_per_cycle,
+        )
         assert cycle_trace.latent_shape == (2, 5, config.latent_dim)
 
 
@@ -200,11 +217,12 @@ def test_modules_only_receive_shared_latent_and_never_call_each_other() -> None:
             )
         )
 
-    updates = model.execute_selected_modules(latent, torch.tensor([1, 3]))
+    selected_indices = torch.tensor([1, 3]).expand(2, 5, 2)
+    updates = model.execute_selected_modules(latent, selected_indices)
     for hook in hooks:
         hook.remove()
 
-    assert updates.shape == (2, 2, 5, config.latent_dim)
+    assert updates.shape == (2, 5, 2, config.latent_dim)
     assert calls == [(1, id(latent)), (3, id(latent))]
     assert all(isinstance(module, EMCModule) for module in model.emc_modules)
     assert all(isinstance(module, nn.Module) for module in model.emc_modules)

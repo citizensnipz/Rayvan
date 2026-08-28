@@ -13,6 +13,7 @@ class EMCConfig:
     modules_per_cycle: int = 2
     num_cycles: int = 3
     vocab_size: int = 256
+    max_sequence_length: int = 128
     module_hidden_dim: int | None = None
     attention_heads: int = 4
 
@@ -23,6 +24,7 @@ class EMCConfig:
             "modules_per_cycle": self.modules_per_cycle,
             "num_cycles": self.num_cycles,
             "vocab_size": self.vocab_size,
+            "max_sequence_length": self.max_sequence_length,
             "attention_heads": self.attention_heads,
         }
         for name, value in positive_fields.items():
@@ -54,6 +56,7 @@ class EMCCycleTrace:
     router_scores: Tensor
     router_weights: Tensor
     latent_shape: tuple[int, ...]
+    selected_indices: Tensor | None = None
 
 
 @dataclass(frozen=True)
@@ -63,7 +66,7 @@ class EMCOutput:
 
 
 class NexusRouter(nn.Module):
-    """Selects one sparse module set for the current latent batch."""
+    """Produces causal per-token scores and selects top-K modules."""
 
     def __init__(self, config: EMCConfig) -> None:
         super().__init__()
@@ -72,8 +75,7 @@ class NexusRouter(nn.Module):
         self.score_projection = nn.Linear(config.latent_dim, config.num_modules)
 
     def forward(self, latent: Tensor) -> RoutingDecision:
-        pooled_latent = latent.mean(dim=(0, 1))
-        scores = self.score_projection(self.input_norm(pooled_latent))
+        scores = self.score_projection(self.input_norm(latent))
         selected_scores, selected_indices = torch.topk(
             scores, k=self.modules_per_cycle, dim=-1
         )
@@ -101,8 +103,19 @@ class EMCModule(nn.Module):
 
     def forward(self, latent: Tensor) -> Tensor:
         normalized = self.attention_norm(latent)
+        sequence_length = latent.size(1)
+        causal_mask = torch.ones(
+            sequence_length,
+            sequence_length,
+            dtype=torch.bool,
+            device=latent.device,
+        ).triu(diagonal=1)
         attended, _ = self.attention(
-            normalized, normalized, normalized, need_weights=False
+            normalized,
+            normalized,
+            normalized,
+            attn_mask=causal_mask,
+            need_weights=False,
         )
         state = latent + attended
         processed = state + self.feed_forward(self.feed_forward_norm(state))
@@ -126,7 +139,7 @@ class Integrator(nn.Module):
         routing_weights: Tensor,
     ) -> Tensor:
         weighted_update = torch.einsum(
-            "k,kbsd->bsd", routing_weights, module_updates
+            "bsk,bskd->bsd", routing_weights, module_updates
         )
         integration_input = torch.cat(
             (self.latent_norm(latent), weighted_update), dim=-1
@@ -141,6 +154,9 @@ class EMCModel(nn.Module):
         super().__init__()
         self.config = config
         self.token_embedding = nn.Embedding(config.vocab_size, config.latent_dim)
+        self.position_embedding = nn.Embedding(
+            config.max_sequence_length, config.latent_dim
+        )
         self.router = NexusRouter(config)
         self.emc_modules = nn.ModuleList(
             EMCModule(config) for _ in range(config.num_modules)
@@ -152,16 +168,41 @@ class EMCModel(nn.Module):
     def execute_selected_modules(
         self, latent: Tensor, selected_indices: Tensor
     ) -> Tensor:
-        """Local execution boundary; every selected module receives the same state."""
-        updates = [
-            self.emc_modules[index](latent) for index in selected_indices.tolist()
-        ]
-        return torch.stack(updates, dim=0)
+        """Run the union of selected modules, then gather each token's top-K updates."""
+        unique_indices = torch.unique(selected_indices, sorted=True)
+        computed_updates = torch.stack(
+            [
+                self.emc_modules[index](latent)
+                for index in unique_indices.tolist()
+            ],
+            dim=2,
+        )
+        lookup = torch.full(
+            (self.config.num_modules,),
+            -1,
+            dtype=torch.long,
+            device=selected_indices.device,
+        )
+        lookup[unique_indices] = torch.arange(
+            unique_indices.numel(), device=selected_indices.device
+        )
+        update_locations = lookup[selected_indices]
+        gather_indices = update_locations.unsqueeze(-1).expand(
+            *update_locations.shape, latent.size(-1)
+        )
+        return torch.gather(computed_updates, dim=2, index=gather_indices)
 
     def forward(
         self, token_ids: Tensor, *, return_trace: bool = False
     ) -> Tensor | EMCOutput:
-        latent = self.token_embedding(token_ids)
+        sequence_length = token_ids.size(1)
+        if sequence_length > self.config.max_sequence_length:
+            raise ValueError(
+                f"sequence length {sequence_length} exceeds configured maximum "
+                f"{self.config.max_sequence_length}"
+            )
+        positions = torch.arange(sequence_length, device=token_ids.device)
+        latent = self.token_embedding(token_ids) + self.position_embedding(positions)
         cycle_traces: list[EMCCycleTrace] = []
 
         for cycle in range(self.config.num_cycles):
@@ -177,10 +218,13 @@ class EMCModel(nn.Module):
                 cycle_traces.append(
                     EMCCycleTrace(
                         cycle=cycle + 1,
-                        selected_modules=tuple(routing.selected_indices.tolist()),
+                        selected_modules=tuple(
+                            torch.unique(routing.selected_indices, sorted=True).tolist()
+                        ),
                         router_scores=routing.scores.detach().cpu(),
                         router_weights=routing.selected_weights.detach().cpu(),
                         latent_shape=tuple(latent.shape),
+                        selected_indices=routing.selected_indices.detach().cpu(),
                     )
                 )
 
