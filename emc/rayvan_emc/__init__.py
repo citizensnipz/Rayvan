@@ -1,3 +1,8 @@
+from .balancing import (
+    RouterBalanceMetrics,
+    router_balance_loss,
+    router_balance_metrics,
+)
 from .baseline import TransformerConfig, TransformerLanguageModel
 from .data import (
     CharacterTokenizer,
@@ -45,6 +50,7 @@ __all__ = [
     "NexusRouter",
     "ParameterCounts",
     "RoutingDecision",
+    "RouterBalanceMetrics",
     "RoutingReport",
     "TrainingConfig",
     "TrainingMetrics",
@@ -56,6 +62,8 @@ __all__ = [
     "generate_text",
     "generate_token_ids",
     "load_tinystories",
+    "router_balance_loss",
+    "router_balance_metrics",
     "next_token_loss",
     "parameter_counts",
     "tiny_overfit_corpus",

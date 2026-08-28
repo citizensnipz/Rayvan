@@ -23,6 +23,8 @@ class TrainingConfig:
     evaluation_interval: int = 25
     evaluation_batches: int = 4
     gradient_clip_norm: float = 1.0
+    router_balance_coefficient: float = 0.01
+    router_balance_entropy_floor: float = 0.75
     seed: int = 42
     device: str = "cpu"
 
@@ -41,6 +43,12 @@ class TrainingConfig:
                 raise ValueError(f"{name} must be positive")
         if self.weight_decay < 0:
             raise ValueError("weight_decay cannot be negative")
+        if self.router_balance_coefficient < 0:
+            raise ValueError("router_balance_coefficient cannot be negative")
+        if not 0.0 <= self.router_balance_entropy_floor <= 1.0:
+            raise ValueError(
+                "router_balance_entropy_floor must be between zero and one"
+            )
 
 
 @dataclass(frozen=True)
@@ -49,6 +57,8 @@ class TrainingMetrics:
     training_loss: float
     validation_loss: float
     validation_perplexity: float
+    router_balance_loss: float
+    weighted_balance_contribution: float
     tokens_per_second: float
     elapsed_seconds: float
 
@@ -59,6 +69,8 @@ class TrainingResult:
     final_training_loss: float
     final_validation_loss: float
     final_validation_perplexity: float
+    average_router_balance_loss: float
+    average_weighted_balance_contribution: float
     tokens_per_second: float
     elapsed_seconds: float
     routing: RoutingReport | None
@@ -122,6 +134,7 @@ def train_model(
     started = time.perf_counter()
     tokens_seen = 0
     evaluation_seconds = 0.0
+    cumulative_balance_loss = 0.0
 
     for step in range(1, config.steps + 1):
         inputs, targets = corpus.sample_batch(
@@ -133,21 +146,32 @@ def train_model(
         )
         optimizer.zero_grad(set_to_none=True)
         if isinstance(model, EMCModel):
-            output = model(inputs, return_trace=True)
+            output = model(
+                inputs,
+                return_trace=True,
+                balance_entropy_floor=config.router_balance_entropy_floor,
+            )
             if not isinstance(output, EMCOutput):
                 raise RuntimeError("trace-enabled EMC forward did not return EMCOutput")
+            if output.router_balance_loss is None:
+                raise RuntimeError("EMC forward did not return router balance loss")
             logits = output.logits
+            balance_loss = output.router_balance_loss
             if emc_diagnostics is not None:
                 emc_diagnostics.observe_trace(output.trace)
         else:
             logits = model(inputs)
-        loss = next_token_loss(logits, targets)
-        loss.backward()
+            balance_loss = logits.new_zeros(())
+        language_model_loss = next_token_loss(logits, targets)
+        weighted_balance = config.router_balance_coefficient * balance_loss
+        total_loss = language_model_loss + weighted_balance
+        total_loss.backward()
         if emc_diagnostics is not None:
             emc_diagnostics.observe_router_gradients(model)
         torch.nn.utils.clip_grad_norm_(model.parameters(), config.gradient_clip_norm)
         optimizer.step()
         tokens_seen += targets.numel()
+        cumulative_balance_loss += balance_loss.detach().item()
 
         if step % config.evaluation_interval == 0 or step == config.steps:
             evaluation_started = time.perf_counter()
@@ -173,13 +197,21 @@ def train_model(
                 training_loss=training_loss,
                 validation_loss=validation_loss,
                 validation_perplexity=validation_perplexity,
+                router_balance_loss=cumulative_balance_loss / step,
+                weighted_balance_contribution=(
+                    config.router_balance_coefficient
+                    * cumulative_balance_loss
+                    / step
+                ),
                 tokens_per_second=tokens_seen / training_seconds,
                 elapsed_seconds=elapsed,
             )
             history.append(metrics)
             if print_progress:
                 print(
-                    f"step {step:>5} | train {training_loss:.4f} | "
+                    f"step {step:>5} | train_lm {training_loss:.4f} | "
+                    f"balance {metrics.router_balance_loss:.5f} | "
+                    f"weighted {metrics.weighted_balance_contribution:.5f} | "
                     f"validation {validation_loss:.4f} | "
                     f"ppl {validation_perplexity:.2f} | "
                     f"{metrics.tokens_per_second:,.0f} tok/s | {elapsed:.1f}s"
@@ -192,6 +224,10 @@ def train_model(
         final_training_loss=final_metrics.training_loss,
         final_validation_loss=final_metrics.validation_loss,
         final_validation_perplexity=final_metrics.validation_perplexity,
+        average_router_balance_loss=final_metrics.router_balance_loss,
+        average_weighted_balance_contribution=(
+            final_metrics.weighted_balance_contribution
+        ),
         tokens_per_second=final_metrics.tokens_per_second,
         elapsed_seconds=final_metrics.elapsed_seconds,
         routing=routing,

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import torch
 from torch import Tensor, nn
+from .balancing import router_balance_loss
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,7 @@ class EMCCycleTrace:
 class EMCOutput:
     logits: Tensor
     trace: tuple[EMCCycleTrace, ...]
+    router_balance_loss: Tensor | None = None
 
 
 class NexusRouter(nn.Module):
@@ -193,7 +195,11 @@ class EMCModel(nn.Module):
         return torch.gather(computed_updates, dim=2, index=gather_indices)
 
     def forward(
-        self, token_ids: Tensor, *, return_trace: bool = False
+        self,
+        token_ids: Tensor,
+        *,
+        return_trace: bool = False,
+        balance_entropy_floor: float = 0.75,
     ) -> Tensor | EMCOutput:
         sequence_length = token_ids.size(1)
         if sequence_length > self.config.max_sequence_length:
@@ -204,9 +210,18 @@ class EMCModel(nn.Module):
         positions = torch.arange(sequence_length, device=token_ids.device)
         latent = self.token_embedding(token_ids) + self.position_embedding(positions)
         cycle_traces: list[EMCCycleTrace] = []
+        cycle_balance_losses: list[Tensor] = []
 
         for cycle in range(self.config.num_cycles):
             routing = self.router(latent)
+            if return_trace:
+                cycle_balance_losses.append(
+                    router_balance_loss(
+                        routing.scores,
+                        routing.selected_indices,
+                        entropy_floor=balance_entropy_floor,
+                    )
+                )
             module_updates = self.execute_selected_modules(
                 latent, routing.selected_indices
             )
@@ -230,5 +245,9 @@ class EMCModel(nn.Module):
 
         logits = self.output_projection(self.output_norm(latent))
         if return_trace:
-            return EMCOutput(logits=logits, trace=tuple(cycle_traces))
+            return EMCOutput(
+                logits=logits,
+                trace=tuple(cycle_traces),
+                router_balance_loss=torch.stack(cycle_balance_losses).mean(),
+            )
         return logits

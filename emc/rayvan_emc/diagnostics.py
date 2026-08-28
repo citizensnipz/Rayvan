@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import torch
@@ -52,6 +53,12 @@ class RoutingReport:
     all_modules_used: bool
     dominant_modules: tuple[int, ...]
     dominant_traffic_fraction: float
+    top_1_traffic_share: float
+    top_2_traffic_share: float
+    minimum_module_share: float
+    normalized_routing_entropy: float
+    effective_active_modules: float
+    severe_collapse: bool
     routing_collapsed: bool
     routing_differs_across_inputs: bool
     routing_differs_across_cycles: bool
@@ -140,11 +147,23 @@ class EMCDiagnostics:
         dominant_modules = tuple(
             torch.topk(traffic, k=dominant_count).indices.tolist()
         )
-        dominant_fraction = sum(traffic[index].item() for index in dominant_modules)
+        top_1_share = traffic.max().item() if traffic.numel() else 0.0
+        top_2_share = sum(traffic[index].item() for index in dominant_modules)
+        minimum_share = traffic.min().item() if traffic.numel() else 0.0
+        traffic_entropy = -(
+            traffic * traffic.clamp_min(torch.finfo(traffic.dtype).tiny).log()
+        ).sum().item()
+        normalized_traffic_entropy = (
+            traffic_entropy / math.log(traffic.numel())
+            if traffic.numel() > 1
+            else 1.0
+        )
+        effective_active_modules = math.exp(traffic_entropy) if overall_total else 0.0
         used_modules = int(torch.count_nonzero(overall_counts).item())
-        routing_collapsed = (
+        severe_collapse = (
             used_modules <= model.config.modules_per_cycle
-            or (traffic.max().item() if traffic.numel() else 0.0) >= 0.8
+            or top_1_share >= 0.8
+            or (traffic.numel() > 2 and top_2_share >= 0.9)
         )
 
         distributions = [torch.tensor(values) for values in per_cycle_distributions]
@@ -176,8 +195,14 @@ class EMCDiagnostics:
             mean_router_entropy=tuple(mean_entropies),
             all_modules_used=used_modules == model.config.num_modules,
             dominant_modules=dominant_modules,
-            dominant_traffic_fraction=dominant_fraction,
-            routing_collapsed=routing_collapsed,
+            dominant_traffic_fraction=top_2_share,
+            top_1_traffic_share=top_1_share,
+            top_2_traffic_share=top_2_share,
+            minimum_module_share=minimum_share,
+            normalized_routing_entropy=normalized_traffic_entropy,
+            effective_active_modules=effective_active_modules,
+            severe_collapse=severe_collapse,
+            routing_collapsed=severe_collapse,
             routing_differs_across_inputs=any(
                 len(cycle_routes) > 1 for cycle_routes in self.routes
             ),

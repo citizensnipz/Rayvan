@@ -123,11 +123,18 @@ def print_routing_report(report: RoutingReport) -> None:
         formatted = ", ".join(f"{value:.1%}" for value in distribution)
         print(f"  cycle {cycle}: [{formatted}] entropy={entropy:.3f}")
     print(
+        "EMC concentration: "
+        f"top1={report.top_1_traffic_share:.1%} | "
+        f"top2={report.top_2_traffic_share:.1%} | "
+        f"minimum={report.minimum_module_share:.1%} | "
+        f"normalized_entropy={report.normalized_routing_entropy:.3f} | "
+        f"effective_modules={report.effective_active_modules:.2f} | "
+        f"severe_collapse={report.severe_collapse}"
+    )
+    print(
         "EMC diagnostics: "
         f"all_modules_used={report.all_modules_used} | "
-        f"collapsed={report.routing_collapsed} | "
-        f"top_modules={list(report.dominant_modules)} "
-        f"({report.dominant_traffic_fraction:.1%} traffic) | "
+        f"top_modules={list(report.dominant_modules)} | "
         f"varies_by_input={report.routing_differs_across_inputs} | "
         f"varies_by_cycle={report.routing_differs_across_cycles} | "
         f"max_router_grad={report.maximum_router_gradient_norm:.3e} | "

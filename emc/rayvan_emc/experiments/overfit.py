@@ -16,6 +16,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--sequence-length", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=3e-3)
+    parser.add_argument("--balance-coefficient", type=float, default=0.01)
+    parser.add_argument("--balance-entropy-floor", type=float, default=0.75)
     parser.add_argument("--seed", type=int, default=7)
     return parser.parse_args()
 
@@ -37,6 +39,8 @@ def main() -> None:
         weight_decay=0.0,
         evaluation_interval=max(1, args.steps // 5),
         evaluation_batches=4,
+        router_balance_coefficient=args.balance_coefficient,
+        router_balance_entropy_floor=args.balance_entropy_floor,
         seed=args.seed,
     )
 
@@ -46,6 +50,11 @@ def main() -> None:
     result = train_model(model, corpus, training)
     print(
         f"loss reduction: {initial_loss:.4f} -> {result.final_validation_loss:.4f}"
+    )
+    print(
+        f"balance: raw={result.average_router_balance_loss:.6f} | "
+        f"weighted={result.average_weighted_balance_contribution:.6f} | "
+        f"coefficient={args.balance_coefficient:.4f}"
     )
     if result.routing is not None:
         print_routing_report(result.routing)

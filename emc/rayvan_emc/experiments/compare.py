@@ -21,6 +21,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--sequence-length", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=2e-3)
+    parser.add_argument("--balance-coefficient", type=float, default=0.01)
+    parser.add_argument("--balance-entropy-floor", type=float, default=0.75)
     parser.add_argument("--train-stories", type=int, default=2_000)
     parser.add_argument("--validation-stories", type=int, default=200)
     parser.add_argument("--max-new-tokens", type=int, default=60)
@@ -55,6 +57,8 @@ def main() -> None:
         learning_rate=args.learning_rate,
         evaluation_interval=max(1, args.steps // 5),
         evaluation_batches=4,
+        router_balance_coefficient=args.balance_coefficient,
+        router_balance_entropy_floor=args.balance_entropy_floor,
         seed=args.seed,
         device=args.device,
     )
@@ -78,6 +82,13 @@ def main() -> None:
         f"{baseline_result.final_validation_perplexity:10.2f}   "
         f"{baseline_result.tokens_per_second:8.0f}   "
         f"{baseline_result.elapsed_seconds:7.1f}s"
+    )
+    print(
+        "EMC balance: "
+        f"average_raw={emc_result.average_router_balance_loss:.6f} | "
+        f"average_weighted="
+        f"{emc_result.average_weighted_balance_contribution:.6f} | "
+        f"coefficient={args.balance_coefficient:.4f}"
     )
 
     for prompt in ("the ", "a ", "we "):

@@ -52,6 +52,29 @@ python -m rayvan_emc.experiments.compare --dataset tinystories --preset research
 
 Both models receive the same corpus batches, step count, context length, optimizer settings, and seed. The command prints total parameters, theoretical top-K active parameters per token-cycle, validation loss/perplexity, measured throughput, elapsed time, identical-prompt generations, and module utilization. Because this local prototype evaluates the union of modules selected across a batch, measured throughput—not the top-K count—is the honest cost of the current implementation.
 
+### Soft router balancing
+
+EMC training adds a weak auxiliary loss without changing Nexus selection, modules, Integrator, cycles, or inference:
+
+```text
+total_loss = language_model_loss + coefficient * router_balance_loss
+router_balance_loss = max(0, entropy_floor - normalized_utilization_entropy)²
+```
+
+The utilization value follows actual top-K assignment traffic in the forward pass. Its gradient follows the full soft router probabilities so starved modules still have a gradient path. The squared dead zone is zero while normalized traffic entropy is at least `0.75`; naturally uneven routing above that floor is not penalized. Below the floor, the penalty increases smoothly. The default coefficient is `0.01`, so the maximum weighted contribution at the default floor is only `0.005625`; language modeling remains dominant. The transformer baseline always receives zero balance loss.
+
+Configure the controlled experiment without changing other settings:
+
+```sh
+python -m rayvan_emc.experiments.compare \
+  --dataset tinystories --preset research --steps 1000 \
+  --balance-coefficient 0.01 --balance-entropy-floor 0.75
+```
+
+Training prints language-model loss, raw balance loss, and weighted contribution separately. Final diagnostics report top-1/top-2/minimum traffic, normalized traffic entropy, effective active-module count, per-cycle distributions, and severe collapse. Top-two traffic of at least 90% is now severe collapse even when every module was selected occasionally. The historical unbalanced run (`validation loss 2.3735`, `perplexity 10.74`, top-two traffic `92.8%`) is a comparison point only and is not embedded in training logic.
+
+No exploration noise was added. The thresholded objective is the single controlled change for this experiment.
+
 ## Interpreting results
 
 Primary metrics are held-out validation loss and perplexity versus the honest transformer baseline. Throughput shows the actual cost of EMC's cycles and local union execution; theoretical active parameters describe the intended sparse per-token path. For EMC, inspect per-cycle module traffic, router entropy, route variation across batches and cycles, router gradient norm, and module update norms.
