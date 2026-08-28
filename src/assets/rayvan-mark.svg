@@ -1,0 +1,9 @@
+<!--
+  Rayvan placeholder logo.
+  Replace this file with the final artwork while keeping the same file name,
+  or update the image path in index.html.
+-->
+<svg width="76" height="76" viewBox="0 0 76 76" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="76" height="76" rx="20" fill="#20242B"/>
+  <path d="M22 54V22H39.75C48.72 22 54 26.62 54 34.08C54 39.12 51.4 42.86 46.92 44.64L55 54H45.28L38.52 45.92H31V54H22ZM31 38.54H39.12C42.88 38.54 45 36.92 45 34.08C45 31.24 42.88 29.62 39.12 29.62H31V38.54Z" fill="#F7F8FA"/>
+</svg>
