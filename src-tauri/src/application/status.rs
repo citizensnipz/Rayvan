@@ -4,6 +4,8 @@ use serde::Serialize;
 #[serde(rename_all = "camelCase")]
 pub enum NetworkStatus {
     NotConnected,
+    Connecting,
+    Connected,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]

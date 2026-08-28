@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import "./styles.css";
 
-type NetworkStatus = "notConnected";
+type NetworkStatus = "notConnected" | "connecting" | "connected";
 
 interface ApplicationStatus {
   networkStatus: NetworkStatus;
@@ -9,6 +9,8 @@ interface ApplicationStatus {
 
 const networkStatusLabels: Record<NetworkStatus, string> = {
   notConnected: "Not connected",
+  connecting: "Connecting",
+  connected: "Connected",
 };
 
 async function renderApplicationStatus(): Promise<void> {

@@ -1,4 +1,8 @@
 mod application;
+pub mod domain;
+pub mod runtime;
+pub mod simulation;
+pub use application::status::NetworkStatus;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
