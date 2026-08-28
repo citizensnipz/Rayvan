@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rayvan-emc"
+version = "0.1.0"
+description = "Local research prototype for Rayvan Emergent Modular Cognition"
+requires-python = ">=3.11"
+dependencies = ["torch>=2.2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-p", "no:asyncio"]
+pythonpath = ["."]

@@ -9,7 +9,7 @@ interface ApplicationStatus {
 
 const networkStatusLabels: Record<NetworkStatus, string> = {
   notConnected: "Not connected",
-  connecting: "Connecting",
+  connecting: "Connecting...",
   connected: "Connected",
 };
 
@@ -24,6 +24,14 @@ async function renderApplicationStatus(): Promise<void> {
   statusElement.textContent = `Network status: ${networkStatusLabels[applicationStatus.networkStatus]}`;
 }
 
-void renderApplicationStatus().catch((error: unknown) => {
-  console.error("Unable to read the application status from the Rayvan core.", error);
-});
+async function pollApplicationStatus(): Promise<void> {
+  try {
+    await renderApplicationStatus();
+  } catch (error: unknown) {
+    console.error("Unable to read the application status from the Rayvan core.", error);
+  } finally {
+    window.setTimeout(() => void pollApplicationStatus(), 500);
+  }
+}
+
+void pollApplicationStatus();

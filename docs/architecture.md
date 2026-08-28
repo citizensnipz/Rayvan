@@ -45,6 +45,16 @@ The trait is synchronous and deliberately narrow for this milestone. A future ba
 
 The local simulation creates nodes A, B, and C, assigns one layer shard to each, loads one dummy runtime per shard, and passes an activation through the runtimes in layer order. It uses no sockets.
 
+## Network membership
+
+The prototype membership service listens on localhost TCP. A client sends a versioned `RegisterNode` message and becomes `Connected` only after receiving `JoinAccepted`. Both sides then exchange `Heartbeat` messages. A heartbeat timeout, closed socket, or stopped service removes the in-memory membership and returns the desktop client to `NotConnected`; the client retries from `Connecting`.
+
+Membership messages are tagged JSON inside a bounded 16 KiB length-prefixed frame. JSON is an explicit, inspectable prototype wire format—not arbitrary Rust object serialization. The message enum is independent of TCP so a later transport can reuse or deliberately version the protocol.
+
+The local installation ID is a random UUID generated once and stored in Tauri's application-local data directory. It identifies an installation only. It is not an account, credential, cryptographic identity, or authorization mechanism.
+
+Network membership means only that the bootstrap service recognizes a live node connection. Joining does **not** assign a shard, add the node to a model `Swarm`, load a model, or make the node available for inference. Placement, scheduling, capabilities, and inference participation remain separate future decisions.
+
 ## Networking and execution boundary
 
 Distributed networking and model execution have different failure and replacement cycles. WAN transport must handle untrusted bytes, timeouts, reconnection, backpressure, peer identity, and heterogeneous links. An execution backend must handle weights, devices, tensor layouts, and kernels. Keeping the Rust-owned distributed core independent means:
@@ -54,7 +64,7 @@ Distributed networking and model execution have different failure and replacemen
 - execution engines can be replaced without rewriting swarm or network logic; and
 - a node only needs the weights for its assigned contiguous range, not the complete model.
 
-No real transport, model loading, scheduling, or inference is part of this milestone.
+Current networking is limited to localhost bootstrap membership. It provides no peer discovery, routing, NAT traversal, authentication, model loading, scheduling, or inference transport.
 
 ## Concepts borrowed from prior work
 

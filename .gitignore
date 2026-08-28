@@ -8,6 +8,13 @@ node_modules/
 dist/
 src-tauri/gen/
 
+# Python research environments and generated files
+__pycache__/
+.pytest_cache/
+.venv/
+*.egg-info/
+*.py[cod]
+
 # Local environment files
 .env
 .env.*

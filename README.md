@@ -4,15 +4,17 @@ Rayvan is intended to become a decentralized AI inference node for personal comp
 
 ## Current scope
 
-This repository contains the desktop foundation and the first Rust distributed-inference domain model:
+This repository contains the desktop foundation, the first Rust distributed-inference domain model, and local network membership:
 
 - a small Tauri desktop window;
 - a minimal vanilla TypeScript UI;
-- a Rust-owned application status with `NotConnected`, `Connecting`, and `Connected` states;
+- a Rust-owned live `NotConnected`, `Connecting`, or `Connected` status;
+- a localhost bootstrap service with versioned registration and heartbeats;
+- a persistent installation node ID;
 - model manifests, nodes, contiguous layer shards, validated swarms, and transport-independent activations; and
 - a replaceable shard-runtime trait with a three-node local dummy simulation.
 
-There is no real networking, inference, background service, account, payment, model download, node discovery, or update implementation yet.
+There is no inference, shard assignment, peer-to-peer routing, decentralized discovery, NAT traversal, authentication, account, payment, model download, or GPU detection.
 
 See [Core architecture](docs/architecture.md) for the domain boundaries and prior-work influences.
 
@@ -30,11 +32,19 @@ Install the frontend and Tauri CLI dependencies:
 npm install
 ```
 
-Launch Rayvan in development mode:
+Start the local network service in one terminal:
+
+```sh
+cargo run --manifest-path src-tauri/Cargo.toml --bin rayvan-network
+```
+
+Launch Rayvan in development mode in another terminal:
 
 ```sh
 npm run tauri dev
 ```
+
+Both default to `127.0.0.1:7878`. Override the service with `RAYVAN_NETWORK_BIND` and the desktop client with `RAYVAN_NETWORK_ADDR`.
 
 Create a production build:
 
