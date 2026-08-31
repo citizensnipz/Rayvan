@@ -11,6 +11,9 @@ src-tauri/gen/
 # Python research environments and generated files
 __pycache__/
 .pytest_cache/
+.pytest-tmp/
+emc/checkpoints/
+emc/benchmark-results/
 .venv/
 *.egg-info/
 *.py[cod]

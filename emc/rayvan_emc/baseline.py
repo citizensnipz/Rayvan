@@ -14,6 +14,7 @@ class TransformerConfig:
     attention_heads: int = 4
     feed_forward_dim: int | None = None
     max_sequence_length: int = 128
+    tie_embeddings: bool = False
 
     def __post_init__(self) -> None:
         positive_fields = {
@@ -83,6 +84,10 @@ class TransformerLanguageModel(nn.Module):
         )
         self.output_norm = nn.LayerNorm(config.latent_dim)
         self.output_projection = nn.Linear(config.latent_dim, config.vocab_size)
+        if config.tie_embeddings:
+            self.output_projection.weight = self.token_embedding.weight
+            nn.init.normal_(self.token_embedding.weight, mean=0.0, std=0.02)
+            nn.init.zeros_(self.output_projection.bias)
 
     def forward(self, token_ids: Tensor) -> Tensor:
         sequence_length = token_ids.size(1)

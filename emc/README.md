@@ -2,92 +2,239 @@
 
 EMC (Emergent Modular Cognition) is an experimental language-model computation graph. Token embeddings form a shared latent state; a learned Nexus selects a sparse module set; those independent modules produce latent updates; a learned Integrator updates the shared state. The route-integrate cycle repeats a fixed number of times before normalization and vocabulary projection.
 
-## Components
+## N1 components
 
-- **Nexus/Router:** scores every module independently at each causal token position, selects top-K, and applies a softmax to the selected scores. The hard selection is sparse while the selected routing weights remain differentiable.
-- **EMC modules:** independent transformer-style blocks with separate weights. Each uses normalization, self-attention, feed-forward processing, and residual connections. Modules have no references to other modules and return only a latent update.
-- **Integrator:** routing-weights the selected updates, then learns a candidate update and gate conditioned on the current shared state.
-- **Cycles and output:** the integrated latent becomes the next cycle's router input. After the configured cycles, a final normalization and linear head produce `[batch, sequence, vocabulary]` logits.
+- **Module-aware Nexus:** projects each causal latent token into a query and scores it against learned per-module descriptor keys. Descriptors contain no semantic labels. Top-K and the existing balancing objective remain unchanged. An availability mask can temporarily remove local modules without changing the scoring head.
+- **Heterogeneous modules:** every family implements `EMCModuleBase.forward([B,S,D]) → proposal [B,S,D]`. The existing GPT-style family remains. A pure-PyTorch selective diagonal state-space family and a GRU recurrent family add different established computation. Input/output adapters permit different internal widths.
+- **Proposal-aware Integrator:** preserves all selected proposals. Multi-head cross-attention uses the current latent as query, proposals as keys/values, and Nexus weights as learned-strength priors. Proposal mean/variance provide set context, followed by a learned token-dimensional gated residual update.
+- **Fixed cycles and output:** the integrated latent becomes the next cycle's input. No adaptive halting or persistent private memory is introduced.
 
-Modules communicate only through the shared latent state and Integrator. `EMCModel.execute_selected_modules` is the local execution boundary: it runs the union of modules selected across a batch, gives each the same causally masked latent tensor, then gathers each token's top-K updates. No module can consume another module's output. The prototype uses a simple local Python loop—no multiprocessing and no claim of distributed execution. That boundary can be replaced experimentally later without coupling module internals.
+State-space and GRU state exists only while scanning one sequence in one module forward. It resets between EMC cycles, batches, and inference calls. Modules never call each other and communicate only through proposals and the Integrator.
 
-This research area is deliberately independent from Rayvan's Rust networking code. It contains no networking, distributed execution, checkpoints, pretrained models, or CUDA-specific path. Modules have no manually assigned cognitive labels; useful specialization is intended to emerge through future training experiments.
+The pre-N1 `NexusRouter` and `WeightedAverageIntegrator` remain available for isolated baselines. No new dependency is required: the state-space implementation uses ordinary PyTorch rather than the CUDA/custom-kernel-oriented `mamba-ssm` package.
 
-## Language-learning experiments
+This research area remains independent from Rayvan's Rust networking code. It contains no networking, distributed execution, pretrained model weights, instruction tuning, semantic module roles, or custom CUDA path.
 
-The language-model path adds learned positions and causal attention to both EMC and the conventional decoder-only transformer baseline. The baseline is intentionally ordinary and is sized near EMC's total parameter count. Shared utilities provide character tokenization, next-token cross-entropy training, validation loss, perplexity, tokens/second, elapsed time, and autoregressive generation.
+## Chunk-routed N1
 
-From this directory, install the research environment:
+`--n1-stage n1_chunked` selects the execution architecture. A request is embedded by a deliberately small shared core, initializes canonical state `[B, shared_state_slots, D]`, selects a request-level descriptor pool once, then processes contiguous `chunk_size` blocks. Chunk routing uses the first causal token plus the previous canonical state; it never summarizes future tokens inside the current chunk.
 
-```sh
-python -m pip install -e ".[test]"
+For every chunk, only the selected top-K modules execute. Chunks assigned to the same module are gathered into one module batch and proposals are scattered back by request and routing slot. Computed and retained chunk-module pairs are therefore identical. The old union-of-token-selections executor remains only in token-routed stages.
+
+Private state is lease-scoped. A continuously selected module reuses its state and increments lease age. When inactive, `end_lease` runs and state is discarded. Selection after a gap calls `begin_lease(shared_state)`; stale state is never resumed. Canonical shared state is the only cross-module history.
+
+The chunk Integrator applies proposal-aware attention independently to `[B,K,C,D]` token proposals and `[B,K,M,D]` state proposals, producing both updated chunk latent and updated canonical state. Nexus confidence remains a prior, not the final acceptance decision.
+
+### Chunk module boundary
+
+```text
+ModuleInput:
+  chunk_latent [B,C,D]
+  shared_state [B,M,D]
+  lease_state
+  structural metadata
+
+ModuleOutput:
+  token_proposal [B,C,D]
+  state_proposal [B,M,D]
+  new_lease_state
 ```
 
-### Tiny overfit sanity check
+GPT prepends canonical state slots as causal context. The SSM uses vectorized chunk projections and an exact diagonal parallel scan with chunk-boundary state/convolution history. The recurrent family calls whole-chunk `nn.GRU` and can use an internal FP16 CUDA autocast while returning EMC dtype. None contains a Python token loop.
 
-```sh
-python -m rayvan_emc.experiments.overfit
+Gated DeltaNet follows Yang, Kautz, and Hatamizadeh, [“Gated Delta Networks: Improving Mamba2 with Delta Rule”](https://arxiv.org/abs/2412.06464):
+
+```text
+S_t = S_{t-1}[alpha_t(I - beta_t k_t k_t^T)] + beta_t v_t k_t^T
+o_t = S_t q_t
 ```
 
-This trains EMC on six repository-local sentences, prints loss periodically, reports routing diagnostics, and generates greedy continuations. It is a memorization test, not evidence of generalization.
+Each token defines an affine memory transform `(A_t, B_t)`. The implementation composes prefix transforms with a logarithmic-depth associative scan, so there is no token-by-token Python recurrence. Lease memory is `[B, heads, value_dim, key_dim]` and is initialized from canonical shared state. The current fallback implements the paper’s gated associative-memory core; it omits the paper’s optional local convolution/attention hybrids and replaces the optimized WY/Triton implementation with mathematically equivalent PyTorch affine-prefix composition. Scan math uses FP32 for stability and returns EMC dtype through adapters.
 
-### Small TinyStories experiment
+The chunk Nexus keeps learned module descriptors at both timescales. Chunk scores add configurable persistence, switching, availability, and bounded loss-free global balancing bias. The balancing bias is a checkpointed buffer, not a learned parameter or auxiliary model loss.
 
-TinyStories is optional so normal tests remain offline and dependency-light:
+Architecture metrics expose request pools, family composition, chunk selections, routing entropy, lease ages/lengths, switch/retention rates, persistence/switch contributions, executed modules, population touched, exact sparse compute pairs, balancing bias/totals, and separate token/state Integrator acceptance.
+
+Grouped configuration is carried by `EMCConfig`: execution (`architecture_stage`, `chunk_size`, `shared_state_slots`, `request_pool_size`, `active_top_k`), leases (`switch_cost`, `persistence_bonus`, `minimum_lease_chunks`), loss-free balance (`loss_free_balance_enabled`, `balance_target_utilization`, `balance_bias_lr`, `balance_bias_limit`, `balance_warmup_chunks`), shared core (`shared_core_enabled`, `shared_core_hidden_dim`), and family backends/widths (`state_space_dim`, `ssm_backend`, `recurrent_dim`, `recurrent_backend`, `recurrent_precision`, `delta_internal_dim`, `delta_heads`, `delta_ffn_dim`, `delta_backend`). Defaults keep the pool equal to the current four-module population and use four canonical state slots.
+
+## TinyStories language training
+
+The main TinyStories path uses the standard fast GPT-2 BPE tokenizer (`gpt2`, 50,257 tokens), inserts EOS between packed stories, and samples fixed-length causal windows without padding or DataLoader workers. Long documents are encoded through the tokenizer's raw fast backend, which has no language-model context limit; only the resulting 128/256-token chunks enter EMC. This fixes the former oversized-sequence warning at its source rather than suppressing it. The repository-local overfit test keeps its character tokenizer.
+
+The final mixed N1 research preset keeps a compact 256-wide shared latent, tied GPT-2 vocabulary weights, 4 modules, top-2 routing, and 2 cycles. Its population is `GPT, state-space, recurrent, GPT`; family sizes are approximately comparable (3.27M–3.42M parameters each). The proposal-aware Integrator and descriptor Nexus bring the full model to about 27.24M parameters.
+
+Install from this directory:
 
 ```sh
 python -m pip install -e ".[test,data]"
-python -m rayvan_emc.experiments.train --model emc --dataset tinystories
-python -m rayvan_emc.experiments.train --model baseline --dataset tinystories
 ```
 
-The adapter streams bounded subsets through the standard `datasets` API. Adjust `--steps`, `--batch-size`, `--sequence-length`, `--train-stories`, and `--validation-stories`. `--preset research` configures roughly 20M–50M parameters (about 27M for EMC and 25M for the baseline with a small character vocabulary); the default `quick` preset is much smaller.
+## Staged N1 experiments
 
-### Reproducible comparison
-
-```sh
-python -m rayvan_emc.experiments.compare
-python -m rayvan_emc.experiments.compare --dataset tinystories --preset research --steps 1000
-```
-
-Both models receive the same corpus batches, step count, context length, optimizer settings, and seed. The command prints total parameters, theoretical top-K active parameters per token-cycle, validation loss/perplexity, measured throughput, elapsed time, identical-prompt generations, and module utilization. Because this local prototype evaluates the union of modules selected across a batch, measured throughput—not the top-K count—is the honest cost of the current implementation.
-
-### Soft router balancing
-
-EMC training adds a weak auxiliary loss without changing Nexus selection, modules, Integrator, cycles, or inference:
+The flags keep H1/H2/H3 separately testable:
 
 ```text
-total_loss = language_model_loss + coefficient * router_balance_loss
-router_balance_loss = max(0, entropy_floor - normalized_utilization_entropy)²
+--n1-stage baseline       fixed router + weighted-average Integrator + GPT-only
+--n1-stage integrator     fixed router + proposal Integrator + GPT-only
+--n1-stage heterogeneous  fixed router + proposal Integrator + chosen families
+--n1-stage n1             descriptor router + proposal Integrator + token routing
+--n1-stage n1_chunked     request pool + chunk routing + leases + canonical state
 ```
 
-The utilization value follows actual top-K assignment traffic in the forward pass. Its gradient follows the full soft router probabilities so starved modules still have a gradient path. The squared dead zone is zero while normalized traffic entropy is at least `0.75`; naturally uneven routing above that floor is not penalized. Below the floor, the penalty increases smoothly. The default coefficient is `0.01`, so the maximum weighted contribution at the default floor is only `0.005625`; language modeling remains dominant. The transformer baseline always receives zero balance loss.
+Module populations:
 
-Configure the controlled experiment without changing other settings:
+```text
+gpt-only, ssm-only, recurrent-only, delta-only,
+gpt-ssm, gpt-recurrent, gpt-delta,
+ssm-recurrent, ssm-delta, recurrent-delta, mixed
+```
+
+Stage A:
+
+```sh
+python -m rayvan_emc.experiments.train --n1-stage baseline --module-population gpt-only ...
+python -m rayvan_emc.experiments.train --n1-stage integrator --module-population gpt-only ...
+```
+
+Stage B:
+
+```sh
+python -m rayvan_emc.experiments.train --n1-stage heterogeneous --module-population gpt-only ...
+python -m rayvan_emc.experiments.train --n1-stage heterogeneous --module-population ssm-only ...
+python -m rayvan_emc.experiments.train --n1-stage heterogeneous --module-population recurrent-only ...
+python -m rayvan_emc.experiments.train --n1-stage heterogeneous --module-population mixed ...
+```
+
+Stage C:
+
+```sh
+python -m rayvan_emc.experiments.train --n1-stage heterogeneous --module-population mixed ...
+python -m rayvan_emc.experiments.train --n1-stage n1 --module-population mixed ...
+```
+
+Chunk-routed N1:
+
+```sh
+python -m rayvan_emc.experiments.train \
+  --n1-stage n1_chunked --module-population mixed ...
+```
+
+Diagnostics now include module/family traffic, average router probability, proposal norm, Integrator acceptance/contribution, proposal similarity, gate/update magnitude, parameter and gradient counts, and quality/perplexity/runtime after each fixed cycle.
+
+### Larger-model smoke test — approximately 1M tokens
+
+```sh
+python -m rayvan_emc.experiments.train \
+  --model emc --dataset tinystories --preset research --budget quick \
+  --sequence-length 256 --batch-size 1 --gradient-accumulation 4 \
+  --precision auto --checkpoint-dir checkpoints
+```
+
+### Meaningful language run — approximately 10M tokens
+
+```sh
+python -m rayvan_emc.experiments.train \
+  --model emc --dataset tinystories --preset research --budget medium \
+  --sequence-length 256 --batch-size 1 --gradient-accumulation 4 \
+  --train-stories 50000 --precision auto --checkpoint-dir checkpoints
+```
+
+### Longer run — approximately 25M tokens
+
+```sh
+python -m rayvan_emc.experiments.train \
+  --model emc --dataset tinystories --preset research --budget research \
+  --sequence-length 256 --batch-size 1 --gradient-accumulation 4 \
+  --train-stories 100000 --precision auto --checkpoint-dir checkpoints
+```
+
+Use `--train-tokens 50000000` for a 50M-token run. Token budgets become whole optimizer steps using `ceil(train_tokens / (batch_size × context_length × gradient_accumulation))`; the final count can exceed the request by less than one accumulated optimizer batch.
+
+Training evaluates periodically and reports LM loss, validation loss/perplexity, processed tokens, throughput, elapsed time, routing distributions, concentration, entropy/effective modules, balance contribution, and CUDA current/peak allocated memory. It samples fixed TinyStories prompts every few evaluations. `--device`, `--precision`, `--batch-size`, `--sequence-length`, and `--gradient-accumulation` are configurable. `auto` uses BF16 when supported, otherwise FP16 on CUDA and FP32 on CPU. A CUDA OOM directly recommends reducing physical batch size or context length and resuming from the latest checkpoint.
+
+### Baseline and comparison
+
+Train only the conventional baseline with the exact same tokenizer/data/context/budget:
+
+```sh
+python -m rayvan_emc.experiments.train \
+  --model baseline --dataset tinystories --preset research --budget medium \
+  --sequence-length 256 --batch-size 1 --gradient-accumulation 4
+```
+
+Train both only when a direct comparison is wanted:
 
 ```sh
 python -m rayvan_emc.experiments.compare \
-  --dataset tinystories --preset research --steps 1000 \
-  --balance-coefficient 0.01 --balance-entropy-floor 0.75
+  --dataset tinystories --preset research --budget medium \
+  --sequence-length 256 --batch-size 1 --gradient-accumulation 4
 ```
 
-Training prints language-model loss, raw balance loss, and weighted contribution separately. Final diagnostics report top-1/top-2/minimum traffic, normalized traffic entropy, effective active-module count, per-cycle distributions, and severe collapse. Top-two traffic of at least 90% is now severe collapse even when every module was selected occasionally. The historical unbalanced run (`validation loss 2.3735`, `perplexity 10.74`, top-two traffic `92.8%`) is a comparison point only and is not embedded in training logic.
+### Checkpoints and resume
 
-No exploration noise was added. The thresholded objective is the single controlled change for this experiment.
+Each evaluation atomically writes:
 
-## Interpreting results
+```text
+checkpoints/emc-latest.pt
+checkpoints/emc-best.pt
+```
 
-Primary metrics are held-out validation loss and perplexity versus the honest transformer baseline. Throughput shows the actual cost of EMC's cycles and local union execution; theoretical active parameters describe the intended sparse per-token path. For EMC, inspect per-cycle module traffic, router entropy, route variation across batches and cycles, router gradient norm, and module update norms.
-
-Encouraging evidence would be reliable tiny-corpus overfitting, continuing loss reduction on held-out real text, non-zero router/Integrator/module gradients, multiple used modules, input- or cycle-dependent routes, and validation quality competitive enough with the baseline to merit larger controlled runs.
-
-Warnings or failures include inability to memorize the tiny corpus, stagnant or unstable validation loss, a persistent gap to the baseline at comparable scale, near-zero router gradients, only top-K modules ever receiving traffic, one module taking nearly all traffic, identical routes for every input and cycle, or modules receiving no distinct updates. Routing diversity alone does **not** demonstrate cognitive specialization.
-
-Success does **NOT** mean EMC is a useful chatbot. The purpose is only to determine whether sparse routed circulating modules can learn language modeling competitively enough to justify further research.
-
-## Tests and original forward example
+The files include model and optimizer state, model configuration, tokenizer identifier/config, step and token counts, best validation loss, RNG state, precision, and routing-balance configuration. Resume with the same model/context settings and a larger total budget:
 
 ```sh
+python -m rayvan_emc.experiments.train \
+  --model emc --dataset tinystories --preset research --budget research \
+  --sequence-length 256 --batch-size 1 --gradient-accumulation 4 \
+  --resume checkpoints/emc-latest.pt
+```
+
+At training completion, the command loads `emc-best.pt`, prints its token count, validation loss/perplexity and routing report, then generates all fixed prompt samples. It does not blindly sample the final step.
+
+### Generate from the best checkpoint
+
+```sh
+python -m rayvan_emc.generate \
+  --checkpoint checkpoints/emc-best.pt \
+  --prompt "Once upon a time there was a little boy named Sam" \
+  --max-new-tokens 180 --temperature 0.8 --top-k 50
+```
+
+Use `--greedy` for deterministic decoding or `--top-p 0.95` for nucleus sampling. This is one-shot continuation, not a chatbot.
+
+### Tiny overfit and tests
+
+```sh
+python -m rayvan_emc.experiments.overfit
 python -m pytest
 python example.py
 ```
+
+## Router balancing and interpretation
+
+EMC retains the weak thresholded balance objective:
+
+```text
+total_loss = language_model_loss + 0.01 * router_balance_loss
+router_balance_loss = max(0, 0.75 - normalized_utilization_entropy)²
+```
+
+The dead zone allows uneven specialization; severe concentration receives smooth pressure. Diagnostics report top-1/top-2/minimum traffic, normalized entropy, effective active modules, route variation, router gradients, and module update divergence. All modules merely receiving some traffic is not sufficient evidence against collapse.
+
+TinyStories should eventually yield coherent simple-English story continuations after enough tokens. That would not make EMC a general-purpose assistant, prove cognitive specialization, or establish an advantage over transformers. The experiment only asks whether the existing sparse circulating architecture can learn useful small-language-model behavior.
+
+## Deliberately deferred
+
+N1 does not include clusters-of-clusters, a second Nexus hierarchy, adaptive halting, automatic module creation/destruction, semantic routing labels, persistent cross-request state, compact global workspaces, networking, distributed gradients, or online inference-time weight updates. Those remain N2-or-later questions.
+
+## Performance diagnostics
+
+Run a warmed, synthetic-token benchmark before long experiments:
+
+```sh
+python -m rayvan_emc.benchmark \
+  --preset research --n1-stage n1 --module-population mixed \
+  --batch-size 1 --sequence-length 256 --gradient-accumulation 4 \
+  --precision bf16 --warmup-steps 3 --benchmark-steps 5
+```
+
+Add `--profile --output-dir benchmark-results/research --json benchmark-results/research/report.json` for a PyTorch Chrome trace and structured report. The command uses the real forward, balance loss, backward, gradient diagnostics, clipping, and AdamW step over synthetic token batches. It does not save weights, alter model code, or run a corpus-scale training job. Reports cover phase timing, module-family isolation, Integrator/Nexus timing, one-versus-two-cycle cost, routed-compute retention, CUDA allocation, `nvidia-smi` utilization samples, and optional operator/kernel tables.

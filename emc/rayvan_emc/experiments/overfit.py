@@ -30,6 +30,8 @@ def main() -> None:
         "quick",
         maximum_sequence_length=args.sequence_length,
         seed=args.seed,
+        n1_stage="baseline",
+        module_population="gpt-only",
     )
     training = TrainingConfig(
         steps=args.steps,

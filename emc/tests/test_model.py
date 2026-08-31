@@ -124,7 +124,9 @@ def test_shared_latent_circulates_through_every_cycle() -> None:
         lambda _module, args: router_inputs.append(args[0].detach().clone())
     )
     integrator_hook = model.integrator.register_forward_hook(
-        lambda _module, _args, output: integrated_states.append(output.detach().clone())
+        lambda _module, _args, output: integrated_states.append(
+            (output[0] if isinstance(output, tuple) else output).detach().clone()
+        )
     )
     result = model(
         torch.randint(0, config.vocab_size, (2, 5)), return_trace=True

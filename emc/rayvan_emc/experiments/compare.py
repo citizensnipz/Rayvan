@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import argparse
 
+import torch
+
 from ..generation import generate_text
 from ..training import TrainingConfig, train_model
 from .common import (
+    MODULE_POPULATIONS,
+    N1_STAGES,
     create_baseline_model,
     create_emc_model,
     load_experiment_corpus,
     print_parameter_summary,
     print_routing_report,
+    token_budget_for_preset,
 )
 
 
@@ -17,52 +22,115 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compare EMC with a plain transformer")
     parser.add_argument("--dataset", choices=("tiny", "tinystories"), default="tiny")
     parser.add_argument("--preset", choices=("quick", "research"), default="quick")
-    parser.add_argument("--steps", type=int, default=100)
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--sequence-length", type=int, default=32)
+    parser.add_argument("--n1-stage", choices=N1_STAGES, default="n1")
+    parser.add_argument(
+        "--module-population",
+        choices=MODULE_POPULATIONS,
+        default="mixed",
+    )
+    parser.add_argument("--budget", choices=("quick", "medium", "research"))
+    parser.add_argument("--steps", type=int)
+    parser.add_argument("--train-tokens", type=int)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--gradient-accumulation", type=int, default=1)
+    parser.add_argument("--sequence-length", type=int)
     parser.add_argument("--learning-rate", type=float, default=2e-3)
     parser.add_argument("--balance-coefficient", type=float, default=0.01)
     parser.add_argument("--balance-entropy-floor", type=float, default=0.75)
-    parser.add_argument("--train-stories", type=int, default=2_000)
-    parser.add_argument("--validation-stories", type=int, default=200)
+    parser.add_argument("--train-stories", type=int, default=10_000)
+    parser.add_argument("--validation-stories", type=int, default=1_000)
+    parser.add_argument("--tokenizer", default="gpt2")
+    parser.add_argument("--evaluation-interval", type=int)
     parser.add_argument("--max-new-tokens", type=int, default=60)
+    parser.add_argument(
+        "--precision",
+        choices=("auto", "fp32", "fp16", "bf16"),
+        default="auto",
+    )
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", default="cpu")
-    return parser.parse_args()
+    parser.add_argument(
+        "--device", default="cuda" if torch.cuda.is_available() else "cpu"
+    )
+    args = parser.parse_args()
+    duration_options = sum(
+        value is not None
+        for value in (args.steps, args.train_tokens, args.budget)
+    )
+    if duration_options > 1:
+        parser.error("use only one of --steps, --train-tokens, or --budget")
+    return args
 
 
 def main() -> None:
     args = parse_args()
+    sequence_length = args.sequence_length or (
+        256 if args.dataset == "tinystories" else 32
+    )
+    steps: int | None = args.steps
+    train_tokens = args.train_tokens
+    if steps is None and train_tokens is None and args.budget is None:
+        steps = 100
+    if args.budget is not None:
+        train_tokens = token_budget_for_preset(args.budget)
+        steps = None
+    elif train_tokens is not None:
+        steps = None
+
     corpus = load_experiment_corpus(
         args.dataset,
         train_stories=args.train_stories,
         validation_stories=args.validation_stories,
+        tokenizer_identifier=args.tokenizer,
     )
+    tie_embeddings = args.dataset == "tinystories"
     emc = create_emc_model(
         corpus.tokenizer.vocab_size,
         args.preset,
-        maximum_sequence_length=args.sequence_length,
+        maximum_sequence_length=sequence_length,
         seed=args.seed,
+        tie_embeddings=tie_embeddings,
+        n1_stage=args.n1_stage,
+        module_population=args.module_population,
     )
     baseline = create_baseline_model(
         corpus.tokenizer.vocab_size,
         args.preset,
-        maximum_sequence_length=args.sequence_length,
+        maximum_sequence_length=sequence_length,
         seed=args.seed,
+        tie_embeddings=tie_embeddings,
     )
-    config = TrainingConfig(
-        steps=args.steps,
+    planned_steps = TrainingConfig(
+        steps=steps,
+        train_tokens=train_tokens,
         batch_size=args.batch_size,
-        sequence_length=args.sequence_length,
+        sequence_length=sequence_length,
+        gradient_accumulation_steps=args.gradient_accumulation,
+    ).planned_steps
+    config = TrainingConfig(
+        steps=steps,
+        train_tokens=train_tokens,
+        batch_size=args.batch_size,
+        sequence_length=sequence_length,
+        gradient_accumulation_steps=args.gradient_accumulation,
         learning_rate=args.learning_rate,
-        evaluation_interval=max(1, args.steps // 5),
+        evaluation_interval=args.evaluation_interval
+        or max(1, planned_steps // 5),
         evaluation_batches=4,
         router_balance_coefficient=args.balance_coefficient,
         router_balance_entropy_floor=args.balance_entropy_floor,
+        precision=args.precision,
         seed=args.seed,
         device=args.device,
     )
 
+    print(
+        f"stage={args.n1_stage} population={args.module_population} | "
+        f"tokenizer={corpus.tokenizer.identifier} "
+        f"vocab={corpus.tokenizer.vocab_size:,} | "
+        f"context={sequence_length} | steps={config.planned_steps:,} | "
+        f"tokens="
+        f"{config.planned_steps * args.batch_size * sequence_length * args.gradient_accumulation:,}"
+    )
     print_parameter_summary("EMC", emc)
     print_parameter_summary("Baseline", baseline)
     print("\nTraining EMC")
@@ -86,12 +154,10 @@ def main() -> None:
     print(
         "EMC balance: "
         f"average_raw={emc_result.average_router_balance_loss:.6f} | "
-        f"average_weighted="
-        f"{emc_result.average_weighted_balance_contribution:.6f} | "
-        f"coefficient={args.balance_coefficient:.4f}"
+        f"average_weighted={emc_result.average_weighted_balance_contribution:.6f}"
     )
 
-    for prompt in ("the ", "a ", "we "):
+    for prompt in ("Once upon a time", "There was a little girl named"):
         emc_text = generate_text(
             emc,
             corpus.tokenizer,

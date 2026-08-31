@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Literal
+from typing import Any, Iterable, Literal
 
 import torch
 from torch import Tensor
+
+from .tokenization import (
+    DEFAULT_TOKENIZER_IDENTIFIER,
+    HuggingFaceTokenizer,
+    TextTokenizer,
+)
 
 
 TINY_OVERFIT_TEXTS = (
@@ -21,17 +27,36 @@ class CharacterTokenizer:
     unknown_symbol = "<unk>"
 
     def __init__(self, characters: Iterable[str]) -> None:
-        symbols = sorted(set(characters))
-        self.symbols = (self.unknown_symbol, *symbols)
-        self._token_to_id = {symbol: index for index, symbol in enumerate(self.symbols)}
+        symbols = (self.unknown_symbol, *sorted(set(characters)))
+        self._set_symbols(symbols)
 
     @classmethod
     def from_texts(cls, texts: Iterable[str]) -> CharacterTokenizer:
         return cls(character for text in texts for character in text)
 
+    @classmethod
+    def from_config(cls, config: dict[str, Any]) -> CharacterTokenizer:
+        tokenizer = cls.__new__(cls)
+        tokenizer._set_symbols(tuple(str(value) for value in config["symbols"]))
+        return tokenizer
+
+    def _set_symbols(self, symbols: tuple[str, ...]) -> None:
+        self.symbols = symbols
+        self._token_to_id = {
+            symbol: index for index, symbol in enumerate(self.symbols)
+        }
+
+    @property
+    def identifier(self) -> str:
+        return "rayvan-character-v1"
+
     @property
     def vocab_size(self) -> int:
         return len(self.symbols)
+
+    @property
+    def eos_token_id(self) -> int:
+        return self._token_to_id["\n"]
 
     def encode(self, text: str) -> list[int]:
         unknown_id = self._token_to_id[self.unknown_symbol]
@@ -44,10 +69,13 @@ class CharacterTokenizer:
             decoded.append("�" if symbol == self.unknown_symbol else symbol)
         return "".join(decoded)
 
+    def to_config(self) -> dict[str, Any]:
+        return {"kind": "character", "symbols": list(self.symbols)}
+
 
 @dataclass(frozen=True)
 class LanguageCorpus:
-    tokenizer: CharacterTokenizer
+    tokenizer: TextTokenizer
     train_tokens: Tensor
     validation_tokens: Tensor
 
@@ -56,6 +84,8 @@ class LanguageCorpus:
         cls,
         train_texts: Iterable[str],
         validation_texts: Iterable[str] | None = None,
+        *,
+        tokenizer: TextTokenizer | None = None,
     ) -> LanguageCorpus:
         train_documents = tuple(train_texts)
         validation_documents = (
@@ -66,16 +96,14 @@ class LanguageCorpus:
         if not train_documents or not validation_documents:
             raise ValueError("training and validation text collections cannot be empty")
 
-        tokenizer = CharacterTokenizer.from_texts(
+        resolved_tokenizer = tokenizer or CharacterTokenizer.from_texts(
             (*train_documents, *validation_documents, "\n")
         )
-        train_text = "\n".join(train_documents) + "\n"
-        validation_text = "\n".join(validation_documents) + "\n"
         return cls(
-            tokenizer=tokenizer,
-            train_tokens=torch.tensor(tokenizer.encode(train_text), dtype=torch.long),
-            validation_tokens=torch.tensor(
-                tokenizer.encode(validation_text), dtype=torch.long
+            tokenizer=resolved_tokenizer,
+            train_tokens=_tokenize_documents(train_documents, resolved_tokenizer),
+            validation_tokens=_tokenize_documents(
+                validation_documents, resolved_tokenizer
             ),
         )
 
@@ -105,15 +133,36 @@ class LanguageCorpus:
         )
         return inputs.to(device), targets.to(device)
 
+    def fixed_sequences(
+        self,
+        split: Literal["train", "validation"],
+        sequence_length: int,
+    ) -> tuple[Tensor, Tensor]:
+        tokens = self.train_tokens if split == "train" else self.validation_tokens
+        sequence_count = (tokens.numel() - 1) // sequence_length
+        if sequence_count == 0:
+            raise ValueError(
+                f"{split} corpus needs at least {sequence_length + 1} tokens"
+            )
+        packed_length = sequence_count * sequence_length
+        inputs = tokens[:packed_length].reshape(sequence_count, sequence_length)
+        targets = tokens[1 : packed_length + 1].reshape(
+            sequence_count, sequence_length
+        )
+        return inputs, targets
+
 
 def tiny_overfit_corpus() -> LanguageCorpus:
     return LanguageCorpus.from_texts(TINY_OVERFIT_TEXTS, TINY_OVERFIT_TEXTS)
 
 
 def load_tinystories(
-    *, max_train_stories: int = 2_000, max_validation_stories: int = 200
+    *,
+    max_train_stories: int = 10_000,
+    max_validation_stories: int = 1_000,
+    tokenizer_identifier: str = DEFAULT_TOKENIZER_IDENTIFIER,
 ) -> LanguageCorpus:
-    """Load bounded TinyStories subsets through the optional datasets package."""
+    """Stream deterministic TinyStories subsets into packed GPT-2 token tensors."""
     if max_train_stories <= 0 or max_validation_stories <= 0:
         raise ValueError("TinyStories subset sizes must be positive")
     try:
@@ -123,14 +172,45 @@ def load_tinystories(
             'TinyStories requires: python -m pip install -e ".[data]"'
         ) from error
 
+    tokenizer = HuggingFaceTokenizer.from_pretrained(tokenizer_identifier)
     train_stream = load_dataset(
         "roneneldan/TinyStories", split="train", streaming=True
     )
     validation_stream = load_dataset(
         "roneneldan/TinyStories", split="validation", streaming=True
     )
-    train_texts = [row["text"] for row in train_stream.take(max_train_stories)]
-    validation_texts = [
-        row["text"] for row in validation_stream.take(max_validation_stories)
-    ]
-    return LanguageCorpus.from_texts(train_texts, validation_texts)
+    train_documents = (
+        str(row["text"]) for row in train_stream.take(max_train_stories)
+    )
+    validation_documents = (
+        str(row["text"])
+        for row in validation_stream.take(max_validation_stories)
+    )
+    return LanguageCorpus(
+        tokenizer=tokenizer,
+        train_tokens=_tokenize_documents(train_documents, tokenizer),
+        validation_tokens=_tokenize_documents(validation_documents, tokenizer),
+    )
+
+
+def _tokenize_documents(
+    documents: Iterable[str],
+    tokenizer: TextTokenizer,
+    *,
+    chunk_size: int = 1_000_000,
+) -> Tensor:
+    chunks: list[Tensor] = []
+    buffer: list[int] = []
+    document_count = 0
+    for document in documents:
+        document_count += 1
+        buffer.extend(tokenizer.encode(document))
+        buffer.append(tokenizer.eos_token_id)
+        if len(buffer) >= chunk_size:
+            chunks.append(torch.tensor(buffer, dtype=torch.long))
+            buffer.clear()
+    if not document_count:
+        raise ValueError("cannot tokenize an empty document collection")
+    if buffer:
+        chunks.append(torch.tensor(buffer, dtype=torch.long))
+    return torch.cat(chunks)
