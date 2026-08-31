@@ -225,6 +225,20 @@ def test_chunked_model_is_causal_across_and_within_chunks() -> None:
     torch.testing.assert_close(first_logits[:, :2], second_logits[:, :2])
 
 
+def test_chunked_model_dispatches_bfloat16_proposals_into_canonical_buffers() -> None:
+    model = ChunkedEMCModel(chunk_config()).train()
+    inputs = torch.randint(0, model.config.vocab_size, (1, 8))
+
+    with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+        logits = model(inputs)
+        assert isinstance(logits, Tensor)
+        loss = logits.float().square().mean()
+    loss.backward()
+
+    assert torch.isfinite(logits).all()
+    assert any(parameter.grad is not None for parameter in model.parameters())
+
+
 def test_only_selected_modules_execute_and_sparse_pairs_match() -> None:
     config = chunk_config(
         modules_per_cycle=2,

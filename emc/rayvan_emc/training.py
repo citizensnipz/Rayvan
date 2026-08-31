@@ -38,6 +38,7 @@ class TrainingConfig:
     resume_from: str | None = None
     seed: int = 42
     device: str = "cpu"
+    collect_module_diagnostics: bool = False
 
     def __post_init__(self) -> None:
         positive_fields = {
@@ -116,6 +117,7 @@ class TrainingResult:
     routing: RoutingReport | None
     latest_checkpoint: str | None
     best_checkpoint: str | None
+    module_diagnostics: dict[str, Any] | None
 
 
 @dataclass(frozen=True)
@@ -326,6 +328,7 @@ def train_model(
     completed_steps_this_run = 0
     latest_checkpoint: Path | None = None
     best_checkpoint: Path | None = None
+    latest_module_diagnostics: dict[str, Any] = {}
     if config.checkpoint_directory is not None:
         checkpoint_directory = Path(config.checkpoint_directory)
         latest_checkpoint = checkpoint_directory / f"{config.checkpoint_prefix}-latest.pt"
@@ -337,6 +340,13 @@ def train_model(
         optimizer.zero_grad(set_to_none=True)
         step_balance_loss = 0.0
         step_tokens = 0
+        capture_module_diagnostics = bool(
+            config.collect_module_diagnostics
+            and (step % config.evaluation_interval == 0 or step == total_steps)
+            and isinstance(model, (EMCModel, ChunkedEMCModel))
+        )
+        parameter_snapshot: list[list[Tensor]] | None = None
+        gradient_norms: list[float | None] | None = None
         try:
             for _ in range(config.gradient_accumulation_steps):
                 inputs, targets = corpus.sample_batch(
@@ -383,6 +393,9 @@ def train_model(
                 step_tokens += targets.numel()
 
             scaler.unscale_(optimizer)
+            if capture_module_diagnostics:
+                parameter_snapshot = _snapshot_module_parameters(model)
+                gradient_norms = _module_gradient_norms(model)
             if emc_diagnostics is not None:
                 emc_diagnostics.observe_router_gradients(model)
                 emc_diagnostics.observe_module_gradients(model)
@@ -391,6 +404,13 @@ def train_model(
             )
             scaler.step(optimizer)
             scaler.update()
+            if parameter_snapshot is not None and gradient_norms is not None:
+                latest_module_diagnostics = _module_update_diagnostics(
+                    model,
+                    parameter_snapshot,
+                    gradient_norms,
+                    step,
+                )
         except RuntimeError as error:
             if "out of memory" in str(error).lower():
                 raise RuntimeError(
@@ -468,6 +488,7 @@ def train_model(
                     "training_config": asdict(config),
                     "train_generator_state": train_generator.get_state(),
                     "evaluation_generator_state": evaluation_generator.get_state(),
+                    "training_diagnostics": latest_module_diagnostics,
                 }
                 save_training_checkpoint(latest_checkpoint, **checkpoint_arguments)
                 if is_best and best_checkpoint is not None:
@@ -514,8 +535,71 @@ def train_model(
         routing=routing,
         latest_checkpoint=(str(latest_checkpoint) if latest_checkpoint else None),
         best_checkpoint=(str(best_checkpoint) if best_checkpoint else None),
+        module_diagnostics=latest_module_diagnostics or None,
     )
 
+
+
+def _snapshot_module_parameters(model: nn.Module) -> list[list[Tensor]]:
+    return [
+        [parameter.detach().clone() for parameter in module.parameters()]
+        for module in model.emc_modules
+    ]
+
+
+def _module_gradient_norms(model: nn.Module) -> list[float | None]:
+    norms: list[float | None] = []
+    for module in model.emc_modules:
+        gradients = [
+            parameter.grad.detach()
+            for parameter in module.parameters()
+            if parameter.grad is not None
+        ]
+        norms.append(
+            sum(
+                gradient.float().square().sum().item()
+                for gradient in gradients
+            )
+            ** 0.5
+            if gradients
+            else None
+        )
+    return norms
+
+
+def _module_update_diagnostics(
+    model: nn.Module,
+    before: list[list[Tensor]],
+    gradient_norms: list[float | None],
+    step: int,
+) -> dict[str, Any]:
+    modules = []
+    for index, (module, previous, gradient_norm) in enumerate(
+        zip(model.emc_modules, before, gradient_norms, strict=True)
+    ):
+        current = list(module.parameters())
+        update_squared = sum(
+            (parameter.detach().float() - old.float()).square().sum().item()
+            for parameter, old in zip(current, previous, strict=True)
+        )
+        modules.append(
+            {
+                "module": index,
+                "family": model.module_families[index],
+                "gradient_norm": gradient_norm,
+                "update_norm": update_squared**0.5,
+            }
+        )
+    return {
+        "source": "live_training",
+        "step": step,
+        "optimizer_state_available": True,
+        "sampling": (
+            "single unscaled gradient and optimizer update norm sampled at "
+            "checkpoint/evaluation interval; no gradient history retained"
+        ),
+        "modules": modules,
+    }
 
 def _resolved_precision(precision: str, device: torch.device) -> str:
     if precision == "auto":

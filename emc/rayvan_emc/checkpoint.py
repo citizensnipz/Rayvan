@@ -33,6 +33,7 @@ class LoadedModelCheckpoint:
     tokenizer: TextTokenizer
     progress: CheckpointProgress
     training_config: dict[str, Any]
+    training_diagnostics: dict[str, Any]
 
 
 def save_training_checkpoint(
@@ -48,6 +49,7 @@ def save_training_checkpoint(
     training_config: dict[str, Any],
     train_generator_state: torch.Tensor | None = None,
     evaluation_generator_state: torch.Tensor | None = None,
+    training_diagnostics: dict[str, Any] | None = None,
 ) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -62,6 +64,7 @@ def save_training_checkpoint(
         "validation_loss": validation_loss,
         "best_validation_loss": best_validation_loss,
         "training_config": training_config,
+        "training_diagnostics": dict(training_diagnostics or {}),
         "tokenizer": tokenizer.to_config(),
         "train_generator_state": train_generator_state,
         "evaluation_generator_state": evaluation_generator_state,
@@ -108,6 +111,7 @@ def load_model_checkpoint(
         tokenizer=tokenizer,
         progress=_progress_from_payload(payload),
         training_config=dict(payload["training_config"]),
+        training_diagnostics=dict(payload.get("training_diagnostics", {})),
     )
 
 

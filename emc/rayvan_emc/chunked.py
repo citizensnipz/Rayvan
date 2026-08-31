@@ -666,10 +666,10 @@ class ChunkedEMCModel(nn.Module):
                 )
             )
             token_proposals[request_indices, slots] = (
-                module_output.token_proposal
+                module_output.token_proposal.to(dtype=token_proposals.dtype)
             )
             state_proposals[request_indices, slots] = (
-                module_output.state_proposal
+                module_output.state_proposal.to(dtype=state_proposals.dtype)
             )
             next_states[module_index] = _scatter_lease_state(
                 module_output.new_lease_state,

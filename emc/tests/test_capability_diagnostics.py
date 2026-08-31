@@ -21,9 +21,18 @@ from rayvan_emc.checkpoint import save_training_checkpoint
 from rayvan_emc.chunked import ChunkedEMCModel
 from rayvan_emc.evaluate import (
     DiagnosticEvaluationConfig,
+    InterventionResult,
+    RouterDiagnosticThresholds,
     _aggregate_capability_results,
-    evaluate_suite,
+    _aggregate_interventions,
+    _aggregate_routing,
+    _collapse_analysis,
+    _evaluate_cycles,
+    _module_diagnostics,
+    _surface_vs_operation,
+    _validate_intervention,
     compare_checkpoints,
+    evaluate_suite,
     write_report,
 )
 from rayvan_emc.model import EMCConfig, EMCModel, EMCOutput
@@ -303,6 +312,245 @@ def test_capability_metrics_use_exact_observable_values() -> None:
     assert metrics["exact_accuracy"] == 0.5
     assert metrics["token_accuracy"] == 0.75
     assert metrics["cross_entropy"] == pytest.approx(0.4)
+
+
+def _synthetic_trace(
+    *,
+    selected: tuple[int, ...],
+    module_counts: dict[str, int],
+    family_counts: dict[str, int],
+    routing_units: int,
+    selected_weights: dict[str, float] | None = None,
+    router_probabilities: dict[str, float] | None = None,
+) -> dict[str, object]:
+    unit_counts = {
+        str(index): routing_units for index in selected
+    }
+    slot_counts = {
+        str(index): {str(slot): routing_units}
+        for slot, index in enumerate(selected)
+    }
+    return {
+        "module_counts": module_counts,
+        "family_counts": family_counts,
+        "module_routing_unit_counts": unit_counts,
+        "family_routing_unit_counts": {
+            family: routing_units for family in family_counts
+        },
+        "module_slot_counts": slot_counts,
+        "routing_units": routing_units,
+        "request_pool_counts": {},
+        "mean_router_scores": {},
+        "mean_router_probabilities": router_probabilities or {},
+        "mean_selected_weights": selected_weights or {},
+        "mean_pre_top_k_entropy": 0.2,
+        "mean_post_top_k_entropy": 0.2,
+        "mean_routing_entropy": 0.2,
+        "unique_modules": list(selected),
+        "integrator": {
+            "acceptance": {},
+            "token_contribution": {},
+            "state_contribution": {},
+            "proposal_norm": {},
+        },
+        "mean_proposal_similarity": None,
+        "mean_gate_magnitude": None,
+        "mean_balance_bias": [],
+        "lease_ages": [],
+        "switch_rates": [],
+        "continuation_rates": [],
+        "lease_state_norms": [],
+        "lease_state_changes": [],
+        "state_reset_count": 0,
+        "requested_pairs": sum(module_counts.values()),
+        "executed_pairs": sum(module_counts.values()),
+        "discarded_pairs": 0,
+        "actual_unique_executed_per_chunk": [len(selected)],
+        "executed_module_sets": [list(selected)],
+        "population_fraction_touched": len(selected) / 4,
+    }
+
+
+def test_causal_metrics_detect_degradation_when_exact_accuracy_stays_zero() -> None:
+    model = EMCModel(token_config())
+    results = [
+        InterventionResult(
+            example_index=index,
+            capability="program_execution",
+            intervention_type="disable_family",
+            target="recurrent",
+            baseline_exact=0.0,
+            intervened_exact=0.0,
+            baseline_token_accuracy=0.6,
+            intervened_token_accuracy=0.2,
+            baseline_loss=1.0,
+            intervened_loss=1.8,
+            status="active_intervention",
+            validation="target removed",
+        )
+        for index in range(3)
+    ]
+
+    metrics = _aggregate_interventions(results, model)[
+        "performance_drop_when_family_removed"
+    ]["program_execution"]["recurrent"]
+
+    assert metrics["mean_exact_accuracy_delta"] == 0.0
+    assert metrics["mean_token_accuracy_delta"] == pytest.approx(-0.4)
+    assert metrics["mean_token_accuracy_degradation"] == pytest.approx(0.4)
+    assert metrics["mean_loss_increase"] == pytest.approx(0.8)
+    assert metrics["fraction_measurably_worsened"] == 1.0
+
+
+def test_top_k_slot_monopoly_and_near_dead_expert_are_not_healthy() -> None:
+    model = ChunkedEMCModel(chunk_config()).eval()
+    records = []
+    for index in range(20):
+        companion = 0 if index % 2 == 0 else 1
+        records.append(
+            {
+                "metadata": {
+                    "capability": CAPABILITIES[index % len(CAPABILITIES)]
+                },
+                "trace": _synthetic_trace(
+                    selected=(2, companion),
+                    module_counts={"2": 10, str(companion): 10},
+                    family_counts={
+                        "recurrent": 10,
+                        model.module_families[companion]: 10,
+                    },
+                    routing_units=10,
+                ),
+            }
+        )
+
+    collapse = _collapse_analysis(
+        records, model, RouterDiagnosticThresholds()
+    )
+
+    assert collapse["status"] == "slot_monopoly"
+    assert collapse["overall"]["request_selection_fraction"][2] == 1.0
+    assert 3 in collapse["overall"]["near_dead_experts"]
+
+
+def test_unavailable_gradients_are_not_numeric_zero() -> None:
+    model = EMCModel(token_config()).eval()
+
+    diagnostics = _module_diagnostics(model, [])
+
+    assert not diagnostics["availability"]["gradients_captured"]
+    assert all(
+        module["gradient_norm"] is None
+        for module in diagnostics["modules"]
+    )
+
+
+def test_observed_zero_gradient_is_reported_as_numeric_zero() -> None:
+    model = EMCModel(token_config()).eval()
+    for parameter in model.emc_modules[0].parameters():
+        parameter.grad = torch.zeros_like(parameter)
+
+    diagnostics = _module_diagnostics(model, [])
+
+    assert diagnostics["availability"]["gradients_captured"]
+    assert diagnostics["modules"][0]["gradient_norm"] == 0.0
+    assert diagnostics["modules"][0]["gradient_source"] == "live_gradient_tensors"
+    assert diagnostics["modules"][1]["gradient_norm"] is None
+
+
+def test_intervention_validation_distinguishes_inactive_target() -> None:
+    families = ("gpt", "ssm", "recurrent", "delta")
+    baseline = {"unique_modules": [0, 1]}
+    active_intervened = {"unique_modules": [1, 2]}
+
+    active = _validate_intervention(
+        "disable_module", "0", families, baseline, active_intervened
+    )
+    inactive = _validate_intervention(
+        "disable_module", "3", families, baseline, active_intervened
+    )
+
+    assert active[0] == "active_intervention"
+    assert inactive[0] == "target_not_selected"
+
+
+def test_operation_surface_mi_warns_when_routing_lacks_diversity() -> None:
+    records = []
+    for index in range(100):
+        family_counts = {"recurrent": 2}
+        if index in (0, 1):
+            family_counts["delta"] = 1
+        records.append(
+            {
+                "metadata": {
+                    "operation": "execute" if index < 50 else "recall",
+                    "surface_format": "json" if index % 2 else "english",
+                },
+                "trace": {"family_counts": family_counts},
+            }
+        )
+
+    analysis = _surface_vs_operation(records)
+
+    assert (
+        analysis["operation_selection_mutual_information_nats"]
+        > analysis["surface_selection_mutual_information_nats"]
+    )
+    assert analysis["insufficient_routing_diversity"]
+    assert "too low for a strong" in analysis["statement"]
+
+
+def test_chunk_cycle_absence_has_architecture_reason() -> None:
+    model = ChunkedEMCModel(chunk_config()).eval()
+
+    result = _evaluate_cycles(
+        model,
+        diagnostic_tokenizer(),
+        (),
+        DiagnosticEvaluationConfig(examples_per_capability=1),
+    )
+
+    assert not result["supported"]
+    assert result["reason_code"] == "architecture_no_cycle_interface"
+    assert "chunk recurrence" in result["reason"]
+
+
+def test_selection_frequency_and_router_weight_remain_separate() -> None:
+    model = ChunkedEMCModel(chunk_config()).eval()
+    trace = _synthetic_trace(
+        selected=(0, 1),
+        module_counts={"0": 10, "1": 10},
+        family_counts={"gpt": 10, "ssm": 10},
+        routing_units=10,
+        selected_weights={"0": 0.9, "1": 0.1},
+        router_probabilities={"0": 0.7, "1": 0.2, "2": 0.09, "3": 0.01},
+    )
+    records = [
+        {
+            "metadata": {
+                "capability": "language",
+                "surface_format": "english",
+            },
+            "trace": trace,
+        }
+    ]
+
+    routing = _aggregate_routing(records, model)
+
+    assert routing["family_metrics"]["gpt"]["selection_frequency"] == 0.5
+    assert (
+        routing["family_metrics"]["gpt"][
+            "mean_normalized_selected_weight"
+        ]
+        == 0.9
+    )
+    assert routing["family_metrics"]["ssm"]["selection_frequency"] == 0.5
+    assert (
+        routing["family_metrics"]["ssm"][
+            "mean_normalized_selected_weight"
+        ]
+        == 0.1
+    )
 
 
 def test_smoke_evaluation_writes_json_csv_and_markdown(tmp_path: Path) -> None:

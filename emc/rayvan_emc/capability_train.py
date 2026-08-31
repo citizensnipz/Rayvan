@@ -55,6 +55,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint-diagnostic-examples", type=int, default=20)
     parser.add_argument("--skip-checkpoint-diagnostics", action="store_true")
     parser.add_argument(
+        "--collect-module-diagnostics",
+        action="store_true",
+        help=(
+            "sample module gradient/update norms at checkpoint intervals; "
+            "disabled by default"
+        ),
+    )
+    parser.add_argument(
         "--precision", choices=("auto", "fp32", "fp16", "bf16"), default="auto"
     )
     parser.add_argument(
@@ -109,6 +117,7 @@ def main() -> None:
         seed=args.seed,
         precision=args.precision,
         device=args.device,
+        collect_module_diagnostics=args.collect_module_diagnostics,
     )
     pending = list(checkpoint_thresholds)
     diagnostics_root = Path(args.checkpoint_dir) / "diagnostics"

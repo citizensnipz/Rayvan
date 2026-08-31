@@ -1,0 +1,4743 @@
+{
+  "capability_results": {
+    "arithmetic": {
+      "cross_entropy": 4.186511278152466,
+      "exact_accuracy": 0.0,
+      "examples": 20,
+      "perplexity": 65.79285712795733,
+      "skipped": 0,
+      "token_accuracy": 0.0
+    },
+    "associative_recall": {
+      "cross_entropy": 4.759897095816476,
+      "exact_accuracy": 0.0,
+      "examples": 20,
+      "perplexity": 116.73391287291146,
+      "skipped": 0,
+      "token_accuracy": 0.0
+    },
+    "compression": {
+      "cross_entropy": 4.304716229438782,
+      "exact_accuracy": 0.0,
+      "examples": 20,
+      "perplexity": 74.04819977196733,
+      "skipped": 0,
+      "token_accuracy": 0.0
+    },
+    "fuzzy_recall": {
+      "cross_entropy": 4.008697271347046,
+      "exact_accuracy": 0.0,
+      "examples": 20,
+      "perplexity": 55.075075929676885,
+      "skipped": 0,
+      "token_accuracy": 0.10902777798473835
+    },
+    "language": {
+      "cross_entropy": 3.7497387290000916,
+      "exact_accuracy": 0.0,
+      "examples": 20,
+      "perplexity": 42.50997392562349,
+      "skipped": 0,
+      "token_accuracy": 0.16373429521918298
+    },
+    "program_execution": {
+      "cross_entropy": 4.291335117816925,
+      "exact_accuracy": 0.0,
+      "examples": 20,
+      "perplexity": 73.06395239352584,
+      "skipped": 0,
+      "token_accuracy": 0.0
+    },
+    "selective_copying": {
+      "cross_entropy": 4.272503601877313,
+      "exact_accuracy": 0.0,
+      "examples": 20,
+      "perplexity": 71.70092165720723,
+      "skipped": 0,
+      "token_accuracy": 0.2162337712943554
+    },
+    "stateful_action": {
+      "cross_entropy": 4.7188920378685,
+      "exact_accuracy": 0.0,
+      "examples": 20,
+      "perplexity": 112.04404331383343,
+      "skipped": 0,
+      "token_accuracy": 0.0
+    },
+    "symbolic": {
+      "cross_entropy": 4.44768795967102,
+      "exact_accuracy": 0.0,
+      "examples": 20,
+      "perplexity": 85.42919973886335,
+      "skipped": 0,
+      "token_accuracy": 0.0
+    },
+    "working_memory": {
+      "cross_entropy": 4.193840873241425,
+      "exact_accuracy": 0.0,
+      "examples": 20,
+      "perplexity": 66.27686374987658,
+      "skipped": 0,
+      "token_accuracy": 0.0
+    }
+  },
+  "causal_ablations": {
+    "matrices": {
+      "disable_family": {
+        "arithmetic": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "associative_recall": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "compression": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "fuzzy_recall": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "language": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "program_execution": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "selective_copying": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "stateful_action": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "symbolic": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "working_memory": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        }
+      },
+      "disable_module": {
+        "arithmetic": {
+          "0": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "1": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "2": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "3": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "associative_recall": {
+          "0": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "1": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "2": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "3": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "compression": {
+          "0": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "1": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "2": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "3": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "fuzzy_recall": {
+          "0": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "1": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "2": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "3": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "language": {
+          "0": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "1": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "2": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "3": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "program_execution": {
+          "0": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "1": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "2": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "3": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "selective_copying": {
+          "0": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "1": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "2": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "3": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "stateful_action": {
+          "0": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "1": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "2": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "3": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "symbolic": {
+          "0": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "1": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "2": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "3": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "working_memory": {
+          "0": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "1": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "2": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "3": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        }
+      },
+      "force_family_alternative": {
+        "arithmetic": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "associative_recall": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "compression": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "fuzzy_recall": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "language": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": -0.8928567171096802
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "program_execution": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "selective_copying": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "stateful_action": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "symbolic": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "working_memory": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        }
+      },
+      "zero_family_proposal": {
+        "arithmetic": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "associative_recall": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "compression": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "fuzzy_recall": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "language": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": -3.452380746603012
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": -2.559523284435272
+          }
+        },
+        "program_execution": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "selective_copying": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "stateful_action": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "symbolic": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        },
+        "working_memory": {
+          "delta": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "gpt": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "recurrent": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          },
+          "ssm": {
+            "accuracy_delta_points": 0.0,
+            "baseline_accuracy": 0.0,
+            "examples": 2,
+            "intervened_accuracy": 0.0,
+            "token_accuracy_delta_points": 0.0
+          }
+        }
+      }
+    },
+    "module_families": [
+      "gpt",
+      "ssm",
+      "recurrent",
+      "delta"
+    ],
+    "most_important_family_by_capability": {
+      "arithmetic": "delta",
+      "associative_recall": "delta",
+      "compression": "delta",
+      "fuzzy_recall": "delta",
+      "language": "delta",
+      "program_execution": "delta",
+      "selective_copying": "delta",
+      "stateful_action": "delta",
+      "symbolic": "delta",
+      "working_memory": "delta"
+    },
+    "performance_drop_when_family_removed": {
+      "arithmetic": {
+        "delta": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "gpt": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "recurrent": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "ssm": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        }
+      },
+      "associative_recall": {
+        "delta": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "gpt": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "recurrent": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "ssm": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        }
+      },
+      "compression": {
+        "delta": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "gpt": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "recurrent": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "ssm": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        }
+      },
+      "fuzzy_recall": {
+        "delta": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "gpt": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "recurrent": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "ssm": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        }
+      },
+      "language": {
+        "delta": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "gpt": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "recurrent": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "ssm": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        }
+      },
+      "program_execution": {
+        "delta": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "gpt": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "recurrent": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "ssm": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        }
+      },
+      "selective_copying": {
+        "delta": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "gpt": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "recurrent": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "ssm": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        }
+      },
+      "stateful_action": {
+        "delta": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "gpt": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "recurrent": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "ssm": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        }
+      },
+      "symbolic": {
+        "delta": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "gpt": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "recurrent": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "ssm": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        }
+      },
+      "working_memory": {
+        "delta": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "gpt": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "recurrent": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        },
+        "ssm": {
+          "accuracy_delta_points": 0.0,
+          "baseline_accuracy": 0.0,
+          "examples": 2,
+          "intervened_accuracy": 0.0,
+          "token_accuracy_delta_points": 0.0
+        }
+      }
+    },
+    "specialization_statement": "No measurable causal family specialization in sampled ablations."
+  },
+  "cycle_analysis": {
+    "reason": "checkpoint does not expose multiple EMC cycles",
+    "supported": false
+  },
+  "difficulty_curves": {
+    "arithmetic": {
+      "1": {
+        "cross_entropy": 4.0590075016021725,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931195139884949,
+        "token_accuracy": 0.0
+      },
+      "2": {
+        "cross_entropy": 4.178765916824341,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931242406368255,
+        "token_accuracy": 0.0
+      },
+      "3": {
+        "cross_entropy": 4.589927768707275,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931225975354512,
+        "token_accuracy": 0.0
+      },
+      "4": {
+        "cross_entropy": 3.918343925476074,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931121418873469,
+        "token_accuracy": 0.0
+      }
+    },
+    "associative_recall": {
+      "1": {
+        "cross_entropy": 4.893217468261719,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931038101514181,
+        "token_accuracy": 0.0
+      },
+      "2": {
+        "cross_entropy": 4.745850276947022,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.693048651900338,
+        "token_accuracy": 0.0
+      },
+      "3": {
+        "cross_entropy": 4.610805153846741,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6929736924718745,
+        "token_accuracy": 0.0
+      },
+      "4": {
+        "cross_entropy": null,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6929338768536866,
+        "token_accuracy": 0.0
+      }
+    },
+    "compression": {
+      "1": {
+        "cross_entropy": 4.3390624046325685,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6929512904749976,
+        "token_accuracy": 0.0
+      },
+      "2": {
+        "cross_entropy": 4.253074836730957,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6929344447453817,
+        "token_accuracy": 0.0
+      },
+      "3": {
+        "cross_entropy": 4.322439479827881,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6929300695373899,
+        "token_accuracy": 0.0
+      },
+      "4": {
+        "cross_entropy": 4.3042881965637205,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6929173852071101,
+        "token_accuracy": 0.0
+      }
+    },
+    "fuzzy_recall": {
+      "1": {
+        "cross_entropy": 3.9413008213043215,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930379327138265,
+        "token_accuracy": 0.11944444477558136
+      },
+      "2": {
+        "cross_entropy": 4.020866394042969,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930078233098174,
+        "token_accuracy": 0.11944444477558136
+      },
+      "3": {
+        "cross_entropy": 3.939323568344116,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.692982068314152,
+        "token_accuracy": 0.125
+      },
+      "4": {
+        "cross_entropy": 4.133298301696778,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6929482127340524,
+        "token_accuracy": 0.07222222238779068
+      }
+    },
+    "language": {
+      "1": {
+        "cross_entropy": 3.7771392822265626,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930693310499192,
+        "token_accuracy": 0.15695436298847198
+      },
+      "2": {
+        "cross_entropy": 3.731078004837036,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930359642420496,
+        "token_accuracy": 0.16629014909267426
+      },
+      "3": {
+        "cross_entropy": 3.7506075859069825,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930680478943719,
+        "token_accuracy": 0.16981578767299652
+      },
+      "4": {
+        "cross_entropy": 3.7401300430297852,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930346532301469,
+        "token_accuracy": 0.1618768811225891
+      }
+    },
+    "program_execution": {
+      "1": {
+        "cross_entropy": 4.166080188751221,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931032657623291,
+        "token_accuracy": 0.0
+      },
+      "2": {
+        "cross_entropy": 4.217648124694824,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931001484394074,
+        "token_accuracy": 0.0
+      },
+      "3": {
+        "cross_entropy": 4.4396522521972654,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.693100094795227,
+        "token_accuracy": 0.0
+      },
+      "4": {
+        "cross_entropy": 4.34195990562439,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930970340967179,
+        "token_accuracy": 0.0
+      }
+    },
+    "selective_copying": {
+      "1": {
+        "cross_entropy": 4.474658203125,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.693063956119202,
+        "token_accuracy": 0.20000000298023224
+      },
+      "2": {
+        "cross_entropy": 4.242383003234863,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930728754353902,
+        "token_accuracy": 0.2
+      },
+      "3": {
+        "cross_entropy": 4.148798179626465,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930551115242494,
+        "token_accuracy": 0.23636364340782165
+      },
+      "4": {
+        "cross_entropy": 4.212092876434326,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930493502479566,
+        "token_accuracy": 0.22857143878936767
+      }
+    },
+    "stateful_action": {
+      "1": {
+        "cross_entropy": 4.552039909362793,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931214535236359,
+        "token_accuracy": 0.0
+      },
+      "2": {
+        "cross_entropy": 4.756683826446533,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931015889985221,
+        "token_accuracy": 0.0
+      },
+      "3": {
+        "cross_entropy": 5.707639503479004,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930984067065376,
+        "token_accuracy": 0.0
+      },
+      "4": {
+        "cross_entropy": 3.859204912185669,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931127002835273,
+        "token_accuracy": 0.0
+      }
+    },
+    "symbolic": {
+      "1": {
+        "cross_entropy": 4.3697105884552006,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931284427642822,
+        "token_accuracy": 0.0
+      },
+      "2": {
+        "cross_entropy": 4.22717170715332,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931467950344086,
+        "token_accuracy": 0.0
+      },
+      "3": {
+        "cross_entropy": 4.481966543197632,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6931284427642822,
+        "token_accuracy": 0.0
+      },
+      "4": {
+        "cross_entropy": 4.71190299987793,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.693065002816064,
+        "token_accuracy": 0.0
+      }
+    },
+    "working_memory": {
+      "1": {
+        "cross_entropy": 4.213728141784668,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930963446696599,
+        "token_accuracy": 0.0
+      },
+      "2": {
+        "cross_entropy": 4.103029108047485,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.693118791381518,
+        "token_accuracy": 0.0
+      },
+      "3": {
+        "cross_entropy": 4.157713317871094,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930942546990183,
+        "token_accuracy": 0.0
+      },
+      "4": {
+        "cross_entropy": 4.300892925262451,
+        "exact_accuracy": 0.0,
+        "examples": 5,
+        "family_routing_frequency": {
+          "delta": 0.0,
+          "gpt": 0.5,
+          "recurrent": 0.0,
+          "ssm": 0.5
+        },
+        "routing_entropy": 0.6930828365192309,
+        "token_accuracy": 0.0
+      }
+    }
+  },
+  "executive_summary": {
+    "causal_family_importance": {
+      "arithmetic": "delta",
+      "associative_recall": "delta",
+      "compression": "delta",
+      "fuzzy_recall": "delta",
+      "language": "delta",
+      "program_execution": "delta",
+      "selective_copying": "delta",
+      "stateful_action": "delta",
+      "symbolic": "delta",
+      "working_memory": "delta"
+    },
+    "cycle_usefulness": "checkpoint does not expose multiple EMC cycles",
+    "language_perplexity": 42.50997392562349,
+    "overall_learning_status": "no_clear_learning_signal",
+    "overall_loss": 4.2789871383825115,
+    "router_collapse_status": "no_global_collapse",
+    "specialization_evidence": "No measurable causal family specialization in sampled ablations.",
+    "strongest_capability": "selective_copying",
+    "surface_routing_evidence": "Operation and surface format have similar association with module selection.",
+    "weakest_capability": "associative_recall"
+  },
+  "generated_language_samples": [
+    "the moon is bright tonight. we te  e          e  e     ",
+    "the little boat returns before sunset. we watch the stars                         "
+  ],
+  "integrator_analysis": {
+    "acceptance_by_capability": {
+      "arithmetic": {
+        "gpt": 0.4498165359676921,
+        "ssm": 0.5501834637089698
+      },
+      "associative_recall": {
+        "gpt": 0.41232324500491835,
+        "ssm": 0.5876767553191766
+      },
+      "compression": {
+        "gpt": 0.41436248844444795,
+        "ssm": 0.5856375100661448
+      },
+      "fuzzy_recall": {
+        "gpt": 0.4080718173853195,
+        "ssm": 0.5919281826989291
+      },
+      "language": {
+        "gpt": 0.43431549516255713,
+        "ssm": 0.5656845060915668
+      },
+      "program_execution": {
+        "gpt": 0.4465528666704751,
+        "ssm": 0.5534471332849632
+      },
+      "selective_copying": {
+        "gpt": 0.4258672984670401,
+        "ssm": 0.5741327019843326
+      },
+      "stateful_action": {
+        "gpt": 0.43096548992536576,
+        "ssm": 0.5690345108393882
+      },
+      "symbolic": {
+        "gpt": 0.4634795766627839,
+        "ssm": 0.5365204238342856
+      },
+      "working_memory": {
+        "gpt": 0.4403011644118878,
+        "ssm": 0.5596988362940897
+      }
+    },
+    "acceptance_by_surface": {
+      "code": {
+        "gpt": 0.4334376959825161,
+        "ssm": 0.5665623047535048
+      },
+      "english": {
+        "gpt": 0.42934738630076463,
+        "ssm": 0.5706526135080716
+      },
+      "json": {
+        "gpt": 0.4237832177496223,
+        "ssm": 0.5762167827872426
+      },
+      "structured": {
+        "gpt": 0.435871858236727,
+        "ssm": 0.5641281413231612
+      },
+      "symbolic": {
+        "gpt": 0.442397948286883,
+        "ssm": 0.5576020524134502
+      }
+    },
+    "gate_magnitude_by_capability": {
+      "arithmetic": 0.5956258901953653,
+      "associative_recall": 0.6138386232782412,
+      "compression": 0.6020175257721688,
+      "fuzzy_recall": 0.6110336216940057,
+      "language": 0.6100219693151713,
+      "program_execution": 0.5989026312668377,
+      "selective_copying": 0.6077813157232463,
+      "stateful_action": 0.6021362488385976,
+      "symbolic": 0.591087904629667,
+      "working_memory": 0.5978777918560556
+    },
+    "nexus_vs_integrator_disagreement": {
+      "flagged": [],
+      "rows": [
+        {
+          "acceptance": 0.43431549516255713,
+          "capability": "language",
+          "family": "gpt",
+          "high_selection_low_acceptance": false,
+          "module": 0,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": 0.5656845060915668,
+          "capability": "language",
+          "family": "ssm",
+          "high_selection_low_acceptance": false,
+          "module": 1,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": null,
+          "capability": "language",
+          "family": "recurrent",
+          "high_selection_low_acceptance": false,
+          "module": 2,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": null,
+          "capability": "language",
+          "family": "delta",
+          "high_selection_low_acceptance": false,
+          "module": 3,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": 0.41232324500491835,
+          "capability": "associative_recall",
+          "family": "gpt",
+          "high_selection_low_acceptance": false,
+          "module": 0,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": 0.5876767553191766,
+          "capability": "associative_recall",
+          "family": "ssm",
+          "high_selection_low_acceptance": false,
+          "module": 1,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": null,
+          "capability": "associative_recall",
+          "family": "recurrent",
+          "high_selection_low_acceptance": false,
+          "module": 2,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": null,
+          "capability": "associative_recall",
+          "family": "delta",
+          "high_selection_low_acceptance": false,
+          "module": 3,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": 0.4080718173853195,
+          "capability": "fuzzy_recall",
+          "family": "gpt",
+          "high_selection_low_acceptance": false,
+          "module": 0,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": 0.5919281826989291,
+          "capability": "fuzzy_recall",
+          "family": "ssm",
+          "high_selection_low_acceptance": false,
+          "module": 1,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": null,
+          "capability": "fuzzy_recall",
+          "family": "recurrent",
+          "high_selection_low_acceptance": false,
+          "module": 2,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": null,
+          "capability": "fuzzy_recall",
+          "family": "delta",
+          "high_selection_low_acceptance": false,
+          "module": 3,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": 0.4258672984670401,
+          "capability": "selective_copying",
+          "family": "gpt",
+          "high_selection_low_acceptance": false,
+          "module": 0,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": 0.5741327019843326,
+          "capability": "selective_copying",
+          "family": "ssm",
+          "high_selection_low_acceptance": false,
+          "module": 1,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": null,
+          "capability": "selective_copying",
+          "family": "recurrent",
+          "high_selection_low_acceptance": false,
+          "module": 2,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": null,
+          "capability": "selective_copying",
+          "family": "delta",
+          "high_selection_low_acceptance": false,
+          "module": 3,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": 0.4403011644118878,
+          "capability": "working_memory",
+          "family": "gpt",
+          "high_selection_low_acceptance": false,
+          "module": 0,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": 0.5596988362940897,
+          "capability": "working_memory",
+          "family": "ssm",
+          "high_selection_low_acceptance": false,
+          "module": 1,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": null,
+          "capability": "working_memory",
+          "family": "recurrent",
+          "high_selection_low_acceptance": false,
+          "module": 2,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": null,
+          "capability": "working_memory",
+          "family": "delta",
+          "high_selection_low_acceptance": false,
+          "module": 3,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": 0.41436248844444795,
+          "capability": "compression",
+          "family": "gpt",
+          "high_selection_low_acceptance": false,
+          "module": 0,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": 0.5856375100661448,
+          "capability": "compression",
+          "family": "ssm",
+          "high_selection_low_acceptance": false,
+          "module": 1,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": null,
+          "capability": "compression",
+          "family": "recurrent",
+          "high_selection_low_acceptance": false,
+          "module": 2,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": null,
+          "capability": "compression",
+          "family": "delta",
+          "high_selection_low_acceptance": false,
+          "module": 3,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": 0.4498165359676921,
+          "capability": "arithmetic",
+          "family": "gpt",
+          "high_selection_low_acceptance": false,
+          "module": 0,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": 0.5501834637089698,
+          "capability": "arithmetic",
+          "family": "ssm",
+          "high_selection_low_acceptance": false,
+          "module": 1,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": null,
+          "capability": "arithmetic",
+          "family": "recurrent",
+          "high_selection_low_acceptance": false,
+          "module": 2,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": null,
+          "capability": "arithmetic",
+          "family": "delta",
+          "high_selection_low_acceptance": false,
+          "module": 3,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": 0.4634795766627839,
+          "capability": "symbolic",
+          "family": "gpt",
+          "high_selection_low_acceptance": false,
+          "module": 0,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": 0.5365204238342856,
+          "capability": "symbolic",
+          "family": "ssm",
+          "high_selection_low_acceptance": false,
+          "module": 1,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": null,
+          "capability": "symbolic",
+          "family": "recurrent",
+          "high_selection_low_acceptance": false,
+          "module": 2,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": null,
+          "capability": "symbolic",
+          "family": "delta",
+          "high_selection_low_acceptance": false,
+          "module": 3,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": 0.4465528666704751,
+          "capability": "program_execution",
+          "family": "gpt",
+          "high_selection_low_acceptance": false,
+          "module": 0,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": 0.5534471332849632,
+          "capability": "program_execution",
+          "family": "ssm",
+          "high_selection_low_acceptance": false,
+          "module": 1,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": null,
+          "capability": "program_execution",
+          "family": "recurrent",
+          "high_selection_low_acceptance": false,
+          "module": 2,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": null,
+          "capability": "program_execution",
+          "family": "delta",
+          "high_selection_low_acceptance": false,
+          "module": 3,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": 0.43096548992536576,
+          "capability": "stateful_action",
+          "family": "gpt",
+          "high_selection_low_acceptance": false,
+          "module": 0,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": 0.5690345108393882,
+          "capability": "stateful_action",
+          "family": "ssm",
+          "high_selection_low_acceptance": false,
+          "module": 1,
+          "selection_frequency": 0.5
+        },
+        {
+          "acceptance": null,
+          "capability": "stateful_action",
+          "family": "recurrent",
+          "high_selection_low_acceptance": false,
+          "module": 2,
+          "selection_frequency": 0.0
+        },
+        {
+          "acceptance": null,
+          "capability": "stateful_action",
+          "family": "delta",
+          "high_selection_low_acceptance": false,
+          "module": 3,
+          "selection_frequency": 0.0
+        }
+      ]
+    },
+    "proposal_norm_by_capability": {
+      "arithmetic": {
+        "gpt": 4.632851484387252,
+        "ssm": 1.925535165830862
+      },
+      "associative_recall": {
+        "gpt": 487567050925391.0,
+        "ssm": 459650094049616.6
+      },
+      "compression": {
+        "gpt": 5.483974543198134,
+        "ssm": 2.646618402942555
+      },
+      "fuzzy_recall": {
+        "gpt": 10014.44370099636,
+        "ssm": 13635.62066678961
+      },
+      "language": {
+        "gpt": 5.571114238842971,
+        "ssm": 2.7277661540062796
+      },
+      "program_execution": {
+        "gpt": 4.839268883963594,
+        "ssm": 2.0209875421814467
+      },
+      "selective_copying": {
+        "gpt": 12596302219338.23,
+        "ssm": 12474673225884.11
+      },
+      "stateful_action": {
+        "gpt": 4.950011483018414,
+        "ssm": 2.1370665842162393
+      },
+      "symbolic": {
+        "gpt": 4.45482338598031,
+        "ssm": 1.9230272770337677
+      },
+      "working_memory": {
+        "gpt": 4.8575364082065295,
+        "ssm": 2.2111001717907066
+      }
+    },
+    "proposal_norm_by_surface": {
+      "code": {
+        "gpt": 270832300843088.12,
+        "ssm": 255322910900239.72
+      },
+      "english": {
+        "gpt": 56395715.962216906,
+        "ssm": 68312809.51980864
+      },
+      "json": {
+        "gpt": 7036007049399.667,
+        "ssm": 6968361086292.806
+      },
+      "structured": {
+        "gpt": 77431206.59369865,
+        "ssm": 90087053.25101672
+      },
+      "symbolic": {
+        "gpt": 56480068.836468555,
+        "ssm": 69044905.99350315
+      }
+    },
+    "proposal_similarity_by_capability": {
+      "arithmetic": 0.37752244987838524,
+      "associative_recall": 0.4474433654419573,
+      "compression": 0.42676975275658513,
+      "fuzzy_recall": 0.4569203189863984,
+      "language": 0.43425932950028495,
+      "program_execution": 0.4269392339934396,
+      "selective_copying": 0.4438376162320033,
+      "stateful_action": 0.42037208884993615,
+      "symbolic": 0.37572034896822826,
+      "working_memory": 0.4206366397612486
+    },
+    "state_contribution_by_capability": {
+      "arithmetic": {
+        "gpt": 3.7949147507548333,
+        "ssm": 2.3860710225999355
+      },
+      "associative_recall": {
+        "gpt": 3.702652973697466,
+        "ssm": 2.12260238206123
+      },
+      "compression": {
+        "gpt": 3.7686957030753576,
+        "ssm": 2.0313749191467347
+      },
+      "fuzzy_recall": {
+        "gpt": 3.6600948993581737,
+        "ssm": 1.9240064501062157
+      },
+      "language": {
+        "gpt": 4.1050909197336924,
+        "ssm": 1.7762828751551296
+      },
+      "program_execution": {
+        "gpt": 3.6749493442475796,
+        "ssm": 2.176122792810202
+      },
+      "selective_copying": {
+        "gpt": 3.8448961728004654,
+        "ssm": 2.04285873324088
+      },
+      "stateful_action": {
+        "gpt": 3.679392075595401,
+        "ssm": 2.1844811379767597
+      },
+      "symbolic": {
+        "gpt": 4.075515798841204,
+        "ssm": 2.1542382486377445
+      },
+      "working_memory": {
+        "gpt": 3.703146864746189,
+        "ssm": 2.075884391054857
+      }
+    },
+    "state_contribution_by_surface": {
+      "code": {
+        "gpt": 3.829406967073115,
+        "ssm": 2.064885985375675
+      },
+      "english": {
+        "gpt": 3.920742821781771,
+        "ssm": 1.9599426939408784
+      },
+      "json": {
+        "gpt": 3.5667403703167317,
+        "ssm": 2.1946050918277136
+      },
+      "structured": {
+        "gpt": 3.77572356037164,
+        "ssm": 2.132917837475377
+      },
+      "symbolic": {
+        "gpt": 3.845501103272627,
+        "ssm": 2.155415201851916
+      }
+    },
+    "token_contribution_by_capability": {
+      "arithmetic": {
+        "gpt": 2.7903980518973763,
+        "ssm": 5.365589409123346
+      },
+      "associative_recall": {
+        "gpt": 2.6404862331844052,
+        "ssm": 5.867723170207036
+      },
+      "compression": {
+        "gpt": 2.5102125873604764,
+        "ssm": 5.87997897613134
+      },
+      "fuzzy_recall": {
+        "gpt": 2.6529308640198637,
+        "ssm": 5.966688801024816
+      },
+      "language": {
+        "gpt": 2.7479861522152538,
+        "ssm": 5.808674253331709
+      },
+      "program_execution": {
+        "gpt": 2.773463838641823,
+        "ssm": 5.467938041883282
+      },
+      "selective_copying": {
+        "gpt": 2.7232135248804132,
+        "ssm": 5.7266200824847395
+      },
+      "stateful_action": {
+        "gpt": 2.7045620185294394,
+        "ssm": 5.624628698333613
+      },
+      "symbolic": {
+        "gpt": 2.754065007050314,
+        "ssm": 5.312058237592479
+      },
+      "working_memory": {
+        "gpt": 2.744871494064559,
+        "ssm": 5.51927110513473
+      }
+    },
+    "token_contribution_by_surface": {
+      "code": {
+        "gpt": 2.7392161099595893,
+        "ssm": 5.649963280862019
+      },
+      "english": {
+        "gpt": 2.703019434423586,
+        "ssm": 5.775080653725645
+      },
+      "json": {
+        "gpt": 2.7085296485839527,
+        "ssm": 5.684784426168103
+      },
+      "structured": {
+        "gpt": 2.671273556030166,
+        "ssm": 5.583185270535401
+      },
+      "symbolic": {
+        "gpt": 2.699722549569559,
+        "ssm": 5.5092586584429695
+      }
+    }
+  },
+  "lease_temporal_analysis": {
+    "by_capability": {
+      "arithmetic": {
+        "average_lease_length": 1.7555555555555555,
+        "lease_state_norm": 6.5654557545979815,
+        "median_lease_length": 2.0,
+        "same_module_continuation_probability": 0.5555555555555556,
+        "state_change_per_chunk": 2.8150505966610377,
+        "state_reset_count": 40,
+        "switches_per_chunk": 0.4444444444444444,
+        "switches_per_request": 1.0
+      },
+      "associative_recall": {
+        "average_lease_length": 14.282798833819243,
+        "lease_state_norm": 6.335256847750299,
+        "median_lease_length": 11.0,
+        "same_module_continuation_probability": 0.9416909620991254,
+        "state_change_per_chunk": 1.9958289999057812,
+        "state_reset_count": 40,
+        "switches_per_chunk": 0.05830903790087463,
+        "switches_per_request": 1.0
+      },
+      "compression": {
+        "average_lease_length": 5.296296296296297,
+        "lease_state_norm": 6.4098946930449685,
+        "median_lease_length": 5.0,
+        "same_module_continuation_probability": 0.8765432098765432,
+        "state_change_per_chunk": 2.6744742382455757,
+        "state_reset_count": 40,
+        "switches_per_chunk": 0.12345679012345678,
+        "switches_per_request": 1.0
+      },
+      "fuzzy_recall": {
+        "average_lease_length": 7.408163265306122,
+        "lease_state_norm": 6.366850854912583,
+        "median_lease_length": 7.0,
+        "same_module_continuation_probability": 0.9183673469387755,
+        "state_change_per_chunk": 2.1784797048082156,
+        "state_reset_count": 40,
+        "switches_per_chunk": 0.08163265306122448,
+        "switches_per_request": 1.0
+      },
+      "language": {
+        "average_lease_length": 4.993939393939394,
+        "lease_state_norm": 6.443045093073989,
+        "median_lease_length": 5.0,
+        "same_module_continuation_probability": 0.8787878787878788,
+        "state_change_per_chunk": 2.705598470658967,
+        "state_reset_count": 40,
+        "switches_per_chunk": 0.12121212121212122,
+        "switches_per_request": 1.0
+      },
+      "program_execution": {
+        "average_lease_length": 2.5,
+        "lease_state_norm": 6.524474191665649,
+        "median_lease_length": 2.5,
+        "same_module_continuation_probability": 0.75,
+        "state_change_per_chunk": 3.3490995466709137,
+        "state_reset_count": 40,
+        "switches_per_chunk": 0.25,
+        "switches_per_request": 1.0
+      },
+      "selective_copying": {
+        "average_lease_length": 7.645833333333333,
+        "lease_state_norm": 6.427089847544188,
+        "median_lease_length": 6.0,
+        "same_module_continuation_probability": 0.8958333333333334,
+        "state_change_per_chunk": 2.472245714356822,
+        "state_reset_count": 40,
+        "switches_per_chunk": 0.10416666666666667,
+        "switches_per_request": 1.0
+      },
+      "stateful_action": {
+        "average_lease_length": 3.298076923076923,
+        "lease_state_norm": 6.47715883071606,
+        "median_lease_length": 3.0,
+        "same_module_continuation_probability": 0.8076923076923077,
+        "state_change_per_chunk": 3.3164625603419084,
+        "state_reset_count": 40,
+        "switches_per_chunk": 0.19230769230769232,
+        "switches_per_request": 1.0
+      },
+      "symbolic": {
+        "average_lease_length": 2.1707317073170733,
+        "lease_state_norm": 6.528303320814923,
+        "median_lease_length": 2.0,
+        "same_module_continuation_probability": 0.5121951219512195,
+        "state_change_per_chunk": 2.2483846676058885,
+        "state_reset_count": 40,
+        "switches_per_chunk": 0.4878048780487805,
+        "switches_per_request": 1.0
+      },
+      "working_memory": {
+        "average_lease_length": 4.543103448275862,
+        "lease_state_norm": 6.35774054609496,
+        "median_lease_length": 4.0,
+        "same_module_continuation_probability": 0.8275862068965517,
+        "state_change_per_chunk": 2.9893771882714897,
+        "state_reset_count": 40,
+        "switches_per_chunk": 0.1724137931034483,
+        "switches_per_request": 1.0
+      }
+    },
+    "overall": {
+      "average_lease_length": 7.4360348292029474,
+      "lease_state_norm": 6.409903004923697,
+      "median_lease_length": 5.0,
+      "same_module_continuation_probability": 0.8660415271265908,
+      "state_change_per_chunk": 2.5397032398074044,
+      "state_reset_count": 400,
+      "switches_per_chunk": 0.13395847287340926,
+      "switches_per_request": 1.0
+    }
+  },
+  "manifest": {
+    "checkpoint": "checkpoints/capability-smoke/capability-smoke-latest.pt",
+    "code_version": "64a1c04dc6470ae1dbac65086e928d8c0c6a2afe",
+    "device": "cuda",
+    "generator_version": "rayvan-capability-v2",
+    "model_config": {
+      "active_top_k": null,
+      "architecture_stage": "n1_chunked",
+      "attention_heads": 4,
+      "balance_bias_limit": 0.25,
+      "balance_bias_lr": 0.01,
+      "balance_target_utilization": null,
+      "balance_warmup_chunks": 0,
+      "chunk_size": 16,
+      "delta_backend": "parallel_delta",
+      "delta_ffn_dim": 128,
+      "delta_heads": 4,
+      "delta_internal_dim": 64,
+      "integrator_heads": 4,
+      "integrator_type": "proposal_attention",
+      "latent_dim": 64,
+      "loss_free_balance_enabled": true,
+      "max_sequence_length": 1024,
+      "minimum_lease_chunks": 0,
+      "module_families": [
+        "gpt",
+        "ssm",
+        "recurrent",
+        "delta"
+      ],
+      "module_hidden_dim": 128,
+      "modules_per_cycle": 2,
+      "num_cycles": 2,
+      "num_modules": 4,
+      "persistence_bonus": 0.1,
+      "recurrent_backend": "gru",
+      "recurrent_dim": 64,
+      "recurrent_precision": "fp16",
+      "request_pool_size": 4,
+      "router_descriptor_dim": 64,
+      "router_type": "module_aware",
+      "shared_core_enabled": true,
+      "shared_core_hidden_dim": null,
+      "shared_state_slots": 4,
+      "ssm_backend": "parallel_scan",
+      "state_space_dim": 96,
+      "state_space_kernel_size": 4,
+      "switch_cost": 0.05,
+      "tie_embeddings": false,
+      "vocab_size": 100
+    },
+    "precision": "bf16",
+    "python": "3.12.11",
+    "seed": 42,
+    "suite_config": {
+      "ablation_examples_per_capability": 2,
+      "examples_per_capability": 20,
+      "held_out_combinations": [
+        [
+          "associative_recall",
+          "json"
+        ],
+        [
+          "working_memory",
+          "symbolic"
+        ]
+      ],
+      "held_out_only": false,
+      "task_mixture": {
+        "arithmetic": 0.1,
+        "associative_recall": 0.15,
+        "compression": 0.07,
+        "fuzzy_recall": 0.1,
+        "language": 0.2,
+        "program_execution": 0.07,
+        "selective_copying": 0.08,
+        "stateful_action": 0.05,
+        "symbolic": 0.08,
+        "working_memory": 0.1
+      }
+    },
+    "torch": "2.8.0+cu129",
+    "training_config": {
+      "batch_size": 4,
+      "checkpoint_directory": "checkpoints/capability-smoke",
+      "checkpoint_prefix": "capability-smoke",
+      "device": "cuda",
+      "evaluation_batches": 4,
+      "evaluation_interval": 49,
+      "gradient_accumulation_steps": 1,
+      "gradient_clip_norm": 1.0,
+      "learning_rate": 0.0003,
+      "precision": "fp32",
+      "resume_from": null,
+      "router_balance_coefficient": 0.01,
+      "router_balance_entropy_floor": 0.75,
+      "seed": 42,
+      "sequence_length": 256,
+      "steps": null,
+      "train_tokens": 50000,
+      "weight_decay": 0.01
+    }
+  },
+  "module_diagnostics": {
+    "modules": [
+      {
+        "family": "gpt",
+        "gradient_norm": 0.0,
+        "module": 0,
+        "parameter_norm": 20.43968960874516,
+        "update_norm": null
+      },
+      {
+        "family": "ssm",
+        "gradient_norm": 0.0,
+        "module": 1,
+        "parameter_norm": 18.223139317343293,
+        "update_norm": null
+      },
+      {
+        "family": "recurrent",
+        "gradient_norm": 0.0,
+        "module": 2,
+        "parameter_norm": 17.440078999904852,
+        "update_norm": null
+      },
+      {
+        "family": "delta",
+        "gradient_norm": 0.0,
+        "module": 3,
+        "parameter_norm": 19.73848433448364,
+        "update_norm": null
+      }
+    ],
+    "proposal_norms_by_capability": {
+      "arithmetic": {
+        "gpt": 4.632851484387252,
+        "ssm": 1.925535165830862
+      },
+      "associative_recall": {
+        "gpt": 487567050925391.0,
+        "ssm": 459650094049616.6
+      },
+      "compression": {
+        "gpt": 5.483974543198134,
+        "ssm": 2.646618402942555
+      },
+      "fuzzy_recall": {
+        "gpt": 10014.44370099636,
+        "ssm": 13635.62066678961
+      },
+      "language": {
+        "gpt": 5.571114238842971,
+        "ssm": 2.7277661540062796
+      },
+      "program_execution": {
+        "gpt": 4.839268883963594,
+        "ssm": 2.0209875421814467
+      },
+      "selective_copying": {
+        "gpt": 12596302219338.23,
+        "ssm": 12474673225884.11
+      },
+      "stateful_action": {
+        "gpt": 4.950011483018414,
+        "ssm": 2.1370665842162393
+      },
+      "symbolic": {
+        "gpt": 4.45482338598031,
+        "ssm": 1.9230272770337677
+      },
+      "working_memory": {
+        "gpt": 4.8575364082065295,
+        "ssm": 2.2111001717907066
+      }
+    },
+    "sampling_policy": "Collected only on explicit evaluation forwards; no per-step synchronization.",
+    "stateful_diagnostics": {
+      "by_capability": {
+        "arithmetic": {
+          "average_lease_length": 1.7555555555555555,
+          "lease_state_norm": 6.5654557545979815,
+          "median_lease_length": 2.0,
+          "same_module_continuation_probability": 0.5555555555555556,
+          "state_change_per_chunk": 2.8150505966610377,
+          "state_reset_count": 40,
+          "switches_per_chunk": 0.4444444444444444,
+          "switches_per_request": 1.0
+        },
+        "associative_recall": {
+          "average_lease_length": 14.282798833819243,
+          "lease_state_norm": 6.335256847750299,
+          "median_lease_length": 11.0,
+          "same_module_continuation_probability": 0.9416909620991254,
+          "state_change_per_chunk": 1.9958289999057812,
+          "state_reset_count": 40,
+          "switches_per_chunk": 0.05830903790087463,
+          "switches_per_request": 1.0
+        },
+        "compression": {
+          "average_lease_length": 5.296296296296297,
+          "lease_state_norm": 6.4098946930449685,
+          "median_lease_length": 5.0,
+          "same_module_continuation_probability": 0.8765432098765432,
+          "state_change_per_chunk": 2.6744742382455757,
+          "state_reset_count": 40,
+          "switches_per_chunk": 0.12345679012345678,
+          "switches_per_request": 1.0
+        },
+        "fuzzy_recall": {
+          "average_lease_length": 7.408163265306122,
+          "lease_state_norm": 6.366850854912583,
+          "median_lease_length": 7.0,
+          "same_module_continuation_probability": 0.9183673469387755,
+          "state_change_per_chunk": 2.1784797048082156,
+          "state_reset_count": 40,
+          "switches_per_chunk": 0.08163265306122448,
+          "switches_per_request": 1.0
+        },
+        "language": {
+          "average_lease_length": 4.993939393939394,
+          "lease_state_norm": 6.443045093073989,
+          "median_lease_length": 5.0,
+          "same_module_continuation_probability": 0.8787878787878788,
+          "state_change_per_chunk": 2.705598470658967,
+          "state_reset_count": 40,
+          "switches_per_chunk": 0.12121212121212122,
+          "switches_per_request": 1.0
+        },
+        "program_execution": {
+          "average_lease_length": 2.5,
+          "lease_state_norm": 6.524474191665649,
+          "median_lease_length": 2.5,
+          "same_module_continuation_probability": 0.75,
+          "state_change_per_chunk": 3.3490995466709137,
+          "state_reset_count": 40,
+          "switches_per_chunk": 0.25,
+          "switches_per_request": 1.0
+        },
+        "selective_copying": {
+          "average_lease_length": 7.645833333333333,
+          "lease_state_norm": 6.427089847544188,
+          "median_lease_length": 6.0,
+          "same_module_continuation_probability": 0.8958333333333334,
+          "state_change_per_chunk": 2.472245714356822,
+          "state_reset_count": 40,
+          "switches_per_chunk": 0.10416666666666667,
+          "switches_per_request": 1.0
+        },
+        "stateful_action": {
+          "average_lease_length": 3.298076923076923,
+          "lease_state_norm": 6.47715883071606,
+          "median_lease_length": 3.0,
+          "same_module_continuation_probability": 0.8076923076923077,
+          "state_change_per_chunk": 3.3164625603419084,
+          "state_reset_count": 40,
+          "switches_per_chunk": 0.19230769230769232,
+          "switches_per_request": 1.0
+        },
+        "symbolic": {
+          "average_lease_length": 2.1707317073170733,
+          "lease_state_norm": 6.528303320814923,
+          "median_lease_length": 2.0,
+          "same_module_continuation_probability": 0.5121951219512195,
+          "state_change_per_chunk": 2.2483846676058885,
+          "state_reset_count": 40,
+          "switches_per_chunk": 0.4878048780487805,
+          "switches_per_request": 1.0
+        },
+        "working_memory": {
+          "average_lease_length": 4.543103448275862,
+          "lease_state_norm": 6.35774054609496,
+          "median_lease_length": 4.0,
+          "same_module_continuation_probability": 0.8275862068965517,
+          "state_change_per_chunk": 2.9893771882714897,
+          "state_reset_count": 40,
+          "switches_per_chunk": 0.1724137931034483,
+          "switches_per_request": 1.0
+        }
+      },
+      "overall": {
+        "average_lease_length": 7.4360348292029474,
+        "lease_state_norm": 6.409903004923697,
+        "median_lease_length": 5.0,
+        "same_module_continuation_probability": 0.8660415271265908,
+        "state_change_per_chunk": 2.5397032398074044,
+        "state_reset_count": 400,
+        "switches_per_chunk": 0.13395847287340926,
+        "switches_per_request": 1.0
+      }
+    }
+  },
+  "nexus_analysis": {
+    "average_unique_modules_per_request": 2.0,
+    "balancing_bias_by_capability": {
+      "arithmetic": [
+        0.0,
+        0.03999999910593033,
+        -3.725290298461914e-09,
+        -0.03999999910593033
+      ],
+      "associative_recall": [
+        0.0,
+        0.03999999910593033,
+        -3.725290298461914e-09,
+        -0.03999999910593033
+      ],
+      "compression": [
+        0.0,
+        0.03999999910593033,
+        -3.725290298461914e-09,
+        -0.03999999910593033
+      ],
+      "fuzzy_recall": [
+        0.0,
+        0.03999999910593033,
+        -3.725290298461914e-09,
+        -0.03999999910593033
+      ],
+      "language": [
+        0.0,
+        0.03999999910593033,
+        -3.725290298461914e-09,
+        -0.03999999910593033
+      ],
+      "program_execution": [
+        0.0,
+        0.03999999910593033,
+        -3.725290298461914e-09,
+        -0.03999999910593033
+      ],
+      "selective_copying": [
+        0.0,
+        0.03999999910593033,
+        -3.725290298461914e-09,
+        -0.03999999910593033
+      ],
+      "stateful_action": [
+        0.0,
+        0.03999999910593033,
+        -3.725290298461914e-09,
+        -0.03999999910593033
+      ],
+      "symbolic": [
+        0.0,
+        0.03999999910593033,
+        -3.725290298461914e-09,
+        -0.03999999910593033
+      ],
+      "working_memory": [
+        0.0,
+        0.03999999910593033,
+        -3.725290298461914e-09,
+        -0.03999999910593033
+      ]
+    },
+    "module_frequency_by_capability": {
+      "arithmetic": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "associative_recall": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "compression": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "fuzzy_recall": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "language": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "program_execution": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "selective_copying": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "stateful_action": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "symbolic": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "working_memory": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      }
+    },
+    "module_frequency_by_surface": {
+      "code": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "english": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "json": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "structured": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "symbolic": {
+        "0": 0.5,
+        "1": 0.5,
+        "2": 0.0,
+        "3": 0.0
+      }
+    },
+    "population_fraction_touched_by_capability": {
+      "arithmetic": 0.5,
+      "associative_recall": 0.5,
+      "compression": 0.5,
+      "fuzzy_recall": 0.5,
+      "language": 0.5,
+      "program_execution": 0.5,
+      "selective_copying": 0.5,
+      "stateful_action": 0.5,
+      "symbolic": 0.5,
+      "working_memory": 0.5
+    },
+    "request_pool_by_capability": {
+      "arithmetic": {
+        "0": 0.25,
+        "1": 0.25,
+        "2": 0.25,
+        "3": 0.25
+      },
+      "associative_recall": {
+        "0": 0.25,
+        "1": 0.25,
+        "2": 0.25,
+        "3": 0.25
+      },
+      "compression": {
+        "0": 0.25,
+        "1": 0.25,
+        "2": 0.25,
+        "3": 0.25
+      },
+      "fuzzy_recall": {
+        "0": 0.25,
+        "1": 0.25,
+        "2": 0.25,
+        "3": 0.25
+      },
+      "language": {
+        "0": 0.25,
+        "1": 0.25,
+        "2": 0.25,
+        "3": 0.25
+      },
+      "program_execution": {
+        "0": 0.25,
+        "1": 0.25,
+        "2": 0.25,
+        "3": 0.25
+      },
+      "selective_copying": {
+        "0": 0.25,
+        "1": 0.25,
+        "2": 0.25,
+        "3": 0.25
+      },
+      "stateful_action": {
+        "0": 0.25,
+        "1": 0.25,
+        "2": 0.25,
+        "3": 0.25
+      },
+      "symbolic": {
+        "0": 0.25,
+        "1": 0.25,
+        "2": 0.25,
+        "3": 0.25
+      },
+      "working_memory": {
+        "0": 0.25,
+        "1": 0.25,
+        "2": 0.25,
+        "3": 0.25
+      }
+    },
+    "router_scores_by_capability": {
+      "arithmetic": {
+        "0": 0.03962182362874349,
+        "1": 0.04177534385894736,
+        "2": -0.08356333741607766,
+        "3": -0.046192063931375746
+      },
+      "associative_recall": {
+        "0": 0.0877071092274245,
+        "1": 0.11443419713765568,
+        "2": -0.10189120468836513,
+        "3": -0.07008536404413247
+      },
+      "compression": {
+        "0": 0.07884931895093575,
+        "1": 0.11381289156983934,
+        "2": -0.09847348969228611,
+        "3": -0.06629499818544027
+      },
+      "fuzzy_recall": {
+        "0": 0.09274528641884307,
+        "1": 0.12316711583062304,
+        "2": -0.1091603905217099,
+        "3": -0.06827777269815569
+      },
+      "language": {
+        "0": 0.09042005718263806,
+        "1": 0.11346119003394284,
+        "2": -0.0930360008180742,
+        "3": -0.06228022262742765
+      },
+      "program_execution": {
+        "0": 0.06782478332519531,
+        "1": 0.07994494467973709,
+        "2": -0.09303589358925819,
+        "3": -0.03032031089067459
+      },
+      "selective_copying": {
+        "0": 0.09092350407053056,
+        "1": 0.10503915694248127,
+        "2": -0.11086655629932982,
+        "3": -0.060274462671250216
+      },
+      "stateful_action": {
+        "0": 0.07943056889942715,
+        "1": 0.09019508103500047,
+        "2": -0.10407041166362072,
+        "3": -0.05820450789369051
+      },
+      "symbolic": {
+        "0": 0.024845091501871745,
+        "1": 0.02938655454975863,
+        "2": -0.08797505947295577,
+        "3": -0.03270356097879509
+      },
+      "working_memory": {
+        "0": 0.07152219572452584,
+        "1": 0.08282320183781103,
+        "2": -0.1003027685215323,
+        "3": -0.05988324322413874
+      }
+    },
+    "routing_entropy_by_capability": {
+      "arithmetic": 0.6931196235120296,
+      "associative_recall": 0.6930150078443293,
+      "compression": 0.6929332974912199,
+      "fuzzy_recall": 0.6929940092679621,
+      "language": 0.693051999104122,
+      "program_execution": 0.6931001357734203,
+      "selective_copying": 0.6930603233316995,
+      "stateful_action": 0.6931085373780557,
+      "symbolic": 0.6931171708447593,
+      "working_memory": 0.6930980568173568
+    },
+    "routing_frequency_by_capability": {
+      "arithmetic": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "associative_recall": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "compression": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "fuzzy_recall": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "language": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "program_execution": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "selective_copying": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "stateful_action": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "symbolic": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "working_memory": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      }
+    },
+    "routing_frequency_by_surface": {
+      "code": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "english": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "json": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "structured": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      },
+      "symbolic": {
+        "delta": 0.0,
+        "gpt": 0.5,
+        "recurrent": 0.0,
+        "ssm": 0.5
+      }
+    }
+  },
+  "notable_examples": [
+    {
+      "causal_effects": [
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "0",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "1",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "2",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "3",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "gpt",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "ssm",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "recurrent",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "delta",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "gpt",
+          "token_accuracy_delta_points": -3.333333134651184
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "ssm",
+          "token_accuracy_delta_points": -3.333333134651184
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "recurrent",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "delta",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "force_family_alternative",
+          "target": "ssm",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "force_family_alternative",
+          "target": "recurrent",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "force_family_alternative",
+          "target": "delta",
+          "token_accuracy_delta_points": 0.0
+        }
+      ],
+      "integrator_acceptance": {
+        "0": 0.46024836639040395,
+        "1": 0.5397516359624109
+      },
+      "metadata": {
+        "capability": "language",
+        "difficulty": 1,
+        "distractor_count": 0,
+        "generator_seed": 2000000053,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "continuation",
+        "sequence_length": 61,
+        "split": "evaluation",
+        "surface_format": "english"
+      },
+      "prediction": "te  e  e       e o            ",
+      "prompt": "the moon is bright tonight. we ",
+      "reason": "causally important module intervention",
+      "routing": {
+        "gpt": 4,
+        "ssm": 4
+      },
+      "target": "watch the stars from the hill."
+    },
+    {
+      "causal_effects": [
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "0",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "1",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "2",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "3",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "gpt",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "ssm",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "recurrent",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "delta",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "gpt",
+          "token_accuracy_delta_points": -3.57142835855484
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "ssm",
+          "token_accuracy_delta_points": -1.7857134342193604
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "recurrent",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "delta",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "force_family_alternative",
+          "target": "ssm",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "force_family_alternative",
+          "target": "recurrent",
+          "token_accuracy_delta_points": -1.7857134342193604
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "force_family_alternative",
+          "target": "delta",
+          "token_accuracy_delta_points": 0.0
+        }
+      ],
+      "integrator_acceptance": {
+        "0": 0.4407990046616258,
+        "1": 0.55920099759924
+      },
+      "metadata": {
+        "capability": "language",
+        "difficulty": 2,
+        "distractor_count": 0,
+        "generator_seed": 2000104782,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "continuation",
+        "sequence_length": 114,
+        "split": "evaluation",
+        "surface_format": "english"
+      },
+      "prediction": "                                                        ",
+      "prompt": "the little boat returns before sunset. we watch the stars ",
+      "reason": "causally important module intervention",
+      "routing": {
+        "gpt": 8,
+        "ssm": 8
+      },
+      "target": "from the hill. a quiet river flows under the old bridge."
+    },
+    {
+      "causal_effects": [
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "0",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "1",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "2",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_module",
+          "target": "3",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "gpt",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "ssm",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "recurrent",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "disable_family",
+          "target": "delta",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "gpt",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "ssm",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "recurrent",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "zero_family_proposal",
+          "target": "delta",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "force_family_alternative",
+          "target": "ssm",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "force_family_alternative",
+          "target": "recurrent",
+          "token_accuracy_delta_points": 0.0
+        },
+        {
+          "exact_delta_points": 0.0,
+          "intervention": "force_family_alternative",
+          "target": "delta",
+          "token_accuracy_delta_points": 0.0
+        }
+      ],
+      "integrator_acceptance": {
+        "0": 0.4587449993078525,
+        "1": 0.5412550026025528
+      },
+      "metadata": {
+        "capability": "selective_copying",
+        "difficulty": 2,
+        "distractor_count": 7,
+        "generator_seed": 316187134803,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "selective_filter",
+        "sequence_length": 63,
+        "split": "evaluation",
+        "surface_format": "structured"
+      },
+      "prediction": "        ",
+      "prompt": "0:E0 0:L4 0:G9 0:D7 1:T2 0:S8 1:U8 0:N2 0:F5 1:K9\nones=",
+      "reason": "Nexus and Integrator disagree",
+      "routing": {
+        "gpt": 4,
+        "ssm": 4
+      },
+      "target": "T2 U8 K9"
+    },
+    {
+      "causal_effects": [],
+      "integrator_acceptance": {
+        "0": 0.412657596457463,
+        "1": 0.5873424028261349
+      },
+      "metadata": {
+        "capability": "selective_copying",
+        "difficulty": 4,
+        "distractor_count": 11,
+        "generator_seed": 316187344261,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "selective_filter",
+        "sequence_length": 165,
+        "split": "evaluation",
+        "surface_format": "code"
+      },
+      "prediction": "              ",
+      "prompt": "pass(T1);pass(Q1);pass(B4);pass(U6);pass(H5);emit(U1);pass(T0);pass(S1);emit(D1);emit(P5);emit(J3);pass(P9);pass(S8);pass(M7);emit(A2);pass(D7)\noutput=",
+      "reason": "Nexus and Integrator disagree",
+      "routing": {
+        "gpt": 11,
+        "ssm": 11
+      },
+      "target": "U1 D1 P5 J3 A2"
+    },
+    {
+      "causal_effects": [],
+      "integrator_acceptance": {
+        "0": 0.45178613513708116,
+        "1": 0.548213862478733
+      },
+      "metadata": {
+        "capability": "selective_copying",
+        "difficulty": 3,
+        "distractor_count": 9,
+        "generator_seed": 316187658448,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "selective_filter",
+        "sequence_length": 81,
+        "split": "evaluation",
+        "surface_format": "structured"
+      },
+      "prediction": "           ",
+      "prompt": "0:C2 0:X6 0:M6 1:L4 0:V1 0:V2 1:T2 0:G4 1:P5 0:P1 1:E4 0:J4 0:L9\nones=",
+      "reason": "Nexus and Integrator disagree",
+      "routing": {
+        "gpt": 5,
+        "ssm": 5
+      },
+      "target": "L4 T2 P5 E4"
+    },
+    {
+      "causal_effects": [],
+      "integrator_acceptance": {
+        "0": 0.4379494214711124,
+        "1": 0.5620505789371386
+      },
+      "metadata": {
+        "capability": "selective_copying",
+        "difficulty": 2,
+        "distractor_count": 7,
+        "generator_seed": 316187972635,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "selective_filter",
+        "sequence_length": 58,
+        "split": "evaluation",
+        "surface_format": "symbolic"
+      },
+      "prediction": "        ",
+      "prompt": "-Z3 -L2 -I1 +S6 +Z9 -K4 -F5 +X3 -P9 -Y2\n+sequence=",
+      "reason": "Nexus and Integrator disagree",
+      "routing": {
+        "gpt": 4,
+        "ssm": 4
+      },
+      "target": "S6 Z9 X3"
+    },
+    {
+      "causal_effects": [],
+      "integrator_acceptance": {
+        "0": 0.40932080178033736,
+        "1": 0.590679202619053
+      },
+      "metadata": {
+        "capability": "selective_copying",
+        "difficulty": 3,
+        "distractor_count": 9,
+        "generator_seed": 316188077364,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "selective_filter",
+        "sequence_length": 167,
+        "split": "evaluation",
+        "surface_format": "english"
+      },
+      "prediction": "           ",
+      "prompt": "skip X9.\nremember U9.\nremember U9.\nskip W9.\nremember X8.\nskip D8.\nskip E0.\nskip D8.\nskip J1.\nskip X2.\nskip M2.\nskip A0.\nremember S2.\nList remembered items: ",
+      "reason": "Nexus and Integrator disagree",
+      "routing": {
+        "gpt": 11,
+        "ssm": 11
+      },
+      "target": "U9 U9 X8 S2"
+    },
+    {
+      "causal_effects": [],
+      "integrator_acceptance": {
+        "0": 0.45280928413073224,
+        "1": 0.5471907094830558
+      },
+      "metadata": {
+        "capability": "selective_copying",
+        "difficulty": 4,
+        "distractor_count": 11,
+        "generator_seed": 316188182093,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "selective_filter",
+        "sequence_length": 99,
+        "split": "evaluation",
+        "surface_format": "structured"
+      },
+      "prediction": "              ",
+      "prompt": "0:Q3 0:J1 1:E5 1:D0 1:Z5 0:L8 0:H5 0:A0 1:Y0 0:T0 0:V6 0:M4 0:X8 0:O1 1:F4 0:S9\nones=",
+      "reason": "Nexus and Integrator disagree",
+      "routing": {
+        "gpt": 7,
+        "ssm": 7
+      },
+      "target": "E5 D0 Z5 Y0 F4"
+    },
+    {
+      "causal_effects": [],
+      "integrator_acceptance": {
+        "0": 0.4240735925056718,
+        "1": 0.5759264081716537
+      },
+      "metadata": {
+        "capability": "selective_copying",
+        "difficulty": 2,
+        "distractor_count": 7,
+        "generator_seed": 316188391551,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "selective_filter",
+        "sequence_length": 105,
+        "split": "evaluation",
+        "surface_format": "code"
+      },
+      "prediction": "        ",
+      "prompt": "pass(S8);pass(M9);pass(J3);pass(G9);pass(S2);pass(M8);pass(X0);emit(L1);emit(S6);emit(C8)\noutput=",
+      "reason": "Nexus and Integrator disagree",
+      "routing": {
+        "gpt": 7,
+        "ssm": 7
+      },
+      "target": "L1 S6 C8"
+    },
+    {
+      "causal_effects": [],
+      "integrator_acceptance": {
+        "0": 0.4280883294084798,
+        "1": 0.5719116686478906
+      },
+      "metadata": {
+        "capability": "selective_copying",
+        "difficulty": 3,
+        "distractor_count": 9,
+        "generator_seed": 316188496280,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "selective_filter",
+        "sequence_length": 73,
+        "split": "evaluation",
+        "surface_format": "symbolic"
+      },
+      "prediction": "           ",
+      "prompt": "-N9 -W7 +Y7 -O7 -B4 -V5 -D2 +Z9 -C8 -F2 -V3 +V2 +Z4\n+sequence=",
+      "reason": "Nexus and Integrator disagree",
+      "routing": {
+        "gpt": 5,
+        "ssm": 5
+      },
+      "target": "Y7 Z9 V2 Z4"
+    },
+    {
+      "causal_effects": [],
+      "integrator_acceptance": {
+        "0": 0.40360519455538857,
+        "1": 0.596394806390717
+      },
+      "metadata": {
+        "capability": "selective_copying",
+        "difficulty": 4,
+        "distractor_count": 11,
+        "generator_seed": 316188601009,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "selective_filter",
+        "sequence_length": 201,
+        "split": "evaluation",
+        "surface_format": "english"
+      },
+      "prediction": "              ",
+      "prompt": "skip A6.\nskip E6.\nremember C6.\nskip X6.\nskip A7.\nremember I3.\nremember J1.\nskip W0.\nskip B1.\nremember G4.\nskip W7.\nskip Y2.\nremember O8.\nskip J0.\nskip A1.\nskip N5.\nList remembered items: ",
+      "reason": "Nexus and Integrator disagree",
+      "routing": {
+        "gpt": 13,
+        "ssm": 13
+      },
+      "target": "C6 I3 J1 G4 O8"
+    },
+    {
+      "causal_effects": [],
+      "integrator_acceptance": {
+        "0": 0.4681548407035215,
+        "1": 0.5318451598286629
+      },
+      "metadata": {
+        "capability": "selective_copying",
+        "difficulty": 1,
+        "distractor_count": 5,
+        "generator_seed": 316188705738,
+        "generator_version": "rayvan-capability-v2",
+        "held_out_combination": false,
+        "operation": "selective_filter",
+        "sequence_length": 45,
+        "split": "evaluation",
+        "surface_format": "structured"
+      },
+      "prediction": "     ",
+      "prompt": "0:E9 0:C3 0:R0 1:C9 1:W3 0:U2 0:M0\nones=",
+      "reason": "Nexus and Integrator disagree",
+      "routing": {
+        "gpt": 3,
+        "ssm": 3
+      },
+      "target": "C9 W3"
+    }
+  ],
+  "overall_metrics": {
+    "examples": 200,
+    "language_perplexity": 42.50997392562349,
+    "overall_exact_accuracy": 0.0,
+    "overall_loss": 4.2789871383825115,
+    "overall_token_accuracy": 0.04889958444982767,
+    "skipped": 0
+  },
+  "router_collapse": {
+    "by_capability": {
+      "arithmetic": {
+        "average_unique_modules_per_request": 2.0,
+        "chunk_routing_concentration": 0.5,
+        "distribution": [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "effective_module_count": 2.0,
+        "minimum_utilization": 0.0,
+        "normalized_entropy": 0.5,
+        "observations": 90,
+        "request_pool_concentration": 0.25,
+        "top_1_concentration": 0.5,
+        "top_2_concentration": 1.0,
+        "top_module": 0
+      },
+      "associative_recall": {
+        "average_unique_modules_per_request": 2.0,
+        "chunk_routing_concentration": 0.5,
+        "distribution": [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "effective_module_count": 2.0,
+        "minimum_utilization": 0.0,
+        "normalized_entropy": 0.5,
+        "observations": 686,
+        "request_pool_concentration": 0.25,
+        "top_1_concentration": 0.5,
+        "top_2_concentration": 1.0,
+        "top_module": 0
+      },
+      "compression": {
+        "average_unique_modules_per_request": 2.0,
+        "chunk_routing_concentration": 0.5,
+        "distribution": [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "effective_module_count": 2.0,
+        "minimum_utilization": 0.0,
+        "normalized_entropy": 0.5,
+        "observations": 324,
+        "request_pool_concentration": 0.25,
+        "top_1_concentration": 0.5,
+        "top_2_concentration": 1.0,
+        "top_module": 0
+      },
+      "fuzzy_recall": {
+        "average_unique_modules_per_request": 2.0,
+        "chunk_routing_concentration": 0.5,
+        "distribution": [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "effective_module_count": 2.0,
+        "minimum_utilization": 0.0,
+        "normalized_entropy": 0.5,
+        "observations": 490,
+        "request_pool_concentration": 0.25,
+        "top_1_concentration": 0.5,
+        "top_2_concentration": 1.0,
+        "top_module": 0
+      },
+      "language": {
+        "average_unique_modules_per_request": 2.0,
+        "chunk_routing_concentration": 0.5,
+        "distribution": [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "effective_module_count": 2.0,
+        "minimum_utilization": 0.0,
+        "normalized_entropy": 0.5,
+        "observations": 330,
+        "request_pool_concentration": 0.25,
+        "top_1_concentration": 0.5,
+        "top_2_concentration": 1.0,
+        "top_module": 0
+      },
+      "program_execution": {
+        "average_unique_modules_per_request": 2.0,
+        "chunk_routing_concentration": 0.5,
+        "distribution": [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "effective_module_count": 2.0,
+        "minimum_utilization": 0.0,
+        "normalized_entropy": 0.5,
+        "observations": 160,
+        "request_pool_concentration": 0.25,
+        "top_1_concentration": 0.5,
+        "top_2_concentration": 1.0,
+        "top_module": 0
+      },
+      "selective_copying": {
+        "average_unique_modules_per_request": 2.0,
+        "chunk_routing_concentration": 0.5,
+        "distribution": [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "effective_module_count": 2.0,
+        "minimum_utilization": 0.0,
+        "normalized_entropy": 0.5,
+        "observations": 384,
+        "request_pool_concentration": 0.25,
+        "top_1_concentration": 0.5,
+        "top_2_concentration": 1.0,
+        "top_module": 0
+      },
+      "stateful_action": {
+        "average_unique_modules_per_request": 2.0,
+        "chunk_routing_concentration": 0.5,
+        "distribution": [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "effective_module_count": 2.0,
+        "minimum_utilization": 0.0,
+        "normalized_entropy": 0.5,
+        "observations": 208,
+        "request_pool_concentration": 0.25,
+        "top_1_concentration": 0.5,
+        "top_2_concentration": 1.0,
+        "top_module": 0
+      },
+      "symbolic": {
+        "average_unique_modules_per_request": 2.0,
+        "chunk_routing_concentration": 0.5,
+        "distribution": [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "effective_module_count": 2.0,
+        "minimum_utilization": 0.0,
+        "normalized_entropy": 0.5,
+        "observations": 82,
+        "request_pool_concentration": 0.25,
+        "top_1_concentration": 0.5,
+        "top_2_concentration": 1.0,
+        "top_module": 0
+      },
+      "working_memory": {
+        "average_unique_modules_per_request": 2.0,
+        "chunk_routing_concentration": 0.5,
+        "distribution": [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "effective_module_count": 2.0,
+        "minimum_utilization": 0.0,
+        "normalized_entropy": 0.5,
+        "observations": 232,
+        "request_pool_concentration": 0.25,
+        "top_1_concentration": 0.5,
+        "top_2_concentration": 1.0,
+        "top_module": 0
+      }
+    },
+    "overall": {
+      "average_unique_modules_per_request": 2.0,
+      "chunk_routing_concentration": 0.5,
+      "distribution": [
+        0.5,
+        0.5,
+        0.0,
+        0.0
+      ],
+      "effective_module_count": 2.0,
+      "minimum_utilization": 0.0,
+      "normalized_entropy": 0.5,
+      "observations": 2986,
+      "request_pool_concentration": 0.25,
+      "top_1_concentration": 0.5,
+      "top_2_concentration": 1.0,
+      "top_module": 0
+    },
+    "rule": "Capability concentration alone is specialization; global concentration plus the same dominant module across capabilities is collapse.",
+    "same_dominant_module_fraction": 1.0,
+    "status": "no_global_collapse"
+  },
+  "runtime": {
+    "active_compute": {
+      "active_flops": null,
+      "approximate_active_parameters_per_cycle": 311322,
+      "approximate_parameter_uses_per_forward": 311322,
+      "note": "FLOP estimates are unavailable for heterogeneous chunk backends"
+    },
+    "estimated_100_examples_per_capability_seconds": 76.89860249985941,
+    "evaluated_tokens": 22307,
+    "parameter_count": 418638,
+    "peak_vram_bytes": 23898624,
+    "smoke_estimate": true,
+    "tokens_per_second": 1450.4164753865834,
+    "wall_time_seconds": 15.379720499971882
+  },
+  "schema_version": 2,
+  "sparse_execution": {
+    "by_capability": {
+      "arithmetic": {
+        "active_flops": null,
+        "actual_modules_executed_per_chunk": 2.0,
+        "approximate_active_parameter_uses_per_forward": 311322,
+        "average_module_population_touched_per_request": 0.5,
+        "chunk_module_computations_executed": 90,
+        "chunk_module_computations_requested": 90,
+        "discarded_module_computations": 0,
+        "large_discrepancy": false,
+        "logical_top_k": 2,
+        "requested_executed_discrepancy_fraction": 0.0,
+        "route_weighted_module_parameters_per_selected_slot": 52880.0
+      },
+      "associative_recall": {
+        "active_flops": null,
+        "actual_modules_executed_per_chunk": 2.0,
+        "approximate_active_parameter_uses_per_forward": 311322,
+        "average_module_population_touched_per_request": 0.5,
+        "chunk_module_computations_executed": 686,
+        "chunk_module_computations_requested": 686,
+        "discarded_module_computations": 0,
+        "large_discrepancy": false,
+        "logical_top_k": 2,
+        "requested_executed_discrepancy_fraction": 0.0,
+        "route_weighted_module_parameters_per_selected_slot": 52880.0
+      },
+      "compression": {
+        "active_flops": null,
+        "actual_modules_executed_per_chunk": 2.0,
+        "approximate_active_parameter_uses_per_forward": 311322,
+        "average_module_population_touched_per_request": 0.5,
+        "chunk_module_computations_executed": 324,
+        "chunk_module_computations_requested": 324,
+        "discarded_module_computations": 0,
+        "large_discrepancy": false,
+        "logical_top_k": 2,
+        "requested_executed_discrepancy_fraction": 0.0,
+        "route_weighted_module_parameters_per_selected_slot": 52880.0
+      },
+      "fuzzy_recall": {
+        "active_flops": null,
+        "actual_modules_executed_per_chunk": 2.0,
+        "approximate_active_parameter_uses_per_forward": 311322,
+        "average_module_population_touched_per_request": 0.5,
+        "chunk_module_computations_executed": 490,
+        "chunk_module_computations_requested": 490,
+        "discarded_module_computations": 0,
+        "large_discrepancy": false,
+        "logical_top_k": 2,
+        "requested_executed_discrepancy_fraction": 0.0,
+        "route_weighted_module_parameters_per_selected_slot": 52880.0
+      },
+      "language": {
+        "active_flops": null,
+        "actual_modules_executed_per_chunk": 2.0,
+        "approximate_active_parameter_uses_per_forward": 311322,
+        "average_module_population_touched_per_request": 0.5,
+        "chunk_module_computations_executed": 330,
+        "chunk_module_computations_requested": 330,
+        "discarded_module_computations": 0,
+        "large_discrepancy": false,
+        "logical_top_k": 2,
+        "requested_executed_discrepancy_fraction": 0.0,
+        "route_weighted_module_parameters_per_selected_slot": 52880.0
+      },
+      "program_execution": {
+        "active_flops": null,
+        "actual_modules_executed_per_chunk": 2.0,
+        "approximate_active_parameter_uses_per_forward": 311322,
+        "average_module_population_touched_per_request": 0.5,
+        "chunk_module_computations_executed": 160,
+        "chunk_module_computations_requested": 160,
+        "discarded_module_computations": 0,
+        "large_discrepancy": false,
+        "logical_top_k": 2,
+        "requested_executed_discrepancy_fraction": 0.0,
+        "route_weighted_module_parameters_per_selected_slot": 52880.0
+      },
+      "selective_copying": {
+        "active_flops": null,
+        "actual_modules_executed_per_chunk": 2.0,
+        "approximate_active_parameter_uses_per_forward": 311322,
+        "average_module_population_touched_per_request": 0.5,
+        "chunk_module_computations_executed": 384,
+        "chunk_module_computations_requested": 384,
+        "discarded_module_computations": 0,
+        "large_discrepancy": false,
+        "logical_top_k": 2,
+        "requested_executed_discrepancy_fraction": 0.0,
+        "route_weighted_module_parameters_per_selected_slot": 52880.0
+      },
+      "stateful_action": {
+        "active_flops": null,
+        "actual_modules_executed_per_chunk": 2.0,
+        "approximate_active_parameter_uses_per_forward": 311322,
+        "average_module_population_touched_per_request": 0.5,
+        "chunk_module_computations_executed": 208,
+        "chunk_module_computations_requested": 208,
+        "discarded_module_computations": 0,
+        "large_discrepancy": false,
+        "logical_top_k": 2,
+        "requested_executed_discrepancy_fraction": 0.0,
+        "route_weighted_module_parameters_per_selected_slot": 52880.0
+      },
+      "symbolic": {
+        "active_flops": null,
+        "actual_modules_executed_per_chunk": 2.0,
+        "approximate_active_parameter_uses_per_forward": 311322,
+        "average_module_population_touched_per_request": 0.5,
+        "chunk_module_computations_executed": 82,
+        "chunk_module_computations_requested": 82,
+        "discarded_module_computations": 0,
+        "large_discrepancy": false,
+        "logical_top_k": 2,
+        "requested_executed_discrepancy_fraction": 0.0,
+        "route_weighted_module_parameters_per_selected_slot": 52880.0
+      },
+      "working_memory": {
+        "active_flops": null,
+        "actual_modules_executed_per_chunk": 2.0,
+        "approximate_active_parameter_uses_per_forward": 311322,
+        "average_module_population_touched_per_request": 0.5,
+        "chunk_module_computations_executed": 232,
+        "chunk_module_computations_requested": 232,
+        "discarded_module_computations": 0,
+        "large_discrepancy": false,
+        "logical_top_k": 2,
+        "requested_executed_discrepancy_fraction": 0.0,
+        "route_weighted_module_parameters_per_selected_slot": 52880.0
+      }
+    },
+    "overall": {
+      "active_flops": null,
+      "actual_modules_executed_per_chunk": 2.0,
+      "approximate_active_parameter_uses_per_forward": 311322,
+      "average_module_population_touched_per_request": 0.5,
+      "chunk_module_computations_executed": 2986,
+      "chunk_module_computations_requested": 2986,
+      "discarded_module_computations": 0,
+      "large_discrepancy": false,
+      "logical_top_k": 2,
+      "requested_executed_discrepancy_fraction": 0.0,
+      "route_weighted_module_parameters_per_selected_slot": 52880.0
+    }
+  },
+  "stratified_results": {
+    "difficulty": {
+      "1": {
+        "exact_accuracy": 0.0,
+        "examples": 50,
+        "token_accuracy": 0.047639881074428556
+      },
+      "2": {
+        "exact_accuracy": 0.0,
+        "examples": 50,
+        "token_accuracy": 0.048573459386825564
+      },
+      "3": {
+        "exact_accuracy": 0.0,
+        "examples": 50,
+        "token_accuracy": 0.053117943108081815
+      },
+      "4": {
+        "exact_accuracy": 0.0,
+        "examples": 50,
+        "token_accuracy": 0.04626705422997475
+      }
+    },
+    "distractor_count": {
+      "0": {
+        "exact_accuracy": 0.0,
+        "examples": 120,
+        "token_accuracy": 0.02728904920319716
+      },
+      "high": {
+        "exact_accuracy": 0.0,
+        "examples": 10,
+        "token_accuracy": 0.0
+      },
+      "low": {
+        "exact_accuracy": 0.0,
+        "examples": 15,
+        "token_accuracy": 0.03981481492519379
+      },
+      "medium": {
+        "exact_accuracy": 0.0,
+        "examples": 55,
+        "token_accuracy": 0.10741834112189033
+      }
+    },
+    "sequence_length": {
+      "129-256": {
+        "exact_accuracy": 0.0,
+        "examples": 48,
+        "token_accuracy": 0.09989147819578648
+      },
+      "257-512": {
+        "exact_accuracy": 0.0,
+        "examples": 12,
+        "token_accuracy": 0.028409091134866078
+      },
+      "65-128": {
+        "exact_accuracy": 0.0,
+        "examples": 53,
+        "token_accuracy": 0.06812987729625881
+      },
+      "<=64": {
+        "exact_accuracy": 0.0,
+        "examples": 84,
+        "token_accuracy": 0.01230158745532944
+      },
+      ">512": {
+        "exact_accuracy": 0.0,
+        "examples": 3,
+        "token_accuracy": 0.0
+      }
+    },
+    "surface_format": {
+      "code": {
+        "exact_accuracy": 0.0,
+        "examples": 36,
+        "token_accuracy": 0.03804313039614095
+      },
+      "english": {
+        "exact_accuracy": 0.0,
+        "examples": 56,
+        "token_accuracy": 0.08318084797688893
+      },
+      "json": {
+        "exact_accuracy": 0.0,
+        "examples": 36,
+        "token_accuracy": 0.02196969712773959
+      },
+      "structured": {
+        "exact_accuracy": 0.0,
+        "examples": 36,
+        "token_accuracy": 0.04112955017222299
+      },
+      "symbolic": {
+        "exact_accuracy": 0.0,
+        "examples": 36,
+        "token_accuracy": 0.04112955017222299
+      }
+    }
+  },
+  "surface_vs_computation": {
+    "operation_family_matrix": {
+      "abstract_symbol_rewrite": {
+        "gpt": 21,
+        "ssm": 21
+      },
+      "action_inventory": {
+        "gpt": 30,
+        "ssm": 30
+      },
+      "action_key_value": {
+        "gpt": 20,
+        "ssm": 20
+      },
+      "action_navigation": {
+        "gpt": 25,
+        "ssm": 25
+      },
+      "action_queue": {
+        "gpt": 29,
+        "ssm": 29
+      },
+      "arithmetic_*+/*": {
+        "gpt": 2,
+        "ssm": 2
+      },
+      "arithmetic_*--*/*+-": {
+        "gpt": 4,
+        "ssm": 4
+      },
+      "arithmetic_*/": {
+        "gpt": 2,
+        "ssm": 2
+      },
+      "arithmetic_+": {
+        "gpt": 2,
+        "ssm": 2
+      },
+      "arithmetic_+/-*": {
+        "gpt": 3,
+        "ssm": 3
+      },
+      "arithmetic_+//-": {
+        "gpt": 3,
+        "ssm": 3
+      },
+      "arithmetic_-++-": {
+        "gpt": 2,
+        "ssm": 2
+      },
+      "arithmetic_/": {
+        "gpt": 2,
+        "ssm": 2
+      },
+      "arithmetic_/-": {
+        "gpt": 4,
+        "ssm": 4
+      },
+      "arithmetic_/--/--+/": {
+        "gpt": 3,
+        "ssm": 3
+      },
+      "arithmetic_comparison": {
+        "gpt": 11,
+        "ssm": 11
+      },
+      "arithmetic_order_of_operations": {
+        "gpt": 7,
+        "ssm": 7
+      },
+      "continuation": {
+        "gpt": 165,
+        "ssm": 165
+      },
+      "delayed_state_compression": {
+        "gpt": 162,
+        "ssm": 162
+      },
+      "exact_lookup": {
+        "gpt": 343,
+        "ssm": 343
+      },
+      "inverse_compositional_lookup": {
+        "gpt": 245,
+        "ssm": 245
+      },
+      "linear_equation": {
+        "gpt": 10,
+        "ssm": 10
+      },
+      "mutable_state_tracking": {
+        "gpt": 116,
+        "ssm": 116
+      },
+      "restricted_program_execution": {
+        "gpt": 80,
+        "ssm": 80
+      },
+      "selective_filter": {
+        "gpt": 192,
+        "ssm": 192
+      },
+      "variable_binding": {
+        "gpt": 10,
+        "ssm": 10
+      }
+    },
+    "operation_selection_mutual_information_nats": 0.0,
+    "operation_to_surface_ratio": null,
+    "statement": "Operation and surface format have similar association with module selection.",
+    "surface_family_matrix": {
+      "code": {
+        "gpt": 294,
+        "ssm": 294
+      },
+      "english": {
+        "gpt": 498,
+        "ssm": 498
+      },
+      "json": {
+        "gpt": 328,
+        "ssm": 328
+      },
+      "structured": {
+        "gpt": 197,
+        "ssm": 197
+      },
+      "symbolic": {
+        "gpt": 176,
+        "ssm": 176
+      }
+    },
+    "surface_selection_mutual_information_nats": 0.0
+  }
+}

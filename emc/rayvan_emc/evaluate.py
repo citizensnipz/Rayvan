@@ -9,7 +9,7 @@ import platform
 import statistics
 import time
 from collections import Counter, defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -26,14 +26,29 @@ from .capability_tasks import (
     CapabilityTaskSuite,
     DiagnosticExample,
 )
-from .checkpoint import LoadedModelCheckpoint, load_model_checkpoint
+from .checkpoint import load_model_checkpoint
 from .chunked import ChunkedEMCModel, ChunkedExecutionTrace
 from .diagnostics import count_parameters, parameter_counts
 from .generation import generate_text
-from .model import EMCModel, EMCOutput
+from .model import EMCCycleTrace, EMCModel, EMCOutput
 from .tokenization import TextTokenizer
 
-REPORT_SCHEMA_VERSION = 2
+REPORT_SCHEMA_VERSION = 3
+
+
+@dataclass(frozen=True)
+class RouterDiagnosticThresholds:
+    near_dead_selection_frequency: float = 0.01
+    near_universal_request_fraction: float = 0.95
+    global_fixed_set_request_fraction: float = 0.95
+    low_utilization_entropy: float = 0.35
+    mild_imbalance_gini: float = 0.20
+    partial_collapse_gini: float = 0.45
+
+    def __post_init__(self) -> None:
+        for name, value in asdict(self).items():
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be between zero and one")
 
 
 @dataclass(frozen=True)
@@ -50,6 +65,10 @@ class DiagnosticEvaluationConfig:
     device: str = "cpu"
     precision: str = "fp32"
     smoke: bool = False
+    deep_diagnostics: bool = False
+    router_thresholds: RouterDiagnosticThresholds = field(
+        default_factory=RouterDiagnosticThresholds
+    )
 
     def __post_init__(self) -> None:
         if self.examples_per_capability <= 0:
@@ -72,16 +91,29 @@ class InterventionResult:
     intervened_exact: float
     baseline_token_accuracy: float
     intervened_token_accuracy: float
+    baseline_loss: float
+    intervened_loss: float
+    status: str
+    validation: str
 
 
 @dataclass
 class _TraceSummary:
     module_counts: Counter[int]
     family_counts: Counter[str]
+    module_routing_unit_counts: Counter[int]
+    family_routing_unit_counts: Counter[str]
+    module_slot_counts: dict[int, Counter[int]]
+    routing_units: int
     request_pool_counts: Counter[int]
     score_sums: dict[int, float]
     score_observations: dict[int, int]
-    routing_entropies: list[float]
+    probability_sums: dict[int, float]
+    probability_observations: dict[int, int]
+    selected_weight_sums: dict[int, float]
+    selected_weight_observations: dict[int, int]
+    pre_top_k_entropies: list[float]
+    post_top_k_entropies: list[float]
     unique_modules: set[int]
     integrator: dict[str, dict[int, list[float]]]
     proposal_similarities: list[float]
@@ -97,6 +129,7 @@ class _TraceSummary:
     executed_pairs: int
     discarded_pairs: int
     actual_unique_executed_per_chunk: list[int]
+    executed_module_sets: list[tuple[int, ...]]
     population_fraction_touched: float
 
 
@@ -113,6 +146,9 @@ def evaluate_checkpoint(
         resolved,
         checkpoint=str(checkpoint),
         checkpoint_training_config=loaded.training_config,
+        checkpoint_training_diagnostics=getattr(
+            loaded, "training_diagnostics", None
+        ),
     )
     write_report(report, output_directory)
     return report
@@ -125,6 +161,7 @@ def evaluate_suite(
     *,
     checkpoint: str | None = None,
     checkpoint_training_config: Mapping[str, Any] | None = None,
+    checkpoint_training_diagnostics: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     resolved = config or DiagnosticEvaluationConfig()
     suite_config = CapabilitySuiteConfig(seed=resolved.seed)
@@ -142,24 +179,20 @@ def evaluate_suite(
 
     started = time.perf_counter()
     baseline_records: list[dict[str, Any]] = []
-    baseline_outputs: dict[int, EMCOutput] = {}
     evaluated_tokens = 0
     for index, example in enumerate(examples):
-        record, output, token_count = _evaluate_example(
+        record, _, token_count = _evaluate_example(
             model, tokenizer, example, resolved, return_trace=True
         )
         record["example_index"] = index
         baseline_records.append(record)
         evaluated_tokens += token_count
-        if output is not None:
-            baseline_outputs[index] = output
 
     interventions = _run_ablations(
         model,
         tokenizer,
         examples,
         baseline_records,
-        baseline_outputs,
         resolved,
     )
     cycle_results = _evaluate_cycles(model, tokenizer, examples, resolved)
@@ -173,10 +206,14 @@ def evaluate_suite(
     integrator = _aggregate_integrator(baseline_records, model)
     causal = _aggregate_interventions(interventions, model)
     surface_analysis = _surface_vs_operation(baseline_records)
-    collapse = _collapse_analysis(baseline_records, model)
+    collapse = _collapse_analysis(
+        baseline_records, model, resolved.router_thresholds
+    )
     lease = _lease_analysis(baseline_records)
     sparsity = _sparsity_analysis(baseline_records, model)
-    module_diagnostics = _module_diagnostics(model, baseline_records)
+    module_diagnostics = _module_diagnostics(
+        model, baseline_records, checkpoint_training_diagnostics
+    )
     stratified = _stratified_results(baseline_records)
     difficulty_curves = _difficulty_curves(baseline_records, model)
     notable = _notable_examples(
@@ -198,6 +235,15 @@ def evaluate_suite(
         "note": "FLOP estimates are unavailable for heterogeneous chunk backends",
     }
     learning_status = _learning_status(capability_results)
+    integrity_warnings = _diagnostic_integrity_warnings(
+        overall_metrics,
+        interventions,
+        causal,
+        collapse,
+        surface_analysis,
+        module_diagnostics,
+        cycle_results,
+    )
     full_scale = 100 / resolved.examples_per_capability
     report: dict[str, Any] = {
         "schema_version": REPORT_SCHEMA_VERSION,
@@ -211,6 +257,8 @@ def evaluate_suite(
                 "examples_per_capability": resolved.examples_per_capability,
                 "ablation_examples_per_capability": resolved.ablation_examples_per_capability,
                 "held_out_only": resolved.held_out_only,
+                "deep_diagnostics": resolved.deep_diagnostics,
+                "router_diagnostic_thresholds": asdict(resolved.router_thresholds),
                 "held_out_combinations": list(DEFAULT_HELD_OUT_COMBINATIONS),
                 "task_mixture": dict(DEFAULT_MIXTURE_WEIGHTS),
             },
@@ -236,11 +284,16 @@ def evaluate_suite(
             "overall_learning_status": learning_status,
             "strongest_capability": _extreme_capability(capability_results, maximum=True),
             "weakest_capability": _extreme_capability(capability_results, maximum=False),
+            "routing": collapse["summary"],
             "router_collapse_status": collapse["status"],
+            "specialization_status": causal["specialization_status"],
             "specialization_evidence": causal["specialization_statement"],
             "surface_routing_evidence": surface_analysis["statement"],
+            "causal_diagnostics": causal["summary"],
+            "cycles": _cycle_statement(cycle_results),
             "cycle_usefulness": _cycle_statement(cycle_results),
             "causal_family_importance": causal["most_important_family_by_capability"],
+            "integrity_warning_count": len(integrity_warnings),
         },
         "overall_metrics": overall_metrics,
         "capability_results": capability_results,
@@ -257,6 +310,7 @@ def evaluate_suite(
         "module_diagnostics": module_diagnostics,
         "generated_language_samples": generated_samples,
         "notable_examples": notable,
+        "diagnostic_integrity_warnings": integrity_warnings,
     }
     model.train(was_training)
     return report
@@ -390,52 +444,92 @@ def _run_ablations(
     tokenizer: TextTokenizer,
     examples: tuple[DiagnosticExample, ...],
     records: list[dict[str, Any]],
-    outputs: Mapping[int, EMCOutput],
     config: DiagnosticEvaluationConfig,
 ) -> list[InterventionResult]:
     if config.ablation_examples_per_capability == 0:
         return []
     families = tuple(model.module_families)
     unique_families = tuple(dict.fromkeys(families))
+    sample_limit = config.ablation_examples_per_capability
+    if config.deep_diagnostics:
+        sample_limit = max(sample_limit, 32)
     selected_per_capability: Counter[str] = Counter()
     results: list[InterventionResult] = []
     for index, (example, baseline) in enumerate(zip(examples, records, strict=True)):
         capability = example.diagnostic_metadata.capability
-        if baseline["skipped"] or selected_per_capability[capability] >= config.ablation_examples_per_capability:
+        if baseline["skipped"] or selected_per_capability[capability] >= sample_limit:
             continue
         selected_per_capability[capability] += 1
-        if index not in outputs:
-            continue
         baseline_exact = float(baseline["exact_match"])
         baseline_token = float(baseline["token_accuracy"])
+        baseline_loss = float(baseline["loss"])
         interventions: list[tuple[str, str, dict[str, Tensor | None]]] = []
         if config.run_module_ablations:
             for module_index in range(model.config.num_modules):
                 availability = torch.ones(model.config.num_modules, dtype=torch.bool)
                 availability[module_index] = False
-                interventions.append(("disable_module", str(module_index), {"availability_mask": availability}))
+                interventions.append(
+                    (
+                        "disable_module",
+                        str(module_index),
+                        {"availability_mask": availability},
+                    )
+                )
         if config.run_family_ablations:
             for family in unique_families:
-                availability = torch.tensor([name != family for name in families], dtype=torch.bool)
-                interventions.append(("disable_family", family, {"availability_mask": availability}))
+                availability = torch.tensor(
+                    [name != family for name in families], dtype=torch.bool
+                )
+                interventions.append(
+                    (
+                        "disable_family",
+                        family,
+                        {"availability_mask": availability},
+                    )
+                )
         if config.run_zero_proposal:
             for family in unique_families:
-                zero = torch.tensor([name == family for name in families], dtype=torch.bool)
-                interventions.append(("zero_family_proposal", family, {"zero_mask": zero}))
+                zero = torch.tensor(
+                    [name == family for name in families], dtype=torch.bool
+                )
+                interventions.append(
+                    ("zero_family_proposal", family, {"zero_mask": zero})
+                )
         if config.run_forced_alternatives:
             trace = baseline.get("trace") or {}
             counts = trace.get("module_counts", {})
-            normal_order = sorted(range(model.config.num_modules), key=lambda item: -int(counts.get(str(item), 0)))
+            normal_order = sorted(
+                range(model.config.num_modules),
+                key=lambda item: -int(counts.get(str(item), 0)),
+            )
             top_family = families[normal_order[0]] if normal_order else families[0]
-            top_k = model.config.resolved_active_top_k if isinstance(model, ChunkedEMCModel) else model.config.modules_per_cycle
+            top_k = (
+                model.config.resolved_active_top_k
+                if isinstance(model, ChunkedEMCModel)
+                else model.config.modules_per_cycle
+            )
             for family in unique_families:
                 if family == top_family:
                     continue
-                candidate = next(i for i, name in enumerate(families) if name == family)
+                candidate = next(
+                    i for i, name in enumerate(families) if name == family
+                )
                 forced = [candidate]
-                forced.extend(i for i in normal_order if i != candidate and i not in forced)
-                forced.extend(i for i in range(model.config.num_modules) if i not in forced)
-                interventions.append(("force_family_alternative", family, {"forced_modules": torch.tensor(forced[:top_k])}))
+                forced.extend(
+                    i for i in normal_order if i != candidate and i not in forced
+                )
+                forced.extend(
+                    i
+                    for i in range(model.config.num_modules)
+                    if i not in forced
+                )
+                interventions.append(
+                    (
+                        "force_family_alternative",
+                        family,
+                        {"forced_modules": torch.tensor(forced[:top_k])},
+                    )
+                )
         for intervention_type, target, kwargs in interventions:
             try:
                 intervened, _, _ = _evaluate_example(
@@ -443,13 +537,22 @@ def _run_ablations(
                     tokenizer,
                     example,
                     config,
-                    return_trace=False,
+                    return_trace=True,
                     availability_mask=kwargs.get("availability_mask"),
                     zero_mask=kwargs.get("zero_mask"),
                     forced_modules=kwargs.get("forced_modules"),
                 )
-            except ValueError:
-                continue
+                status, validation = _validate_intervention(
+                    intervention_type,
+                    target,
+                    families,
+                    baseline.get("trace"),
+                    intervened.get("trace"),
+                )
+            except ValueError as error:
+                intervened = baseline
+                status = "unsupported_intervention"
+                validation = str(error)
             results.append(
                 InterventionResult(
                     example_index=index,
@@ -459,10 +562,97 @@ def _run_ablations(
                     baseline_exact=baseline_exact,
                     intervened_exact=float(intervened["exact_match"]),
                     baseline_token_accuracy=baseline_token,
-                    intervened_token_accuracy=float(intervened["token_accuracy"]),
+                    intervened_token_accuracy=float(
+                        intervened["token_accuracy"]
+                    ),
+                    baseline_loss=baseline_loss,
+                    intervened_loss=float(intervened["loss"]),
+                    status=status,
+                    validation=validation,
                 )
             )
     return results
+
+
+def _validate_intervention(
+    intervention_type: str,
+    target: str,
+    families: tuple[str, ...],
+    baseline_trace: Mapping[str, Any] | None,
+    intervened_trace: Mapping[str, Any] | None,
+) -> tuple[str, str]:
+    if not baseline_trace or not intervened_trace:
+        return (
+            "unsupported_intervention",
+            "forward trace unavailable; active path could not be validated",
+        )
+    target_modules = (
+        {int(target)}
+        if intervention_type == "disable_module"
+        else {index for index, family in enumerate(families) if family == target}
+    )
+    baseline_active = set(baseline_trace.get("unique_modules", ()))
+    intervened_active = set(intervened_trace.get("unique_modules", ()))
+    if intervention_type != "force_family_alternative" and not (
+        baseline_active & target_modules
+    ):
+        return (
+            "target_not_selected",
+            "target was absent from the baseline active forward path",
+        )
+    if intervention_type in {"disable_module", "disable_family"}:
+        if intervened_active & target_modules:
+            return (
+                "intervention_no_effect",
+                "disabled target remained present in the active routing trace",
+            )
+        return (
+            "active_intervention",
+            "target was active at baseline and absent from intervened routing",
+        )
+    if intervention_type == "zero_family_proposal":
+        norms = intervened_trace.get("integrator", {}).get("proposal_norm", {})
+        observed = [
+            norms.get(str(index))
+            for index in target_modules & intervened_active
+            if str(index) in norms
+        ]
+        if not observed:
+            return (
+                "unsupported_intervention",
+                "proposal-norm telemetry unavailable for the selected target",
+            )
+        if any(value is not None and abs(float(value)) > 1e-8 for value in observed):
+            return (
+                "intervention_no_effect",
+                "target proposal remained nonzero at the Integrator input",
+            )
+        return (
+            "active_intervention",
+            "selected target proposal was zero at the Integrator input",
+        )
+    if intervention_type == "force_family_alternative":
+        if not (intervened_active & target_modules):
+            return (
+                "intervention_no_effect",
+                "forced family did not appear in intervened routing",
+            )
+        routing_changed = bool(
+            baseline_trace.get("module_counts")
+            != intervened_trace.get("module_counts")
+            or baseline_trace.get("module_slot_counts")
+            != intervened_trace.get("module_slot_counts")
+        )
+        if not routing_changed:
+            return (
+                "intervention_no_effect",
+                "forced routing matched baseline counts and slot occupancy",
+            )
+        return (
+            "active_intervention",
+            "forced family appeared and routing counts or slots changed",
+        )
+    return "unsupported_intervention", "unknown intervention type"
 
 
 def _evaluate_cycles(
@@ -471,25 +661,150 @@ def _evaluate_cycles(
     examples: tuple[DiagnosticExample, ...],
     config: DiagnosticEvaluationConfig,
 ) -> dict[str, Any]:
-    if not isinstance(model, EMCModel) or model.config.num_cycles <= 1:
-        return {"supported": False, "reason": "checkpoint does not expose multiple EMC cycles"}
-    sample_limit = min(8, config.examples_per_capability)
+    if isinstance(model, ChunkedEMCModel):
+        return {
+            "supported": False,
+            "reason_code": "architecture_no_cycle_interface",
+            "reason": (
+                "n1_chunked exposes chunk recurrence and lease telemetry, but "
+                "does not expose independently repeatable EMC cycles or a "
+                "cycle-limit intervention"
+            ),
+            "configured_num_cycles": model.config.num_cycles,
+            "available_temporal_telemetry": "lease_temporal_analysis",
+            "unavailable_fields": [
+                "routing_changes_between_cycles",
+                "module_persistence_between_cycles",
+                "latent_state_change_per_cycle",
+                "integrator_contribution_by_cycle",
+                "shared_state_convergence_by_cycle",
+            ],
+        }
+    if not isinstance(model, EMCModel):
+        return {
+            "supported": False,
+            "reason_code": "unsupported_model_type",
+            "reason": "model does not expose EMC cycle traces",
+        }
+    if model.config.num_cycles <= 1:
+        return {
+            "supported": False,
+            "reason_code": "single_cycle_architecture",
+            "reason": "model is configured to execute exactly one EMC cycle",
+            "configured_num_cycles": model.config.num_cycles,
+        }
+    sample_limit = min(
+        32 if config.deep_diagnostics else 8,
+        config.examples_per_capability,
+    )
     rows: dict[str, dict[str, dict[str, float]]] = {}
+    full_cycle_outputs: list[EMCOutput] = []
     for capability in CAPABILITIES:
-        selected = [example for example in examples if example.diagnostic_metadata.capability == capability][:sample_limit]
+        selected = [
+            example
+            for example in examples
+            if example.diagnostic_metadata.capability == capability
+        ][:sample_limit]
         rows[capability] = {}
         for cycle in range(1, model.config.num_cycles + 1):
-            metrics = [
-                _evaluate_example(model, tokenizer, example, config, return_trace=False, cycle_limit=cycle)[0]
+            evaluated = [
+                _evaluate_example(
+                    model,
+                    tokenizer,
+                    example,
+                    config,
+                    return_trace=cycle == model.config.num_cycles,
+                    cycle_limit=cycle,
+                )
                 for example in selected
             ]
+            metrics = [item[0] for item in evaluated]
+            if cycle == model.config.num_cycles:
+                full_cycle_outputs.extend(
+                    item[1] for item in evaluated if item[1] is not None
+                )
             valid = [row for row in metrics if not row["skipped"]]
             rows[capability][str(cycle)] = {
                 "exact_accuracy": _mean(row["exact_match"] for row in valid),
                 "token_accuracy": _mean(row["token_accuracy"] for row in valid),
                 "loss": _mean(row["loss"] for row in valid),
             }
-    return {"supported": True, "capability_by_cycle": rows}
+    return {
+        "supported": True,
+        "configured_cycles": model.config.num_cycles,
+        "sampled_examples_per_capability": sample_limit,
+        "capability_by_cycle": rows,
+        "telemetry": _cycle_trace_telemetry(full_cycle_outputs),
+        "limitations": {
+            "latent_state_change_per_cycle": (
+                "unavailable: cycle traces expose latent shape, not latent values"
+            ),
+            "shared_state_convergence_by_cycle": (
+                "unavailable: token-cycle architecture has no exposed shared-state "
+                "convergence scalar"
+            ),
+        },
+    }
+
+
+def _cycle_trace_telemetry(outputs: Iterable[EMCOutput]) -> dict[str, Any]:
+    changes: dict[int, list[float]] = defaultdict(list)
+    persistence: dict[int, list[float]] = defaultdict(list)
+    contributions: dict[int, list[float]] = defaultdict(list)
+    executed_counts: Counter[int] = Counter()
+    for output in outputs:
+        previous: EMCCycleTrace | None = None
+        for trace in output.trace:
+            executed_counts[trace.cycle] += 1
+            if trace.integrator_trace is not None:
+                contributions[trace.cycle].append(
+                    float(
+                        trace.integrator_trace.proposal_contributions.float()
+                        .mean()
+                        .item()
+                    )
+                )
+            if previous is not None:
+                current_indices = trace.selected_indices
+                previous_indices = previous.selected_indices
+                if (
+                    current_indices is not None
+                    and previous_indices is not None
+                    and current_indices.shape == previous_indices.shape
+                ):
+                    changes[trace.cycle].append(
+                        float(
+                            (current_indices != previous_indices)
+                            .float()
+                            .mean()
+                            .item()
+                        )
+                    )
+                current_modules = set(trace.selected_modules)
+                previous_modules = set(previous.selected_modules)
+                union = current_modules | previous_modules
+                persistence[trace.cycle].append(
+                    len(current_modules & previous_modules) / len(union)
+                    if union
+                    else 1.0
+                )
+            previous = trace
+    return {
+        "cycles_executed_observations": {
+            str(cycle): count for cycle, count in sorted(executed_counts.items())
+        },
+        "routing_slot_change_fraction_from_previous_cycle": {
+            str(cycle): _mean(values) for cycle, values in sorted(changes.items())
+        },
+        "module_set_jaccard_from_previous_cycle": {
+            str(cycle): _mean(values)
+            for cycle, values in sorted(persistence.items())
+        },
+        "mean_integrator_contribution_by_cycle": {
+            str(cycle): _mean(values)
+            for cycle, values in sorted(contributions.items())
+        },
+    }
 
 
 def _summarize_trace(output: EMCOutput, model: nn.Module) -> _TraceSummary:
@@ -499,62 +814,168 @@ def _summarize_trace(output: EMCOutput, model: nn.Module) -> _TraceSummary:
             if cycle.selected_indices is None:
                 continue
             selected = cycle.selected_indices.long()
-            _observe_selected(summary, selected, model.module_families)
-            probabilities = torch.softmax(cycle.router_scores.float(), dim=-1)
-            entropy = -(probabilities * probabilities.clamp_min(1e-12).log()).sum(dim=-1)
-            summary.routing_entropies.extend(entropy.reshape(-1).tolist())
-            _observe_scores(summary, cycle.router_scores)
+            _observe_routing(
+                summary,
+                selected,
+                cycle.router_scores,
+                cycle.router_weights,
+                model.module_families,
+            )
             if cycle.integrator_trace is not None:
-                _observe_integrator(summary, selected, cycle.integrator_trace, "token")
+                _observe_integrator(
+                    summary, selected, cycle.integrator_trace, "token"
+                )
+            summary.executed_module_sets.append(cycle.selected_modules)
         summary.requested_pairs = sum(summary.module_counts.values())
-        summary.executed_pairs = sum(len(cycle.selected_modules) for cycle in output.trace)
+        summary.executed_pairs = sum(
+            len(cycle.selected_modules) for cycle in output.trace
+        )
         summary.discarded_pairs = 0
-        summary.actual_unique_executed_per_chunk = [len(cycle.selected_modules) for cycle in output.trace]
-        summary.population_fraction_touched = len(summary.unique_modules) / model.config.num_modules
+        summary.actual_unique_executed_per_chunk = [
+            len(cycle.selected_modules) for cycle in output.trace
+        ]
+        summary.population_fraction_touched = (
+            len(summary.unique_modules) / model.config.num_modules
+        )
     if isinstance(output.chunk_trace, ChunkedExecutionTrace):
         chunked = output.chunk_trace
-        summary.request_pool_counts.update(chunked.request_pool.module_indices.reshape(-1).tolist())
-        _observe_scores(summary, chunked.request_pool.scores)
+        summary.request_pool_counts.update(
+            chunked.request_pool.module_indices.reshape(-1).tolist()
+        )
         for chunk in chunked.chunks:
             selected = chunk.active_modules.long()
-            _observe_selected(summary, selected, model.module_families)
-            _observe_scores(summary, chunk.routing_scores)
-            summary.routing_entropies.extend(chunk.routing_entropy.reshape(-1).tolist())
-            summary.lease_ages.extend(chunk.lease_ages[chunk.lease_ages > 0].float().tolist())
+            _observe_routing(
+                summary,
+                selected,
+                chunk.routing_scores,
+                chunk.routing_weights,
+                model.module_families,
+            )
+            summary.lease_ages.extend(
+                chunk.lease_ages[chunk.lease_ages > 0].float().tolist()
+            )
             summary.switch_rates.append(float(chunk.switch_rate))
             summary.continuation_rates.append(float(chunk.retained_rate))
             summary.balancing_biases.append(chunk.balance_bias.float().tolist())
             summary.lease_state_norms.append(float(chunk.lease_state_norm))
             summary.lease_state_changes.append(float(chunk.lease_state_change))
             summary.state_reset_count += int(chunk.state_reset_count)
-            _observe_integrator(summary, selected, chunk.token_integrator_trace, "token")
-            _observe_integrator(summary, selected, chunk.state_integrator_trace, "state")
-            summary.requested_pairs += int(chunk.computed_chunk_module_pairs)
-            summary.executed_pairs += int(chunk.retained_chunk_module_pairs)
-            summary.discarded_pairs += int(chunk.computed_chunk_module_pairs - chunk.retained_chunk_module_pairs)
-            summary.actual_unique_executed_per_chunk.append(len(chunk.executed_modules))
-        summary.population_fraction_touched = float(chunked.population_fraction_touched)
+            _observe_integrator(
+                summary, selected, chunk.token_integrator_trace, "token"
+            )
+            _observe_integrator(
+                summary, selected, chunk.state_integrator_trace, "state"
+            )
+            summary.requested_pairs += int(
+                chunk.computed_chunk_module_pairs
+            )
+            summary.executed_pairs += int(
+                chunk.retained_chunk_module_pairs
+            )
+            summary.discarded_pairs += int(
+                chunk.computed_chunk_module_pairs
+                - chunk.retained_chunk_module_pairs
+            )
+            summary.actual_unique_executed_per_chunk.append(
+                len(chunk.executed_modules)
+            )
+            summary.executed_module_sets.append(chunk.executed_modules)
+        summary.population_fraction_touched = float(
+            chunked.population_fraction_touched
+        )
     return summary
 
 
 def _empty_trace() -> _TraceSummary:
     return _TraceSummary(
-        module_counts=Counter(), family_counts=Counter(), request_pool_counts=Counter(),
-        score_sums=defaultdict(float), score_observations=defaultdict(int),
-        routing_entropies=[], unique_modules=set(),
-        integrator={name: defaultdict(list) for name in ("acceptance", "token_contribution", "state_contribution", "proposal_norm")},
-        proposal_similarities=[], gate_magnitudes=[], balancing_biases=[], lease_ages=[],
-        switch_rates=[], continuation_rates=[], lease_state_norms=[], lease_state_changes=[],
-        state_reset_count=0, requested_pairs=0, executed_pairs=0, discarded_pairs=0,
-        actual_unique_executed_per_chunk=[], population_fraction_touched=0.0,
+        module_counts=Counter(),
+        family_counts=Counter(),
+        module_routing_unit_counts=Counter(),
+        family_routing_unit_counts=Counter(),
+        module_slot_counts=defaultdict(Counter),
+        routing_units=0,
+        request_pool_counts=Counter(),
+        score_sums=defaultdict(float),
+        score_observations=defaultdict(int),
+        probability_sums=defaultdict(float),
+        probability_observations=defaultdict(int),
+        selected_weight_sums=defaultdict(float),
+        selected_weight_observations=defaultdict(int),
+        pre_top_k_entropies=[],
+        post_top_k_entropies=[],
+        unique_modules=set(),
+        integrator={
+            name: defaultdict(list)
+            for name in (
+                "acceptance",
+                "token_contribution",
+                "state_contribution",
+                "proposal_norm",
+            )
+        },
+        proposal_similarities=[],
+        gate_magnitudes=[],
+        balancing_biases=[],
+        lease_ages=[],
+        switch_rates=[],
+        continuation_rates=[],
+        lease_state_norms=[],
+        lease_state_changes=[],
+        state_reset_count=0,
+        requested_pairs=0,
+        executed_pairs=0,
+        discarded_pairs=0,
+        actual_unique_executed_per_chunk=[],
+        executed_module_sets=[],
+        population_fraction_touched=0.0,
     )
 
 
-def _observe_selected(summary: _TraceSummary, selected: Tensor, families: tuple[str, ...]) -> None:
-    values = selected.reshape(-1).tolist()
-    summary.module_counts.update(values)
-    summary.family_counts.update(families[index] for index in values)
-    summary.unique_modules.update(values)
+def _observe_routing(
+    summary: _TraceSummary,
+    selected: Tensor,
+    scores: Tensor,
+    selected_weights: Tensor,
+    families: tuple[str, ...],
+) -> None:
+    selected_rows = selected.reshape(-1, selected.size(-1))
+    weight_rows = selected_weights.float().reshape(
+        -1, selected_weights.size(-1)
+    )
+    summary.routing_units += selected_rows.size(0)
+    for row, weights in zip(selected_rows, weight_rows, strict=True):
+        values = row.tolist()
+        summary.module_counts.update(values)
+        summary.family_counts.update(families[index] for index in values)
+        summary.module_routing_unit_counts.update(set(values))
+        summary.family_routing_unit_counts.update(
+            {families[index] for index in values}
+        )
+        summary.unique_modules.update(values)
+        for slot, (module_index, weight) in enumerate(
+            zip(values, weights.tolist(), strict=True)
+        ):
+            summary.module_slot_counts[module_index][slot] += 1
+            summary.selected_weight_sums[module_index] += float(weight)
+            summary.selected_weight_observations[module_index] += 1
+    _observe_scores(summary, scores)
+    probabilities = torch.softmax(scores.float(), dim=-1)
+    finite_rows = probabilities.reshape(-1, probabilities.size(-1))
+    for index in range(finite_rows.size(-1)):
+        values = finite_rows[:, index]
+        finite = values[torch.isfinite(values)]
+        if finite.numel():
+            summary.probability_sums[index] += float(finite.sum().item())
+            summary.probability_observations[index] += int(finite.numel())
+    pre_entropy = -(
+        probabilities * probabilities.clamp_min(1e-12).log()
+    ).sum(dim=-1)
+    post_entropy = -(
+        selected_weights.float()
+        * selected_weights.float().clamp_min(1e-12).log()
+    ).sum(dim=-1)
+    summary.pre_top_k_entropies.extend(pre_entropy.reshape(-1).tolist())
+    summary.post_top_k_entropies.extend(post_entropy.reshape(-1).tolist())
 
 
 def _observe_scores(summary: _TraceSummary, scores: Tensor) -> None:
@@ -589,14 +1010,54 @@ def _observe_integrator(summary: _TraceSummary, selected: Tensor, trace: Any, ki
 
 def _trace_to_dict(summary: _TraceSummary) -> dict[str, Any]:
     return {
-        "module_counts": {str(key): value for key, value in summary.module_counts.items()},
+        "module_counts": {
+            str(key): value for key, value in summary.module_counts.items()
+        },
         "family_counts": dict(summary.family_counts),
-        "request_pool_counts": {str(key): value for key, value in summary.request_pool_counts.items()},
-        "mean_router_scores": {str(key): summary.score_sums[key] / summary.score_observations[key] for key in summary.score_observations},
-        "mean_routing_entropy": _mean(summary.routing_entropies),
+        "module_routing_unit_counts": {
+            str(key): value
+            for key, value in summary.module_routing_unit_counts.items()
+        },
+        "family_routing_unit_counts": dict(
+            summary.family_routing_unit_counts
+        ),
+        "module_slot_counts": {
+            str(module): {
+                str(slot): count for slot, count in slots.items()
+            }
+            for module, slots in summary.module_slot_counts.items()
+        },
+        "routing_units": summary.routing_units,
+        "request_pool_counts": {
+            str(key): value
+            for key, value in summary.request_pool_counts.items()
+        },
+        "mean_router_scores": {
+            str(key): summary.score_sums[key] / summary.score_observations[key]
+            for key in summary.score_observations
+        },
+        "mean_router_probabilities": {
+            str(key): (
+                summary.probability_sums[key]
+                / summary.probability_observations[key]
+            )
+            for key in summary.probability_observations
+        },
+        "mean_selected_weights": {
+            str(key): (
+                summary.selected_weight_sums[key]
+                / summary.selected_weight_observations[key]
+            )
+            for key in summary.selected_weight_observations
+        },
+        "mean_pre_top_k_entropy": _mean(summary.pre_top_k_entropies),
+        "mean_post_top_k_entropy": _mean(summary.post_top_k_entropies),
+        "mean_routing_entropy": _mean(summary.post_top_k_entropies),
         "unique_modules": sorted(summary.unique_modules),
         "integrator": {
-            metric: {str(index): _mean(values) for index, values in modules.items()}
+            metric: {
+                str(index): _mean(values) for index, values in modules.items()
+            }
             for metric, modules in summary.integrator.items()
         },
         "mean_proposal_similarity": _mean(summary.proposal_similarities),
@@ -611,7 +1072,12 @@ def _trace_to_dict(summary: _TraceSummary) -> dict[str, Any]:
         "requested_pairs": summary.requested_pairs,
         "executed_pairs": summary.executed_pairs,
         "discarded_pairs": summary.discarded_pairs,
-        "actual_unique_executed_per_chunk": summary.actual_unique_executed_per_chunk,
+        "actual_unique_executed_per_chunk": (
+            summary.actual_unique_executed_per_chunk
+        ),
+        "executed_module_sets": [
+            list(indices) for indices in summary.executed_module_sets
+        ],
         "population_fraction_touched": summary.population_fraction_touched,
     }
 
@@ -707,22 +1173,183 @@ def _stratified_results(records: list[dict[str, Any]]) -> dict[str, Any]:
     return output
 
 
-def _aggregate_routing(records: list[dict[str, Any]], model: nn.Module) -> dict[str, Any]:
+def _aggregate_routing(
+    records: list[dict[str, Any]], model: nn.Module
+) -> dict[str, Any]:
     families = tuple(dict.fromkeys(model.module_families))
     by_capability = _routing_matrix(records, "capability", families)
     by_surface = _routing_matrix(records, "surface_format", families)
+    family_metrics = _family_routing_metrics(records, model, by_capability)
     return {
+        "routing_variable": (
+            "selected family per top-k slot; request and routing-unit presence "
+            "are reported separately"
+        ),
         "routing_frequency_by_capability": by_capability,
         "routing_frequency_by_surface": by_surface,
-        "module_frequency_by_capability": _module_routing_matrix(records, "capability", model.config.num_modules),
-        "module_frequency_by_surface": _module_routing_matrix(records, "surface_format", model.config.num_modules),
-        "router_scores_by_capability": _router_score_matrix(records, "capability", model.config.num_modules),
-        "request_pool_by_capability": _request_pool_matrix(records, "capability", model.config.num_modules),
-        "routing_entropy_by_capability": _trace_scalar_by(records, "capability", "mean_routing_entropy"),
-        "average_unique_modules_per_request": _mean(len((row.get("trace") or {}).get("unique_modules", [])) for row in records if row.get("trace")),
-        "population_fraction_touched_by_capability": _trace_scalar_by(records, "capability", "population_fraction_touched"),
-        "balancing_bias_by_capability": _vector_by(records, "capability", "mean_balance_bias"),
+        "module_frequency_by_capability": _module_routing_matrix(
+            records, "capability", model.config.num_modules
+        ),
+        "module_frequency_by_surface": _module_routing_matrix(
+            records, "surface_format", model.config.num_modules
+        ),
+        "router_scores_by_capability": _router_score_matrix(
+            records, "capability", model.config.num_modules
+        ),
+        "router_probability_by_capability": _module_trace_metric_matrix(
+            records,
+            "capability",
+            "mean_router_probabilities",
+            model.config.num_modules,
+        ),
+        "normalized_selected_weight_by_capability": (
+            _module_trace_metric_matrix(
+                records,
+                "capability",
+                "mean_selected_weights",
+                model.config.num_modules,
+            )
+        ),
+        "request_pool_by_capability": _request_pool_matrix(
+            records, "capability", model.config.num_modules
+        ),
+        "pre_top_k_entropy_by_capability": _trace_scalar_by(
+            records, "capability", "mean_pre_top_k_entropy"
+        ),
+        "post_top_k_entropy_by_capability": _trace_scalar_by(
+            records, "capability", "mean_post_top_k_entropy"
+        ),
+        "routing_entropy_by_capability": _trace_scalar_by(
+            records, "capability", "mean_post_top_k_entropy"
+        ),
+        "family_metrics": family_metrics,
+        "average_unique_modules_per_request": _mean(
+            len((row.get("trace") or {}).get("unique_modules", []))
+            for row in records
+            if row.get("trace")
+        ),
+        "population_fraction_touched_by_capability": _trace_scalar_by(
+            records, "capability", "population_fraction_touched"
+        ),
+        "balancing_bias_by_capability": _vector_by(
+            records, "capability", "mean_balance_bias"
+        ),
     }
+
+
+def _family_routing_metrics(
+    records: list[dict[str, Any]],
+    model: nn.Module,
+    by_capability: Mapping[str, Mapping[str, float]],
+) -> dict[str, dict[str, Any]]:
+    families = tuple(dict.fromkeys(model.module_families))
+    module_indices = {
+        family: [
+            index
+            for index, module_family in enumerate(model.module_families)
+            if module_family == family
+        ]
+        for family in families
+    }
+    traces = [row["trace"] for row in records if row.get("trace")]
+    total_selections = sum(
+        sum(trace.get("family_counts", {}).values()) for trace in traces
+    )
+    total_routing_units = sum(trace.get("routing_units", 0) for trace in traces)
+    result: dict[str, dict[str, Any]] = {}
+    for family in families:
+        indices = module_indices[family]
+        selection_count = sum(
+            trace.get("family_counts", {}).get(family, 0) for trace in traces
+        )
+        selected_requests = sum(
+            bool(trace.get("family_counts", {}).get(family, 0))
+            for trace in traces
+        )
+        selected_units = sum(
+            trace.get("family_routing_unit_counts", {}).get(family, 0)
+            for trace in traces
+        )
+        slot_counts: Counter[int] = Counter()
+        for trace in traces:
+            for index in indices:
+                slot_counts.update(
+                    {
+                        int(slot): count
+                        for slot, count in trace.get(
+                            "module_slot_counts", {}
+                        )
+                        .get(str(index), {})
+                        .items()
+                    }
+                )
+        probability = _mean(
+            sum(
+                float(
+                    trace.get("mean_router_probabilities", {}).get(
+                        str(index), 0.0
+                    )
+                )
+                for index in indices
+            )
+            for trace in traces
+        )
+        selected_weight = _mean(
+            trace.get("mean_selected_weights", {}).get(str(index))
+            for trace in traces
+            for index in indices
+        )
+        acceptance = _mean(
+            trace.get("integrator", {})
+            .get("acceptance", {})
+            .get(str(index))
+            for trace in traces
+            for index in indices
+        )
+        contribution = _mean(
+            trace.get("integrator", {})
+            .get("token_contribution", {})
+            .get(str(index))
+            for trace in traces
+            for index in indices
+        )
+        never_used_categories = sum(
+            metrics.get(family, 0.0) < 0.01
+            for metrics in by_capability.values()
+        )
+        result[family] = {
+            "selection_frequency": (
+                selection_count / total_selections if total_selections else 0.0
+            ),
+            "request_selection_fraction": (
+                selected_requests / len(traces) if traces else 0.0
+            ),
+            "routing_unit_selection_fraction": (
+                selected_units / total_routing_units
+                if total_routing_units
+                else 0.0
+            ),
+            "chunk_selection_fraction": (
+                selected_units / total_routing_units
+                if total_routing_units
+                and isinstance(model, ChunkedEMCModel)
+                else None
+            ),
+            "selection_slot_distribution": {
+                str(slot): count / selection_count if selection_count else 0.0
+                for slot, count in sorted(slot_counts.items())
+            },
+            "mean_router_probability_before_top_k": probability,
+            "mean_normalized_selected_weight": selected_weight,
+            "mean_integrator_acceptance": acceptance,
+            "mean_integrator_token_contribution": contribution,
+            "effectively_never_used_capability_fraction": (
+                never_used_categories / len(by_capability)
+                if by_capability
+                else None
+            ),
+        }
+    return result
 
 
 def _aggregate_integrator(records: list[dict[str, Any]], model: nn.Module) -> dict[str, Any]:
@@ -736,48 +1363,379 @@ def _aggregate_integrator(records: list[dict[str, Any]], model: nn.Module) -> di
     return output
 
 
-def _aggregate_interventions(results: list[InterventionResult], model: nn.Module) -> dict[str, Any]:
+def _aggregate_interventions(
+    results: list[InterventionResult], model: nn.Module
+) -> dict[str, Any]:
     matrices: dict[str, dict[str, dict[str, Any]]] = {}
-    for intervention_type in sorted({result.intervention_type for result in results}):
+    intervention_types = sorted(
+        {result.intervention_type for result in results}
+    )
+    for intervention_type in intervention_types:
         matrices[intervention_type] = {}
-        relevant = [result for result in results if result.intervention_type == intervention_type]
+        relevant = [
+            result
+            for result in results
+            if result.intervention_type == intervention_type
+        ]
+        targets = sorted({result.target for result in relevant})
         for capability in CAPABILITIES:
             matrices[intervention_type][capability] = {}
-            for target in sorted({result.target for result in relevant}):
-                rows = [result for result in relevant if result.capability == capability and result.target == target]
-                if not rows:
-                    continue
-                baseline = _mean(row.baseline_exact for row in rows)
-                intervened = _mean(row.intervened_exact for row in rows)
-                baseline_token = _mean(row.baseline_token_accuracy for row in rows)
-                intervened_token = _mean(row.intervened_token_accuracy for row in rows)
-                matrices[intervention_type][capability][target] = {
-                    "examples": len(rows), "baseline_accuracy": baseline,
-                    "intervened_accuracy": intervened,
-                    "accuracy_delta_points": 100 * (intervened - baseline),
-                    "token_accuracy_delta_points": 100 * (intervened_token - baseline_token),
-                }
+            for target in targets:
+                rows = [
+                    result
+                    for result in relevant
+                    if result.capability == capability
+                    and result.target == target
+                ]
+                if rows:
+                    matrices[intervention_type][capability][target] = (
+                        _intervention_metrics(rows)
+                    )
     family_matrix = matrices.get("disable_family", {})
-    important: dict[str, str | None] = {}
-    drops: list[float] = []
-    for capability in CAPABILITIES:
-        values = family_matrix.get(capability, {})
-        if values:
-            target, metric = min(values.items(), key=lambda item: item[1]["accuracy_delta_points"])
-            important[capability] = target
-            drops.append(float(metric["accuracy_delta_points"]))
-        else:
-            important[capability] = None
-    statement = "No measurable causal family specialization in sampled ablations."
-    if drops and min(drops) < 0:
-        statement = "At least one capability loses accuracy when its most important family is removed; inspect the family matrix for specificity."
+    specialization = _specialization_analysis(family_matrix)
+    active = [
+        result for result in results if result.status == "active_intervention"
+    ]
+    worsened = sum(_intervention_effect(result) == "worsened" for result in active)
+    status_counts = Counter(result.status for result in results)
     return {
+        "sign_conventions": {
+            "exact_accuracy_delta": (
+                "intervened minus baseline; negative means ablation hurt"
+            ),
+            "token_accuracy_delta": (
+                "intervened minus baseline; negative means ablation hurt"
+            ),
+            "token_accuracy_degradation": (
+                "baseline minus intervened; positive means ablation hurt"
+            ),
+            "loss_increase": (
+                "intervened cross-entropy minus baseline; positive means "
+                "ablation hurt"
+            ),
+            "perplexity_increase": (
+                "intervened minus baseline; positive means ablation hurt"
+            ),
+        },
+        "effect_thresholds": {
+            "loss_absolute": 1e-4,
+            "token_accuracy_absolute": 1e-6,
+            "precedence": (
+                "loss increase determines direction when measurable; token "
+                "accuracy is the fallback"
+            ),
+        },
         "matrices": matrices,
         "performance_drop_when_family_removed": family_matrix,
-        "most_important_family_by_capability": important,
-        "specialization_statement": statement,
+        "family_capability_causal_impact": specialization["impact_matrix"],
+        "most_important_family_by_capability": specialization[
+            "most_important_family_by_capability"
+        ],
+        "specialization_status": specialization["status"],
+        "specialization_statement": specialization["statement"],
+        "specialization_criteria": specialization["criteria"],
+        "statistical_confidence": (
+            "not estimated; sampled interventions are descriptive and no "
+            "independence or variance assumptions are imposed"
+        ),
+        "intervention_status_counts": dict(status_counts),
+        "active_interventions_evaluated": len(active),
+        "active_interventions_measurably_worsened": worsened,
+        "summary": (
+            f"{len(active)} active interventions evaluated; {worsened} "
+            "measurably worsened loss or token accuracy"
+        ),
         "module_families": list(model.module_families),
     }
+
+
+def _intervention_metrics(rows: list[InterventionResult]) -> dict[str, Any]:
+    active = [row for row in rows if row.status == "active_intervention"]
+    exact_deltas = [
+        row.intervened_exact - row.baseline_exact for row in active
+    ]
+    token_deltas = [
+        row.intervened_token_accuracy - row.baseline_token_accuracy
+        for row in active
+    ]
+    loss_increases = [
+        row.intervened_loss - row.baseline_loss for row in active
+    ]
+    perplexity_increases = [
+        math.exp(min(row.intervened_loss, 20.0))
+        - math.exp(min(row.baseline_loss, 20.0))
+        for row in active
+    ]
+    effects = [_intervention_effect(row) for row in active]
+    mean_exact = _mean(exact_deltas)
+    mean_token = _mean(token_deltas)
+    return {
+        "attempted_interventions": len(rows),
+        "evaluated_interventions": len(active),
+        "examples": len(active),
+        "status_counts": dict(Counter(row.status for row in rows)),
+        "baseline_exact_accuracy": _mean(
+            row.baseline_exact for row in active
+        ),
+        "intervened_exact_accuracy": _mean(
+            row.intervened_exact for row in active
+        ),
+        "mean_exact_accuracy_delta": mean_exact,
+        "median_exact_accuracy_delta": _median(exact_deltas),
+        "exact_accuracy_delta": mean_exact,
+        "accuracy_delta_points": (
+            100 * mean_exact if mean_exact is not None else None
+        ),
+        "baseline_token_accuracy": _mean(
+            row.baseline_token_accuracy for row in active
+        ),
+        "intervened_token_accuracy": _mean(
+            row.intervened_token_accuracy for row in active
+        ),
+        "mean_token_accuracy_delta": mean_token,
+        "median_token_accuracy_delta": _median(token_deltas),
+        "mean_token_accuracy_degradation": (
+            -mean_token if mean_token is not None else None
+        ),
+        "median_token_accuracy_degradation": (
+            -_median(token_deltas) if token_deltas else None
+        ),
+        "token_accuracy_delta_points": (
+            100 * mean_token if mean_token is not None else None
+        ),
+        "baseline_cross_entropy": _mean(
+            row.baseline_loss for row in active
+        ),
+        "intervened_cross_entropy": _mean(
+            row.intervened_loss for row in active
+        ),
+        "mean_loss_increase": _mean(loss_increases),
+        "median_loss_increase": _median(loss_increases),
+        "mean_perplexity_increase": _mean(perplexity_increases),
+        "median_perplexity_increase": _median(perplexity_increases),
+        "fraction_measurably_worsened": (
+            effects.count("worsened") / len(effects) if effects else None
+        ),
+        "fraction_measurably_improved": (
+            effects.count("improved") / len(effects) if effects else None
+        ),
+        "fraction_no_measurable_change": (
+            effects.count("unchanged") / len(effects) if effects else None
+        ),
+    }
+
+
+def _intervention_effect(result: InterventionResult) -> str:
+    loss_increase = result.intervened_loss - result.baseline_loss
+    if abs(loss_increase) > 1e-4:
+        return "worsened" if loss_increase > 0 else "improved"
+    token_degradation = (
+        result.baseline_token_accuracy - result.intervened_token_accuracy
+    )
+    if abs(token_degradation) > 1e-6:
+        return "worsened" if token_degradation > 0 else "improved"
+    return "unchanged"
+
+
+def _specialization_analysis(
+    family_matrix: Mapping[str, Mapping[str, Mapping[str, Any]]],
+) -> dict[str, Any]:
+    impact_matrix: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    important: dict[str, str | None] = {}
+    dominant_signals: list[tuple[str, str, Mapping[str, Any], bool]] = []
+    active_cells = 0
+    for capability in CAPABILITIES:
+        values = family_matrix.get(capability, {})
+        usable = {
+            family: metrics
+            for family, metrics in values.items()
+            if metrics.get("evaluated_interventions", 0) > 0
+        }
+        for family, metrics in usable.items():
+            active_cells += 1
+            impact_matrix[family][capability] = {
+                "mean_loss_increase": metrics.get("mean_loss_increase"),
+                "median_loss_increase": metrics.get("median_loss_increase"),
+                "mean_token_accuracy_degradation": metrics.get(
+                    "mean_token_accuracy_degradation"
+                ),
+                "median_token_accuracy_degradation": metrics.get(
+                    "median_token_accuracy_degradation"
+                ),
+                "exact_accuracy_delta": metrics.get(
+                    "mean_exact_accuracy_delta"
+                ),
+                "evaluated_interventions": metrics.get(
+                    "evaluated_interventions"
+                ),
+                "fraction_measurably_worsened": metrics.get(
+                    "fraction_measurably_worsened"
+                ),
+            }
+        if not usable:
+            important[capability] = None
+            continue
+        ordered = sorted(
+            usable.items(),
+            key=lambda item: _descriptive_impact(item[1]),
+            reverse=True,
+        )
+        family, top = ordered[0]
+        important[capability] = family
+        second = ordered[1][1] if len(ordered) > 1 else None
+        meaningful = _meaningful_causal_cell(top)
+        margin = _meaningful_impact_margin(top, second)
+        if meaningful:
+            dominant_signals.append((capability, family, top, margin))
+    criteria = {
+        "meaningful_family_capability_effect": (
+            "at least 2 active interventions, at least 50% measurably worsened, "
+            "and mean loss increase >=0.02 nats or mean token-accuracy "
+            "degradation >=0.02"
+        ),
+        "weak": (
+            "a meaningful capability-specific contrast or differential effect "
+            "exists, but family diversity/sample consistency is limited"
+        ),
+        "moderate": (
+            "at least 2 capabilities have meaningful, margin-separated effects "
+            "with at least 2 different dominant families and >=3 interventions "
+            "per dominant cell"
+        ),
+        "strong": (
+            "at least 3 capabilities have margin-separated effects with at "
+            "least 2 dominant families, >=5 interventions per dominant cell, "
+            "and >=75% measurable worsening"
+        ),
+        "insufficient_evidence": (
+            "fewer than 8 active family-capability cells or fewer than 2 "
+            "capabilities with active family comparisons"
+        ),
+    }
+    comparable_capabilities = sum(
+        sum(
+            metrics.get("evaluated_interventions", 0) > 0
+            for metrics in values.values()
+        )
+        >= 2
+        for values in family_matrix.values()
+    )
+    if active_cells < 8 or comparable_capabilities < 2:
+        status = "insufficient_evidence"
+    else:
+        separated = [signal for signal in dominant_signals if signal[3]]
+        distinct_families = {signal[1] for signal in separated}
+        strong = (
+            len(separated) >= 3
+            and len(distinct_families) >= 2
+            and all(
+                signal[2].get("evaluated_interventions", 0) >= 5
+                and (signal[2].get("fraction_measurably_worsened") or 0.0)
+                >= 0.75
+                for signal in separated
+            )
+        )
+        moderate = (
+            len(separated) >= 2
+            and len(distinct_families) >= 2
+            and all(
+                signal[2].get("evaluated_interventions", 0) >= 3
+                for signal in separated
+            )
+        )
+        if strong:
+            status = "strong_specialization_signal"
+        elif moderate:
+            status = "moderate_specialization_signal"
+        elif separated or _has_differential_family_effect(impact_matrix):
+            status = "weak_specialization_signal"
+        else:
+            status = "no_detectable_specialization"
+    examples = [
+        f"{capability}: {family}"
+        for capability, family, _, margin in dominant_signals
+        if margin
+    ][:4]
+    if status == "insufficient_evidence":
+        statement = (
+            "Insufficient active family ablations for a specialization "
+            "conclusion."
+        )
+    elif status == "no_detectable_specialization":
+        statement = (
+            "No detectable capability-specific family effect under the "
+            "documented loss/token criteria."
+        )
+    else:
+        detail = "; ".join(examples) if examples else "differential effects"
+        statement = (
+            f"{status}: descriptive causal differences ({detail}); sampled "
+            "data do not establish statistical significance."
+        )
+    return {
+        "status": status,
+        "statement": statement,
+        "criteria": criteria,
+        "impact_matrix": dict(impact_matrix),
+        "most_important_family_by_capability": important,
+    }
+
+
+def _descriptive_impact(metrics: Mapping[str, Any]) -> float:
+    return float(metrics.get("mean_loss_increase") or 0.0) + float(
+        metrics.get("mean_token_accuracy_degradation") or 0.0
+    )
+
+
+def _meaningful_causal_cell(metrics: Mapping[str, Any]) -> bool:
+    return bool(
+        metrics.get("evaluated_interventions", 0) >= 2
+        and (metrics.get("fraction_measurably_worsened") or 0.0) >= 0.5
+        and (
+            (metrics.get("mean_loss_increase") or 0.0) >= 0.02
+            or (metrics.get("mean_token_accuracy_degradation") or 0.0)
+            >= 0.02
+        )
+    )
+
+
+def _meaningful_impact_margin(
+    top: Mapping[str, Any], second: Mapping[str, Any] | None
+) -> bool:
+    if second is None:
+        return True
+    return bool(
+        (top.get("mean_loss_increase") or 0.0)
+        - (second.get("mean_loss_increase") or 0.0)
+        >= 0.02
+        or (top.get("mean_token_accuracy_degradation") or 0.0)
+        - (second.get("mean_token_accuracy_degradation") or 0.0)
+        >= 0.02
+    )
+
+
+def _has_differential_family_effect(
+    impact_matrix: Mapping[str, Mapping[str, Mapping[str, Any]]],
+) -> bool:
+    for capabilities in impact_matrix.values():
+        losses = [
+            float(metrics["mean_loss_increase"])
+            for metrics in capabilities.values()
+            if metrics.get("mean_loss_increase") is not None
+        ]
+        tokens = [
+            float(metrics["mean_token_accuracy_degradation"])
+            for metrics in capabilities.values()
+            if metrics.get("mean_token_accuracy_degradation") is not None
+        ]
+        if (
+            losses
+            and max(losses) - min(losses) >= 0.03
+            or tokens
+            and max(tokens) - min(tokens) >= 0.02
+        ):
+            return True
+    return False
 
 
 def _surface_vs_operation(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -787,41 +1745,190 @@ def _surface_vs_operation(records: list[dict[str, Any]]) -> dict[str, Any]:
         if not trace:
             continue
         for family, count in trace["family_counts"].items():
-            observations.extend((row["metadata"]["operation"], row["metadata"]["surface_format"], family) for _ in range(count))
-    operation_mi = _mutual_information((operation, family) for operation, _, family in observations)
-    surface_mi = _mutual_information((surface, family) for _, surface, family in observations)
+            observations.extend(
+                (
+                    row["metadata"]["operation"],
+                    row["metadata"]["surface_format"],
+                    family,
+                )
+                for _ in range(count)
+            )
+    operation_pairs = [(operation, family) for operation, _, family in observations]
+    surface_pairs = [(surface, family) for _, surface, family in observations]
+    operation_mi = _mutual_information(operation_pairs)
+    surface_mi = _mutual_information(surface_pairs)
+    operation_nmi = _normalized_mutual_information(operation_pairs)
+    surface_nmi = _normalized_mutual_information(surface_pairs)
+    family_counts = Counter(family for _, _, family in observations)
+    family_entropy = _categorical_entropy(family_counts)
+    family_categories = len(family_counts)
+    normalized_family_entropy = (
+        family_entropy / math.log(family_categories)
+        if family_categories > 1
+        else 0.0
+    )
+    effective_families = math.exp(family_entropy) if family_counts else 0.0
+    insufficient_diversity = bool(
+        family_categories < 2
+        or normalized_family_entropy < 0.35
+        or effective_families < 1.5
+    )
     if operation_mi > surface_mi * 1.1:
-        statement = "Module selection correlates more strongly with operation identity than surface format."
+        relative = "operation correlates more strongly than surface"
     elif surface_mi > operation_mi * 1.1:
-        statement = "Module selection correlates more strongly with surface format than operation identity."
+        relative = "surface correlates more strongly than operation"
     else:
-        statement = "Operation and surface format have similar association with module selection."
+        relative = "operation and surface have similar association"
+    maximum_nmi = max(operation_nmi, surface_nmi)
+    if maximum_nmi < 0.05:
+        strength = "very_weak"
+    elif maximum_nmi < 0.15:
+        strength = "weak"
+    elif maximum_nmi < 0.30:
+        strength = "moderate"
+    else:
+        strength = "strong"
+    if insufficient_diversity:
+        statement = (
+            f"{relative}, but routing diversity is too low for a strong "
+            "operation-dependent routing claim."
+        )
+    else:
+        statement = (
+            f"{relative}; the larger normalized association is {strength}, "
+            "which is descriptive rather than evidence of causal "
+            "specialization."
+        )
     return {
+        "routing_variable": "selected family per top-k slot",
+        "samples": len(observations),
         "operation_selection_mutual_information_nats": operation_mi,
         "surface_selection_mutual_information_nats": surface_mi,
-        "operation_to_surface_ratio": operation_mi / surface_mi if surface_mi else None,
+        "operation_selection_normalized_mutual_information": operation_nmi,
+        "surface_selection_normalized_mutual_information": surface_nmi,
+        "operation_to_surface_ratio": (
+            operation_mi / surface_mi if surface_mi else None
+        ),
+        "routing_family_entropy_nats": family_entropy,
+        "routing_family_normalized_entropy": normalized_family_entropy,
+        "effective_routing_family_count": effective_families,
+        "insufficient_routing_diversity": insufficient_diversity,
+        "association_strength": strength,
         "statement": statement,
         "operation_family_matrix": _categorical_matrix(observations, 0, 2),
         "surface_family_matrix": _categorical_matrix(observations, 1, 2),
     }
 
 
-def _collapse_analysis(records: list[dict[str, Any]], model: nn.Module) -> dict[str, Any]:
-    overall = _collapse_metrics(records, model.config.num_modules)
+def _collapse_analysis(
+    records: list[dict[str, Any]],
+    model: nn.Module,
+    thresholds: RouterDiagnosticThresholds | None = None,
+) -> dict[str, Any]:
+    resolved = thresholds or RouterDiagnosticThresholds()
+    top_k = (
+        model.config.resolved_active_top_k
+        if isinstance(model, ChunkedEMCModel)
+        else model.config.modules_per_cycle
+    )
+    overall = _collapse_metrics(
+        records, model.config.num_modules, top_k, resolved
+    )
     by_capability = {
-        capability: _collapse_metrics([row for row in records if row["metadata"]["capability"] == capability], model.config.num_modules)
+        capability: _collapse_metrics(
+            [
+                row
+                for row in records
+                if row["metadata"]["capability"] == capability
+            ],
+            model.config.num_modules,
+            top_k,
+            resolved,
+        )
         for capability in CAPABILITIES
     }
-    dominant = [metrics["top_module"] for metrics in by_capability.values() if metrics["observations"]]
-    same_dominant_fraction = max(Counter(dominant).values()) / len(dominant) if dominant else 0.0
-    globally_concentrated = overall["top_1_concentration"] >= 0.8 or overall["normalized_entropy"] < 0.35
-    status = "global_collapse" if globally_concentrated and same_dominant_fraction >= 0.8 else "no_global_collapse"
+    dominant = [
+        metrics["top_module"]
+        for metrics in by_capability.values()
+        if metrics["observations"]
+    ]
+    same_dominant_fraction = (
+        max(Counter(dominant).values()) / len(dominant)
+        if dominant
+        else 0.0
+    )
+    near_universal = overall["near_universal_experts"]
+    near_dead = overall["near_dead_experts"]
+    fixed_set = overall["most_common_request_module_set_fraction"]
+    effective = overall["effective_module_count"]
+    if (
+        len(near_universal) >= top_k
+        and fixed_set >= resolved.global_fixed_set_request_fraction
+        and effective <= top_k * 1.25
+    ):
+        status = "global_collapse"
+    elif near_universal:
+        status = "slot_monopoly"
+    elif (
+        overall["utilization_gini"] >= resolved.partial_collapse_gini
+        or overall["normalized_entropy"] < resolved.low_utilization_entropy
+        or len(near_dead) >= max(1, model.config.num_modules // 2)
+    ):
+        status = "partial_collapse"
+    elif (
+        overall["utilization_gini"] >= resolved.mild_imbalance_gini
+        or near_dead
+    ):
+        status = "mild_imbalance"
+    else:
+        status = "healthy"
+    universal_text = ", ".join(
+        f"{model.module_families[index]}[{index}] selected in "
+        f"{100 * overall['request_selection_fraction'][index]:.1f}% of requests"
+        for index in near_universal
+    )
+    dead_text = ", ".join(
+        f"{model.module_families[index]}[{index}] at "
+        f"{100 * overall['selection_frequency'][index]:.2f}% of slots"
+        for index in near_dead
+    )
+    details = "; ".join(
+        detail
+        for detail in (
+            universal_text,
+            f"near-dead: {dead_text}" if dead_text else "",
+        )
+        if detail
+    )
+    summary = f"{status}"
+    if details:
+        summary += f"; {details}"
     return {
         "status": status,
+        "summary": summary,
         "overall": overall,
         "by_capability": by_capability,
         "same_dominant_module_fraction": same_dominant_fraction,
-        "rule": "Capability concentration alone is specialization; global concentration plus the same dominant module across capabilities is collapse.",
+        "thresholds": asdict(resolved),
+        "status_definitions": {
+            "healthy": "no configured imbalance or liveness threshold crossed",
+            "mild_imbalance": (
+                "utilization Gini crosses the mild threshold or at least one "
+                "expert is near-dead"
+            ),
+            "partial_collapse": (
+                "strong utilization imbalance, low entropy, or at least half "
+                "the experts are near-dead"
+            ),
+            "slot_monopoly": (
+                "at least one expert appears in the configured near-universal "
+                "fraction of requests while other top-k slots may still vary"
+            ),
+            "global_collapse": (
+                "at least top-k experts are near-universal, the same request "
+                "set dominates, and effective utilization is close to top-k"
+            ),
+        },
     }
 
 
@@ -847,11 +1954,16 @@ def _lease_analysis(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _sparsity_analysis(records: list[dict[str, Any]], model: nn.Module) -> dict[str, Any]:
+def _sparsity_analysis(
+    records: list[dict[str, Any]], model: nn.Module
+) -> dict[str, Any]:
     parameter_estimate = parameter_counts(model)
+    total_parameters = count_parameters(model)
     module_parameter_counts = [
         count_parameters(module) for module in model.emc_modules
     ]
+    total_module_parameters = sum(module_parameter_counts)
+
     def metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         traces = [row["trace"] for row in rows if row.get("trace")]
         requested = sum(trace["requested_pairs"] for trace in traces)
@@ -875,6 +1987,20 @@ def _sparsity_analysis(records: list[dict[str, Any]], model: nn.Module) -> dict[
             if routed_total
             else None
         )
+        selected_population_per_request = [
+            sum(
+                module_parameter_counts[index]
+                for index in trace.get("unique_modules", ())
+            )
+            for trace in traces
+        ]
+        executed_parameters_per_unit = [
+            sum(module_parameter_counts[index] for index in indices)
+            for trace in traces
+            for indices in trace.get("executed_module_sets", ())
+        ]
+        mean_selected_population = _mean(selected_population_per_request)
+        mean_executed_parameters = _mean(executed_parameters_per_unit)
         return {
             "logical_top_k": (
                 model.config.resolved_active_top_k
@@ -889,6 +2015,30 @@ def _sparsity_analysis(records: list[dict[str, Any]], model: nn.Module) -> dict[
             "average_module_population_touched_per_request": _mean(
                 trace["population_fraction_touched"] for trace in traces
             ),
+            "total_model_parameter_count": total_parameters,
+            "total_routable_module_parameter_count": total_module_parameters,
+            "mean_selected_module_parameter_count_per_request": (
+                mean_selected_population
+            ),
+            "mean_fraction_total_parameters_in_selected_module_population": (
+                mean_selected_population / total_parameters
+                if mean_selected_population is not None and total_parameters
+                else None
+            ),
+            "mean_actively_executed_module_parameters_per_routing_unit": (
+                mean_executed_parameters
+            ),
+            "mean_fraction_total_parameters_actively_executed_in_modules": (
+                mean_executed_parameters / total_parameters
+                if mean_executed_parameters is not None and total_parameters
+                else None
+            ),
+            "estimated_module_compute_relative_to_executing_all_modules": (
+                mean_executed_parameters / total_module_parameters
+                if mean_executed_parameters is not None
+                and total_module_parameters
+                else None
+            ),
             "chunk_module_computations_requested": requested,
             "chunk_module_computations_executed": executed,
             "discarded_module_computations": discarded,
@@ -896,17 +2046,43 @@ def _sparsity_analysis(records: list[dict[str, Any]], model: nn.Module) -> dict[
                 abs(requested - executed) / requested if requested else 0.0
             ),
             "large_discrepancy": bool(
-                requested and abs(requested - executed) / requested > 0.05
+                requested
+                and abs(requested - executed) / requested > 0.05
             ),
             "approximate_active_parameter_uses_per_forward": (
                 parameter_estimate.approximate_parameter_uses_per_forward
+            ),
+            "approximate_active_parameter_fraction_per_forward": (
+                parameter_estimate.approximate_parameter_uses_per_forward
+                / total_parameters
+                if total_parameters
+                else None
             ),
             "route_weighted_module_parameters_per_selected_slot": (
                 route_weighted_module_parameters
             ),
             "active_flops": None,
         }
+
     return {
+        "definitions": {
+            "module_population_touched": (
+                "fraction of module identities selected at least once; ignores "
+                "module size"
+            ),
+            "selected_parameter_population": (
+                "unique parameters belonging to modules selected in a request; "
+                "not a FLOP count"
+            ),
+            "actively_executed_parameters": (
+                "parameters in the unique module implementations executed per "
+                "routing unit; shared non-module parameters are excluded"
+            ),
+            "estimated_compute_relative_to_all_modules": (
+                "routable module parameter ratio; heterogeneous operators make "
+                "this a size proxy rather than a measured FLOP ratio"
+            ),
+        },
         "overall": metrics(records),
         "by_capability": {
             capability: metrics(
@@ -921,23 +2097,101 @@ def _sparsity_analysis(records: list[dict[str, Any]], model: nn.Module) -> dict[
     }
 
 
-def _module_diagnostics(model: nn.Module, records: list[dict[str, Any]]) -> dict[str, Any]:
-    proposal_norms = _integrator_matrix(records, "capability", "proposal_norm", model)
+def _module_diagnostics(
+    model: nn.Module,
+    records: list[dict[str, Any]],
+    training_diagnostics: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    proposal_norms = _integrator_matrix(
+        records, "capability", "proposal_norm", model
+    )
+    saved_modules = {
+        int(row["module"]): row
+        for row in (training_diagnostics or {}).get("modules", ())
+        if "module" in row
+    }
     modules = []
+    any_live_gradients = False
     for index, module in enumerate(model.emc_modules):
-        gradient_squared = sum(parameter.grad.detach().float().square().sum().item() for parameter in module.parameters() if parameter.grad is not None)
-        parameter_squared = sum(parameter.detach().float().square().sum().item() for parameter in module.parameters())
-        modules.append({
-            "module": index, "family": model.module_families[index],
-            "gradient_norm": gradient_squared ** 0.5,
-            "parameter_norm": parameter_squared ** 0.5,
-            "update_norm": None,
-        })
+        saved = saved_modules.get(index)
+        if saved is not None:
+            gradient_norm = saved.get("gradient_norm")
+            update_norm = saved.get("update_norm")
+            gradient_source = "training_instrumentation"
+        else:
+            observed_gradients = [
+                parameter.grad.detach()
+                for parameter in module.parameters()
+                if parameter.grad is not None
+            ]
+            any_live_gradients = any_live_gradients or bool(
+                observed_gradients
+            )
+            gradient_norm = (
+                sum(
+                    gradient.float().square().sum().item()
+                    for gradient in observed_gradients
+                )
+                ** 0.5
+                if observed_gradients
+                else None
+            )
+            update_norm = None
+            gradient_source = (
+                "live_gradient_tensors"
+                if observed_gradients
+                else "unavailable"
+            )
+        parameter_squared = sum(
+            parameter.detach().float().square().sum().item()
+            for parameter in module.parameters()
+        )
+        modules.append(
+            {
+                "module": index,
+                "family": model.module_families[index],
+                "gradient_norm": gradient_norm,
+                "gradient_source": gradient_source,
+                "parameter_norm": parameter_squared**0.5,
+                "update_norm": update_norm,
+            }
+        )
+    captured_from_training = bool(saved_modules)
+    gradients_captured = captured_from_training or any_live_gradients
+    updates_available = any(
+        row.get("update_norm") is not None for row in modules
+    )
     return {
         "modules": modules,
+        "availability": {
+            "execution_context": (
+                "live_training_instrumentation"
+                if captured_from_training
+                else (
+                    "live_model_with_gradient_tensors"
+                    if any_live_gradients
+                    else "checkpoint_or_evaluation_only"
+                )
+            ),
+            "gradients_captured": gradients_captured,
+            "optimizer_state_available": bool(
+                (training_diagnostics or {}).get(
+                    "optimizer_state_available", False
+                )
+            ),
+            "update_norms_available": updates_available,
+            "note": (
+                "Evaluation runs under torch.inference_mode; absent tensors are "
+                "reported as unavailable, never as numeric zero."
+            ),
+        },
         "proposal_norms_by_capability": proposal_norms,
         "stateful_diagnostics": _lease_analysis(records),
-        "sampling_policy": "Collected only on explicit evaluation forwards; no per-step synchronization.",
+        "sampling_policy": (
+            "Evaluation forwards retain aggregate trace scalars only. Optional "
+            "training instrumentation samples module gradient/update norms at "
+            "checkpoint intervals."
+        ),
     }
 
 
@@ -1017,6 +2271,11 @@ def _notable_examples(
                         effect.intervened_token_accuracy
                         - effect.baseline_token_accuracy
                     ),
+                    "loss_increase": (
+                        effect.intervened_loss - effect.baseline_loss
+                    ),
+                    "status": effect.status,
+                    "validation": effect.validation,
                 }
                 for effect in causal_by_example.get(index, [])
             ],
@@ -1063,6 +2322,28 @@ def _router_score_matrix(records: list[dict[str, Any]], dimension: str, num_modu
     output: dict[str, dict[str, float | None]] = {}
     for key, rows in _group_records(records, lambda row: row["metadata"][dimension]).items():
         output[key] = {str(index): _mean((row.get("trace") or {}).get("mean_router_scores", {}).get(str(index)) for row in rows) for index in range(num_modules)}
+    return output
+
+
+def _module_trace_metric_matrix(
+    records: list[dict[str, Any]],
+    dimension: str,
+    field: str,
+    num_modules: int,
+) -> dict[str, dict[str, float | None]]:
+    output: dict[str, dict[str, float | None]] = {}
+    for key, rows in _group_records(
+        records, lambda row: row["metadata"][dimension]
+    ).items():
+        output[key] = {
+            str(index): _mean(
+                (row.get("trace") or {})
+                .get(field, {})
+                .get(str(index))
+                for row in rows
+            )
+            for index in range(num_modules)
+        }
     return output
 
 
@@ -1115,35 +2396,154 @@ def _vector_by(records: list[dict[str, Any]], dimension: str, field: str) -> dic
     return {key: _column_means([(row.get("trace") or {}).get(field, []) for row in rows]) for key, rows in _group_records(records, lambda row: row["metadata"][dimension]).items()}
 
 
-def _collapse_metrics(records: list[dict[str, Any]], num_modules: int) -> dict[str, Any]:
-    counts = Counter()
-    unique = []
-    request_pool = Counter()
-    for row in records:
-        trace = row.get("trace") or {}
-        counts.update({int(key): value for key, value in trace.get("module_counts", {}).items()})
+def _collapse_metrics(
+    records: list[dict[str, Any]],
+    num_modules: int,
+    top_k: int,
+    thresholds: RouterDiagnosticThresholds,
+) -> dict[str, Any]:
+    counts: Counter[int] = Counter()
+    routing_unit_counts: Counter[int] = Counter()
+    request_counts: Counter[int] = Counter()
+    request_pool: Counter[str] = Counter()
+    slot_counts: dict[int, Counter[int]] = defaultdict(Counter)
+    unique: list[int] = []
+    active_sets: Counter[tuple[int, ...]] = Counter()
+    pre_top_k_entropies: list[float] = []
+    post_top_k_entropies: list[float] = []
+    traces = [row["trace"] for row in records if row.get("trace")]
+    for trace in traces:
+        counts.update(
+            {
+                int(key): value
+                for key, value in trace.get("module_counts", {}).items()
+            }
+        )
+        routing_unit_counts.update(
+            {
+                int(key): value
+                for key, value in trace.get(
+                    "module_routing_unit_counts", {}
+                ).items()
+            }
+        )
+        selected = tuple(sorted(trace.get("unique_modules", ())))
+        request_counts.update(selected)
+        active_sets[selected] += 1
         request_pool.update(trace.get("request_pool_counts", {}))
-        if trace:
-            unique.append(len(trace.get("unique_modules", [])))
+        unique.append(len(selected))
+        if trace.get("mean_pre_top_k_entropy") is not None:
+            pre_top_k_entropies.append(trace["mean_pre_top_k_entropy"])
+        if trace.get("mean_post_top_k_entropy") is not None:
+            post_top_k_entropies.append(trace["mean_post_top_k_entropy"])
+        for module, slots in trace.get("module_slot_counts", {}).items():
+            slot_counts[int(module)].update(
+                {int(slot): count for slot, count in slots.items()}
+            )
     total = sum(counts.values())
-    distribution = [counts[index] / total if total else 0.0 for index in range(num_modules)]
-    entropy = -sum(value * math.log(value) for value in distribution if value > 0)
+    routing_units = sum(trace.get("routing_units", 0) for trace in traces)
+    distribution = [
+        counts[index] / total if total else 0.0
+        for index in range(num_modules)
+    ]
+    request_fractions = [
+        request_counts[index] / len(traces) if traces else 0.0
+        for index in range(num_modules)
+    ]
+    routing_unit_fractions = [
+        routing_unit_counts[index] / routing_units if routing_units else 0.0
+        for index in range(num_modules)
+    ]
+    entropy = -sum(
+        value * math.log(value) for value in distribution if value > 0
+    )
     sorted_values = sorted(distribution, reverse=True)
     pool_total = sum(request_pool.values())
-    pool_top = max(request_pool.values(), default=0) / pool_total if pool_total else 0.0
+    pool_top = (
+        max(request_pool.values(), default=0) / pool_total if pool_total else 0.0
+    )
+    fixed_set_fraction = (
+        max(active_sets.values(), default=0) / len(traces) if traces else 0.0
+    )
+    slot_occupancy = {
+        str(slot): [
+            (
+                slot_counts[module][slot] / routing_units
+                if routing_units
+                else 0.0
+            )
+            for module in range(num_modules)
+        ]
+        for slot in range(top_k)
+    }
+    gini = _gini_coefficient(distribution)
+    near_dead = [
+        index
+        for index, frequency in enumerate(distribution)
+        if frequency < thresholds.near_dead_selection_frequency
+    ]
+    near_universal = [
+        index
+        for index, fraction in enumerate(request_fractions)
+        if fraction >= thresholds.near_universal_request_fraction
+    ]
     return {
         "observations": total,
+        "requests": len(traces),
+        "routing_units": routing_units,
+        "selection_frequency": distribution,
         "distribution": distribution,
-        "normalized_entropy": entropy / math.log(num_modules) if num_modules > 1 else 1.0,
+        "request_selection_fraction": request_fractions,
+        "routing_unit_selection_fraction": routing_unit_fractions,
+        "top_k_slot_occupancy": slot_occupancy,
+        "normalized_entropy": (
+            entropy / math.log(num_modules) if num_modules > 1 else 1.0
+        ),
+        "post_top_k_utilization_entropy_nats": entropy,
         "effective_module_count": math.exp(entropy) if total else 0.0,
-        "top_module": max(range(num_modules), key=lambda index: distribution[index]) if total else None,
-        "top_1_concentration": sorted_values[0] if sorted_values else 0.0,
+        "utilization_gini": gini,
+        "mean_pre_top_k_routing_entropy_nats": _mean(
+            pre_top_k_entropies
+        ),
+        "mean_post_top_k_routing_entropy_nats": _mean(
+            post_top_k_entropies
+        ),
+        "top_module": (
+            max(
+                range(num_modules),
+                key=lambda index: distribution[index],
+            )
+            if total
+            else None
+        ),
+        "top_1_concentration": (
+            sorted_values[0] if sorted_values else 0.0
+        ),
         "top_2_concentration": sum(sorted_values[:2]),
         "minimum_utilization": min(distribution) if distribution else 0.0,
         "request_pool_concentration": pool_top,
-        "chunk_routing_concentration": sorted_values[0] if sorted_values else 0.0,
+        "chunk_routing_concentration": (
+            sorted_values[0] if sorted_values else 0.0
+        ),
         "average_unique_modules_per_request": _mean(unique),
+        "most_common_request_module_set": (
+            list(active_sets.most_common(1)[0][0]) if active_sets else []
+        ),
+        "most_common_request_module_set_fraction": fixed_set_fraction,
+        "near_dead_experts": near_dead,
+        "near_universal_experts": near_universal,
+        "number_near_dead_experts": len(near_dead),
+        "number_near_universal_experts": len(near_universal),
     }
+
+
+def _gini_coefficient(values: Iterable[float]) -> float:
+    data = [max(0.0, float(value)) for value in values]
+    total = sum(data)
+    if not data or total == 0:
+        return 0.0
+    pairwise = sum(abs(left - right) for left in data for right in data)
+    return pairwise / (2 * len(data) * total)
 
 
 def _mutual_information(pairs: Iterable[tuple[str, str]]) -> float:
@@ -1157,6 +2557,31 @@ def _mutual_information(pairs: Iterable[tuple[str, str]]) -> float:
         left[a] += count
         right[b] += count
     return sum((count / total) * math.log((count * total) / (left[a] * right[b])) for (a, b), count in joint.items())
+
+
+def _normalized_mutual_information(
+    pairs: Iterable[tuple[str, str]],
+) -> float:
+    observations = list(pairs)
+    if not observations:
+        return 0.0
+    left = Counter(item[0] for item in observations)
+    right = Counter(item[1] for item in observations)
+    denominator = math.sqrt(
+        _categorical_entropy(left) * _categorical_entropy(right)
+    )
+    return _mutual_information(observations) / denominator if denominator else 0.0
+
+
+def _categorical_entropy(counts: Mapping[Any, int]) -> float:
+    total = sum(counts.values())
+    if not total:
+        return 0.0
+    return -sum(
+        (count / total) * math.log(count / total)
+        for count in counts.values()
+        if count
+    )
 
 
 def _categorical_matrix(observations: list[tuple[str, str, str]], row_index: int, column_index: int) -> dict[str, dict[str, int]]:
@@ -1180,6 +2605,15 @@ def _mean(values: Iterable[float | int | None]) -> float | None:
         if value is not None and math.isfinite(float(value))
     ]
     return sum(valid) / len(valid) if valid else None
+
+
+def _median(values: Iterable[float | int | None]) -> float | None:
+    valid = [
+        float(value)
+        for value in values
+        if value is not None and math.isfinite(float(value))
+    ]
+    return statistics.median(valid) if valid else None
 
 
 def _column_means(rows: Iterable[list[float]]) -> list[float | None]:
@@ -1237,6 +2671,141 @@ def _cycle_statement(cycle_results: Mapping[str, Any]) -> str:
         if first is not None and last is not None and last > first:
             improved += 1
     return f"Additional cycles improve sampled token accuracy for {improved} capabilities."
+
+
+def _diagnostic_integrity_warnings(
+    overall_metrics: Mapping[str, Any],
+    interventions: list[InterventionResult],
+    causal: Mapping[str, Any],
+    collapse: Mapping[str, Any],
+    surface_analysis: Mapping[str, Any],
+    module_diagnostics: Mapping[str, Any],
+    cycle_results: Mapping[str, Any],
+) -> list[dict[str, str]]:
+    warnings: list[dict[str, str]] = []
+
+    def add(code: str, message: str, severity: str = "warning") -> None:
+        warnings.append(
+            {"code": code, "severity": severity, "message": message}
+        )
+
+    exact = overall_metrics.get("overall_exact_accuracy")
+    if exact is not None and exact <= 0.05:
+        add(
+            "exact_accuracy_too_low_for_ablation",
+            (
+                "Overall exact accuracy is at or below 5%; exact-match deltas "
+                "are unlikely to resolve causal effects. Use loss increase and "
+                "token-accuracy degradation."
+            ),
+        )
+    overall_collapse = collapse.get("overall", {})
+    if overall_collapse.get("near_dead_experts"):
+        add(
+            "near_dead_experts",
+            (
+                f"Experts {overall_collapse['near_dead_experts']} are below "
+                "the configured selection-frequency threshold."
+            ),
+        )
+    if overall_collapse.get("near_universal_experts"):
+        add(
+            "near_universal_experts",
+            (
+                f"Experts {overall_collapse['near_universal_experts']} exceed "
+                "the configured request-presence threshold; inspect slot "
+                "monopolization."
+            ),
+        )
+    threshold = collapse.get("thresholds", {}).get(
+        "low_utilization_entropy", 0.35
+    )
+    if overall_collapse.get("normalized_entropy", 1.0) < threshold:
+        add(
+            "low_routing_entropy",
+            "Post-top-k utilization entropy is below the configured threshold.",
+        )
+    if surface_analysis.get("insufficient_routing_diversity"):
+        add(
+            "insufficient_routing_diversity_for_mi",
+            (
+                "Routing diversity constrains operation/surface mutual "
+                "information; relative MI does not imply strong routing."
+            ),
+        )
+    availability = module_diagnostics.get("availability", {})
+    if not availability.get("gradients_captured"):
+        add(
+            "gradients_unavailable",
+            (
+                "No live or training-instrumented gradient tensors are "
+                "available for this diagnostic run."
+            ),
+            "info",
+        )
+    if not availability.get("update_norms_available"):
+        add(
+            "update_norms_unavailable",
+            "Parameter update norms were not captured during training.",
+            "info",
+        )
+    if not cycle_results.get("supported"):
+        add(
+            "cycle_telemetry_unavailable",
+            str(cycle_results.get("reason", "cycle telemetry unavailable")),
+            "info",
+        )
+    family_cells = [
+        metrics
+        for capabilities in causal.get(
+            "performance_drop_when_family_removed", {}
+        ).values()
+        for metrics in capabilities.values()
+    ]
+    if not family_cells or any(
+        metrics.get("evaluated_interventions", 0) < 3
+        for metrics in family_cells
+        if metrics.get("evaluated_interventions", 0)
+    ):
+        add(
+            "small_ablation_sample",
+            (
+                "At least one family/capability cell has fewer than three "
+                "active ablations; specialization evidence is descriptive."
+            ),
+        )
+    inactive = Counter(
+        result.status
+        for result in interventions
+        if result.status != "active_intervention"
+    )
+    if inactive.get("target_not_selected"):
+        add(
+            "ablation_target_not_active",
+            (
+                f"{inactive['target_not_selected']} interventions targeted a "
+                "module absent from the baseline active path and were excluded "
+                "from causal aggregation."
+            ),
+            "info",
+        )
+    if inactive.get("intervention_no_effect"):
+        add(
+            "intervention_path_unchanged",
+            (
+                f"{inactive['intervention_no_effect']} interventions did not "
+                "change the validated active path."
+            ),
+        )
+    if inactive.get("unsupported_intervention"):
+        add(
+            "unsupported_interventions",
+            (
+                f"{inactive['unsupported_intervention']} interventions could "
+                "not be validated and were excluded."
+            ),
+        )
+    return warnings
 
 
 def _resolved_precision(precision: str, device: torch.device) -> str:
@@ -1311,9 +2880,29 @@ def _write_metrics_csv(report: Mapping[str, Any], path: Path) -> None:
                             "value": metrics[metric],
                         }
                     )
-        for capability, targets in report["causal_ablations"]["performance_drop_when_family_removed"].items():
+        for capability, targets in report["causal_ablations"][
+            "performance_drop_when_family_removed"
+        ].items():
             for family, metrics in targets.items():
-                writer.writerow({"section": "disable_family", "capability": capability, "metric": family, "value": metrics["accuracy_delta_points"]})
+                for metric in (
+                    "mean_exact_accuracy_delta",
+                    "mean_token_accuracy_delta",
+                    "mean_token_accuracy_degradation",
+                    "mean_loss_increase",
+                    "median_loss_increase",
+                    "mean_perplexity_increase",
+                    "evaluated_interventions",
+                    "fraction_measurably_worsened",
+                    "fraction_measurably_improved",
+                ):
+                    writer.writerow(
+                        {
+                            "section": f"disable_family_{metric}",
+                            "capability": capability,
+                            "metric": family,
+                            "value": metrics.get(metric),
+                        }
+                    )
 
 
 def _write_comparison_csv(comparison: Mapping[str, Any], path: Path) -> None:
@@ -1327,41 +2916,219 @@ def _write_comparison_csv(comparison: Mapping[str, Any], path: Path) -> None:
 
 def _report_markdown(report: Mapping[str, Any]) -> str:
     summary = report["executive_summary"]
+    surface = report["surface_vs_computation"]
+    cycle = report["cycle_analysis"]
+    causal = report["causal_ablations"]
     lines = [
-        "# Executive Summary", "",
+        "# Executive Summary",
+        "",
         f"- Learning: `{summary['overall_learning_status']}`",
         f"- Overall loss: `{_format_value(summary['overall_loss'])}`",
         f"- Language perplexity: `{_format_value(summary['language_perplexity'])}`",
-        f"- Strongest / weakest: `{summary['strongest_capability']}` / `{summary['weakest_capability']}`",
-        f"- Router collapse: `{summary['router_collapse_status']}`",
-        f"- Specialization: {summary['specialization_evidence']}",
+        (
+            f"- Strongest / weakest: `{summary['strongest_capability']}` / "
+            f"`{summary['weakest_capability']}`"
+        ),
+        f"- Routing: {summary['routing']}",
+        (
+            f"- Specialization (`{summary['specialization_status']}`): "
+            f"{summary['specialization_evidence']}"
+        ),
+        f"- Causal diagnostics: {summary['causal_diagnostics']}",
         f"- Surface vs computation: {summary['surface_routing_evidence']}",
-        f"- Cycles: {summary['cycle_usefulness']}", "",
-        "# Overall Metrics", "",
-        _markdown_table({"overall": report["overall_metrics"]}), "",
-        "# Capability Results", "",
-        _markdown_table(report["capability_results"], ("exact_accuracy", "token_accuracy", "cross_entropy", "perplexity")), "",
-        "# Generalization and Difficulty Curves", "",
-        _markdown_table(_difficulty_table_rows(report["difficulty_curves"])), "",
-        "# Nexus Analysis", "", "## Routing Frequency by Capability", "",
-        _markdown_table(report["nexus_analysis"]["routing_frequency_by_capability"]), "",
-        "## Routing Frequency by Surface", "",
-        _markdown_table(report["nexus_analysis"]["routing_frequency_by_surface"]), "",
-        "# Integrator Analysis", "",
-        "## Acceptance by Capability", "",
-        _markdown_table(report["integrator_analysis"]["acceptance_by_capability"]), "",
-        "## Nexus Selection versus Integrator Acceptance", "",
-        f"Flagged rows: {len(report['integrator_analysis']['nexus_vs_integrator_disagreement']['flagged'])}", "",
-        "# Causal Ablations", "", "## Performance Drop When Family Removed", "",
-        _nested_metric_table(report["causal_ablations"]["performance_drop_when_family_removed"], "accuracy_delta_points"), "",
-        "# Surface-vs-Computation Analysis", "", report["surface_vs_computation"]["statement"], "",
-        f"Operation MI: `{report['surface_vs_computation']['operation_selection_mutual_information_nats']:.6f}`; surface MI: `{report['surface_vs_computation']['surface_selection_mutual_information_nats']:.6f}`.", "",
-        "# Temporal/Lease Analysis", "", _markdown_table({"overall": report["lease_temporal_analysis"]["overall"]}), "",
-        "# Sparse Execution", "", _markdown_table({"overall": report["sparse_execution"]["overall"]}), "",
-        "# Cycle Analysis", "", f"Supported: `{report['cycle_analysis'].get('supported')}`", "",
-        "# Module Diagnostics", "", _list_table(report["module_diagnostics"]["modules"]), "",
-        "# Notable Examples", "",
+        f"- Cycles: {summary['cycles']}",
+        "",
+        "# Diagnostic Integrity Warnings",
+        "",
     ]
+    warnings = report.get("diagnostic_integrity_warnings", [])
+    if warnings:
+        lines.extend(
+            f"- `{warning['code']}` ({warning['severity']}): "
+            f"{warning['message']}"
+            for warning in warnings
+        )
+    else:
+        lines.append("No integrity warnings.")
+    lines.extend(
+        [
+            "",
+            "# Overall Metrics",
+            "",
+            _markdown_table({"overall": report["overall_metrics"]}),
+            "",
+            "# Capability Results",
+            "",
+            _markdown_table(
+                report["capability_results"],
+                (
+                    "exact_accuracy",
+                    "token_accuracy",
+                    "cross_entropy",
+                    "perplexity",
+                ),
+            ),
+            "",
+            "# Generalization and Difficulty Curves",
+            "",
+            _markdown_table(
+                _difficulty_table_rows(report["difficulty_curves"])
+            ),
+            "",
+            "# Nexus Analysis",
+            "",
+            "Selection frequency is a slot count; router probability, normalized "
+            "selected weight, and Integrator acceptance are distinct metrics.",
+            "",
+            "## Per-Family Routing Metrics",
+            "",
+            _markdown_table(report["nexus_analysis"]["family_metrics"]),
+            "",
+            "## Routing Frequency by Capability",
+            "",
+            _markdown_table(
+                report["nexus_analysis"]["routing_frequency_by_capability"]
+            ),
+            "",
+            "## Mean Router Probability Before Top-K by Capability",
+            "",
+            _markdown_table(
+                report["nexus_analysis"]["router_probability_by_capability"]
+            ),
+            "",
+            "## Mean Normalized Selected Weight by Capability",
+            "",
+            _markdown_table(
+                report["nexus_analysis"][
+                    "normalized_selected_weight_by_capability"
+                ]
+            ),
+            "",
+            "## Router Collapse",
+            "",
+            f"Status: `{report['router_collapse']['status']}`",
+            "",
+            _markdown_table(
+                {"overall": report["router_collapse"]["overall"]}
+            ),
+            "",
+            "Configured thresholds:",
+            "",
+            *[
+                f"- `{name}`: `{_format_value(value)}`"
+                for name, value in report["router_collapse"][
+                    "thresholds"
+                ].items()
+            ],
+            "",
+            "Status definitions:",
+            "",
+            *[
+                f"- `{name}`: {description}"
+                for name, description in report["router_collapse"][
+                    "status_definitions"
+                ].items()
+            ],
+            "",
+            "# Integrator Analysis",
+            "",
+            "## Acceptance by Capability",
+            "",
+            _markdown_table(
+                report["integrator_analysis"]["acceptance_by_capability"]
+            ),
+            "",
+            "## Nexus Selection versus Integrator Acceptance",
+            "",
+            (
+                "Flagged rows: "
+                f"{len(report['integrator_analysis']['nexus_vs_integrator_disagreement']['flagged'])}"
+            ),
+            "",
+            "# Causal Ablations",
+            "",
+            "Sign conventions:",
+            "",
+            *[
+                f"- `{name}`: {description}"
+                for name, description in causal["sign_conventions"].items()
+            ],
+            "",
+            "## Family Removal: Mean Loss Increase",
+            "",
+            _nested_metric_table(
+                causal["performance_drop_when_family_removed"],
+                "mean_loss_increase",
+            ),
+            "",
+            "## Family Removal: Mean Token-Accuracy Degradation",
+            "",
+            _nested_metric_table(
+                causal["performance_drop_when_family_removed"],
+                "mean_token_accuracy_degradation",
+            ),
+            "",
+            "## Family Removal: Mean Exact-Accuracy Delta",
+            "",
+            _nested_metric_table(
+                causal["performance_drop_when_family_removed"],
+                "mean_exact_accuracy_delta",
+            ),
+            "",
+            "## Specialization Criteria",
+            "",
+            *[
+                f"- `{name}`: {description}"
+                for name, description in causal[
+                    "specialization_criteria"
+                ].items()
+            ],
+            "",
+            "# Surface-vs-Computation Analysis",
+            "",
+            surface["statement"],
+            "",
+            (
+                f"Samples: `{surface['samples']}`; routing variable: "
+                f"`{surface['routing_variable']}`."
+            ),
+            (
+                f"Operation MI/NMI: "
+                f"`{surface['operation_selection_mutual_information_nats']:.6f}` / "
+                f"`{surface['operation_selection_normalized_mutual_information']:.6f}`; "
+                f"surface MI/NMI: "
+                f"`{surface['surface_selection_mutual_information_nats']:.6f}` / "
+                f"`{surface['surface_selection_normalized_mutual_information']:.6f}`."
+            ),
+            "",
+            "# Temporal/Lease Analysis",
+            "",
+            _markdown_table(
+                {"overall": report["lease_temporal_analysis"]["overall"]}
+            ),
+            "",
+            "# Sparse Execution",
+            "",
+            _markdown_table({"overall": report["sparse_execution"]["overall"]}),
+            "",
+            "# Cycle Analysis",
+            "",
+            f"Supported: `{cycle.get('supported')}`",
+            "",
+            f"Reason: {cycle.get('reason', 'cycle telemetry available')}",
+            "",
+            "# Module Diagnostics",
+            "",
+            _markdown_table(
+                {"availability": report["module_diagnostics"]["availability"]}
+            ),
+            "",
+            _list_table(report["module_diagnostics"]["modules"]),
+            "",
+            "# Notable Examples",
+            "",
+        ]
+    )
     for example in report["notable_examples"]:
         lines.extend(
             [
@@ -1435,7 +3202,7 @@ def _format_value(value: Any) -> str:
     if isinstance(value, float):
         return f"{value:.4f}"
     if value is None:
-        return "—"
+        return "unavailable"
     return str(value).replace("|", "\\|")
 
 
@@ -1447,6 +3214,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--examples-per-capability", type=int, default=100)
     parser.add_argument("--ablation-examples-per-capability", type=int, default=8)
     parser.add_argument("--diagnostic-smoke", action="store_true")
+    parser.add_argument(
+        "--deep-diagnostics",
+        action="store_true",
+        help=(
+            "increase sampled ablations/cycle comparisons; default diagnostics "
+            "retain streaming aggregates and small samples"
+        ),
+    )
     parser.add_argument("--held-out-only", action="store_true")
     parser.add_argument("--skip-ablations", action="store_true")
     parser.add_argument("--skip-module-ablations", action="store_true")
@@ -1472,6 +3247,7 @@ def main() -> None:
         device=args.device,
         precision=args.precision,
         smoke=args.diagnostic_smoke,
+        deep_diagnostics=args.deep_diagnostics,
     )
     if len(args.checkpoint) == 1:
         evaluate_checkpoint(args.checkpoint[0], args.output_dir, config)
