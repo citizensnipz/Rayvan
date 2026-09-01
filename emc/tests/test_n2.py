@@ -139,6 +139,34 @@ def test_mixed_population_has_one_node_of_each_family() -> None:
     assert model.module_families == ("gpt", "ssm", "recurrent", "delta")
 
 
+def test_dense_n2_control_executes_all_nodes_without_changing_sparse_default() -> None:
+    dense = create_n2_model(
+        64,
+        "quick",
+        maximum_sequence_length=16,
+        seed=42,
+        population="mixed",
+        top_k=2,
+        n1_depth=3,
+        execution_mode="dense",
+    )
+    dense_output = dense(torch.randint(0, 64, (1, 8)), return_trace=True)
+    assert isinstance(dense_output, EMCOutput)
+    assert isinstance(dense_output.chunk_trace, N2ExecutionTrace)
+    assert dense_output.chunk_trace.execution_mode == "dense"
+    assert dense_output.chunk_trace.selected_node_ids.tolist() == [[0, 1, 2, 3]]
+    torch.testing.assert_close(
+        dense_output.chunk_trace.selected_node_weights.sum(dim=-1),
+        torch.ones(1),
+    )
+    assert [node.execution_count for node in dense.n1_nodes] == [1, 1, 1, 1]
+
+    sparse = n2_model()
+    sparse_output = traced_forward(sparse)
+    assert sparse_output.chunk_trace.execution_mode == "sparse"
+    assert sparse_output.chunk_trace.selected_node_ids.shape == (1, 2)
+
+
 def test_gpt4_has_four_independent_gpt_n1_nodes() -> None:
     model = n2_model("gpt4")
     assert all(type(node) is GPTN1Node for node in model.n1_nodes)

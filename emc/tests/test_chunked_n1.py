@@ -2,6 +2,7 @@ from __future__ import annotations
 
 
 from pathlib import Path
+import pytest
 import torch
 from torch import Tensor, nn
 
@@ -414,6 +415,13 @@ def _assert_module_gradients(
 
 def test_gated_deltanet_produces_valid_gradients() -> None:
     _assert_module_gradients(ChunkGatedDeltaNetModule(chunk_config()), chunk_config())
+
+
+def test_gated_deltanet_rejects_unsafe_transition_allocation() -> None:
+    config = chunk_config(delta_max_transition_bytes=1)
+    module = ChunkGatedDeltaNetModule(config)
+    with pytest.raises(RuntimeError, match="configured safety limit"):
+        module.forward_chunk(module_input(config))
 
 
 def test_chunkwise_ssm_produces_valid_gradients() -> None:

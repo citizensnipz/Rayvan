@@ -72,6 +72,14 @@ class ChunkGPTModule(ChunkEMCModuleBase):
             nn.GELU(),
             nn.Linear(config.resolved_module_hidden_dim, config.latent_dim),
         )
+        attention_length = config.chunk_size + config.shared_state_slots
+        self.register_buffer(
+            "_causal_mask",
+            torch.ones(attention_length, attention_length, dtype=torch.bool).triu(
+                diagonal=1
+            ),
+            persistent=False,
+        )
         self._capabilities = ModuleCapabilities(
             family=self.family,
             internal_width=config.resolved_module_hidden_dim,
@@ -95,9 +103,7 @@ class ChunkGPTModule(ChunkEMCModuleBase):
         combined = torch.cat((memory, conditioned), dim=1)
         normalized = self.attention_norm(combined)
         length = combined.size(1)
-        causal_mask = torch.ones(
-            length, length, dtype=torch.bool, device=combined.device
-        ).triu(diagonal=1)
+        causal_mask = self._causal_mask[:length, :length]
         attended, _ = self.attention(
             normalized,
             normalized,
@@ -137,6 +143,11 @@ class ChunkStateSpaceModule(ChunkEMCModuleBase):
         self.log_decay = nn.Parameter(torch.zeros(width))
         self.output_adapter = nn.Linear(width, config.latent_dim)
         self.state_initializer = nn.Linear(config.latent_dim, width)
+        self.register_buffer(
+            "_scan_causal_mask",
+            torch.ones(config.chunk_size, config.chunk_size, dtype=torch.bool).tril(),
+            persistent=False,
+        )
         self._capabilities = ModuleCapabilities(
             family=self.family,
             internal_width=width,
@@ -172,7 +183,12 @@ class ChunkStateSpaceModule(ChunkEMCModuleBase):
         log_decay = -F.softplus(self.log_decay).reshape(1, 1, -1) * delta
         candidate = torch.tanh(self.input_projection(convolved)).float()
         initial_state = module_input.lease_state.tensors["state"].float()
-        states = _parallel_diagonal_scan(log_decay, candidate, initial_state)
+        states = _parallel_diagonal_scan(
+            log_decay,
+            candidate,
+            initial_state,
+            self._scan_causal_mask,
+        )
         gate = torch.sigmoid(self.gate_projection(convolved)).float()
         token_proposal = self.output_adapter(
             (gate * states).to(internal.dtype)
@@ -278,6 +294,14 @@ class ChunkGatedDeltaNetModule(ChunkEMCModuleBase):
         self.initial_key = nn.Linear(config.latent_dim, self.width)
         self.initial_value = nn.Linear(config.latent_dim, self.width)
         state_elements = self.heads * self.head_dim * self.head_dim
+        self.max_transition_bytes = config.delta_max_transition_bytes
+        self.register_buffer(
+            "_identity",
+            torch.eye(self.head_dim, dtype=torch.float32).reshape(
+                1, 1, 1, self.head_dim, self.head_dim
+            ),
+            persistent=False,
+        )
         self._capabilities = ModuleCapabilities(
             family=self.family,
             internal_width=self.width,
@@ -307,6 +331,20 @@ class ChunkGatedDeltaNetModule(ChunkEMCModuleBase):
             module_input.chunk_latent, module_input.shared_state
         )
         normalized = self.input_norm(conditioned)
+        transition_bytes = (
+            conditioned.size(0)
+            * conditioned.size(1)
+            * self.heads
+            * self.head_dim
+            * self.head_dim
+            * 4
+        )
+        if transition_bytes > self.max_transition_bytes:
+            raise RuntimeError(
+                "DeltaNet transition tensor exceeds the configured safety limit: "
+                f"{transition_bytes / 2**20:.1f} MiB > "
+                f"{self.max_transition_bytes / 2**20:.1f} MiB"
+            )
         shape = (
             conditioned.size(0),
             conditioned.size(1),
@@ -318,9 +356,7 @@ class ChunkGatedDeltaNetModule(ChunkEMCModuleBase):
         value = torch.tanh(self.value_projection(normalized).reshape(shape))
         alpha = torch.sigmoid(self.alpha_projection(normalized)).float()
         beta = torch.sigmoid(self.beta_projection(normalized)).float()
-        eye = torch.eye(
-            self.head_dim, device=conditioned.device, dtype=torch.float32
-        ).reshape(1, 1, 1, self.head_dim, self.head_dim)
+        eye = self._identity
         key_float = key.float()
         transition = alpha[..., None, None] * (
             eye
@@ -372,7 +408,10 @@ def create_chunk_module(config: Any, family: str) -> ChunkEMCModuleBase:
 
 
 def _parallel_diagonal_scan(
-    log_decay: Tensor, candidate: Tensor, initial_state: Tensor
+    log_decay: Tensor,
+    candidate: Tensor,
+    initial_state: Tensor,
+    causal_mask: Tensor | None = None,
 ) -> Tensor:
     decay = torch.exp(log_decay)
     write = (1.0 - decay) * candidate
@@ -383,9 +422,12 @@ def _parallel_diagonal_scan(
         - prefix_by_dimension.unsqueeze(-2)
     )
     length = log_decay.size(1)
-    causal = torch.ones(
-        length, length, dtype=torch.bool, device=log_decay.device
-    ).tril()
+    if causal_mask is None:
+        causal = torch.ones(
+            length, length, dtype=torch.bool, device=log_decay.device
+        ).tril()
+    else:
+        causal = causal_mask[:length, :length]
     masked_log_coefficients = log_coefficients.masked_fill(
         ~causal.reshape(1, 1, length, length), -torch.inf
     )

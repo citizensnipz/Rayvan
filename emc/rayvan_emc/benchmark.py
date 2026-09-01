@@ -22,7 +22,7 @@ from .model import EMCConfig, EMCModel, EMCOutput
 from .modules import create_emc_module
 from .nexus import ModuleAwareNexusRouter, NexusRouter
 from .training import next_token_loss
-from .experiments.common import create_emc_model
+from .experiments.common import create_emc_model, create_n2_model
 
 
 @dataclass(frozen=True)
@@ -663,6 +663,90 @@ def benchmark_cycle_costs(
     return results
 
 
+def benchmark_n2_forced_components(
+    model: EMCModel,
+    inputs: Tensor,
+    *,
+    precision: str,
+    device: torch.device,
+    iterations: int,
+) -> dict[str, dict[str, float]]:
+    results: dict[str, dict[str, float]] = {}
+    for pair in ((0, 1), (2, 3)):
+        forced = torch.tensor(pair, device=device)
+        recorder = ComponentEventRecorder(model)
+        recorder.install()
+
+        def forward() -> None:
+            with torch.no_grad(), _autocast(device, precision):
+                model(inputs, diagnostic_forced_modules=forced)
+
+        try:
+            for _ in range(2):
+                forward()
+            _synchronize(device)
+            recorder.reset()
+            timing = _time_iterations(
+                forward,
+                iterations=iterations,
+                tokens=inputs.numel(),
+                device=device,
+            )
+            component_times: dict[str, float] = defaultdict(float)
+            for key, value in recorder.totals().items():
+                label = key.split("/", 2)[-1] if key.startswith("micro_") else key
+                component_times[label] += value / iterations
+        finally:
+            recorder.remove()
+        results["-".join(map(str, pair))] = {
+            "forward_ms": timing.milliseconds,
+            **component_times,
+        }
+    return results
+
+
+def _profiler_summary(profiler: torch.profiler.profile) -> dict[str, object]:
+    events = profiler.events()
+    cuda_events = [
+        event
+        for event in events
+        if event.device_type == torch.autograd.DeviceType.CUDA
+    ]
+    synchronization_events = [
+        event.name
+        for event in events
+        if any(
+            marker in event.name.lower()
+            for marker in ("synchronize", "dtoh", "aten::item", "aten::_local_scalar")
+        )
+    ]
+    allocation_names = {
+        "aten::empty",
+        "aten::empty_like",
+        "aten::empty_strided",
+        "aten::new_empty",
+        "aten::new_zeros",
+        "aten::zeros",
+        "aten::zeros_like",
+    }
+    allocation_events = sum(event.name in allocation_names for event in events)
+    return {
+        "cuda_kernel_launches": len(cuda_events),
+        "synchronization_events": len(synchronization_events),
+        "synchronization_event_names": dict(
+            sorted(
+                (
+                    name,
+                    synchronization_events.count(name),
+                )
+                for name in set(synchronization_events)
+            )
+        ),
+        "temporary_allocation_events": allocation_events,
+        "total_event_count": len(events),
+    }
+
+
 def run_profiler(
     stepper: TrainingStepper,
     output_directory: Path,
@@ -671,32 +755,45 @@ def run_profiler(
     activities = [torch.profiler.ProfilerActivity.CPU]
     if stepper.device.type == "cuda":
         activities.append(torch.profiler.ProfilerActivity.CUDA)
+    sample_inputs, _ = stepper.source.sample(
+        stepper.batch_size, stepper.sequence_length, stepper.device
+    )
     with torch.profiler.profile(
         activities=activities,
         record_shapes=True,
         profile_memory=True,
         with_stack=False,
-    ) as profiler:
+    ) as forward_profiler:
+        stepper._forward(sample_inputs)
+    forward_trace_path = output_directory / "n2-forward.json"
+    forward_profiler.export_chrome_trace(str(forward_trace_path))
+
+    with torch.profiler.profile(
+        activities=activities,
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=False,
+    ) as step_profiler:
         stepper.step()
-    trace_path = output_directory / "n1-training-step.json"
-    profiler.export_chrome_trace(str(trace_path))
-    sort_key = "self_cuda_time_total" if stepper.device.type == "cuda" else "self_cpu_time_total"
-    table = profiler.key_averages().table(
+    step_trace_path = output_directory / "n2-training-step.json"
+    step_profiler.export_chrome_trace(str(step_trace_path))
+    sort_key = (
+        "self_cuda_time_total"
+        if stepper.device.type == "cuda"
+        else "self_cpu_time_total"
+    )
+    table = step_profiler.key_averages().table(
         sort_by=sort_key,
         row_limit=30,
     )
     print("\nTorch profiler top operators")
     print(table)
-    events = profiler.events()
-    cuda_events = sum(
-        event.device_type == torch.autograd.DeviceType.CUDA
-        for event in events
-    )
     return {
-        "trace": str(trace_path),
+        "forward_trace": str(forward_trace_path),
+        "training_step_trace": str(step_trace_path),
         "operator_table": table,
-        "cuda_event_count": cuda_events,
-        "total_event_count": len(events),
+        "forward": _profiler_summary(forward_profiler),
+        "training_step": _profiler_summary(step_profiler),
     }
 
 
@@ -713,10 +810,15 @@ def parse_args() -> argparse.Namespace:
             "heterogeneous",
             "n1",
             "n1_chunked",
+            "n2",
         ),
         default="n1",
     )
     parser.add_argument("--module-population", default="mixed")
+    parser.add_argument(
+        "--n2-execution-mode", choices=("sparse", "dense"), default="sparse"
+    )
+    parser.add_argument("--n2-cuda-streams", action="store_true")
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--sequence-length", type=int, default=256)
     parser.add_argument("--gradient-accumulation", type=int, default=4)
@@ -739,16 +841,30 @@ def main() -> None:
         raise RuntimeError(
             "CUDA benchmark requested but this Python environment has no CUDA PyTorch"
         )
-    model = create_emc_model(
-        50_257,
-        args.preset,
-        maximum_sequence_length=args.sequence_length,
-        seed=42,
-        tie_embeddings=True,
-        n1_stage=args.n1_stage,
-        module_population=args.module_population,
-    ).to(device)
-    if isinstance(model, ChunkedEMCModel):
+    if args.n1_stage == "n2":
+        model = create_n2_model(
+            50_257,
+            args.preset,
+            maximum_sequence_length=args.sequence_length,
+            seed=42,
+            population=args.module_population,
+            top_k=2,
+            tie_embeddings=True,
+            n1_depth=3,
+            execution_mode=args.n2_execution_mode,
+            use_cuda_streams=args.n2_cuda_streams,
+        ).to(device)
+    else:
+        model = create_emc_model(
+            50_257,
+            args.preset,
+            maximum_sequence_length=args.sequence_length,
+            seed=42,
+            tie_embeddings=True,
+            n1_stage=args.n1_stage,
+            module_population=args.module_population,
+        ).to(device)
+    if isinstance(model, ChunkedEMCModel) or args.n1_stage == "n2":
         args.skip_components = True
     stepper = TrainingStepper(
         model,
@@ -821,7 +937,18 @@ def main() -> None:
     sample_inputs, _ = stepper.source.sample(
         args.batch_size, args.sequence_length, device
     )
-    waste = routing_waste(model, sample_inputs)
+    forced_n2_components = (
+        benchmark_n2_forced_components(
+            model,
+            sample_inputs,
+            precision=args.precision,
+            device=device,
+            iterations=max(3, args.component_iterations // 2),
+        )
+        if args.n1_stage == "n2" and device.type == "cuda"
+        else {}
+    )
+    waste = [] if args.n1_stage == "n2" else routing_waste(model, sample_inputs)
     if args.skip_components:
         cycle_costs: dict[str, float] = {}
         module_results: dict[str, dict[str, float]] = {}
@@ -865,6 +992,7 @@ def main() -> None:
         "utilization": utilization,
         "phase_timings_ms": phase_timings,
         "component_cuda_timings_ms": component_timings,
+        "forced_n2_component_cuda_timings_ms": forced_n2_components,
         "routing_waste": waste,
         "cycle_costs": cycle_costs,
         "module_benchmarks": module_results,

@@ -138,6 +138,158 @@ class _Window:
                 )
 
 
+class _N2TensorWindow:
+    """GPU-side N2 telemetry reduced to fixed-size per-expert tensors."""
+
+    def __init__(
+        self, num_modules: int, families: tuple[str, ...], device: torch.device
+    ) -> None:
+        self.num_modules = num_modules
+        self.families = families
+        self.device = device
+        self.selection_counts = torch.zeros(
+            num_modules, dtype=torch.long, device=device
+        )
+        self.request_counts = torch.zeros(
+            num_modules, dtype=torch.long, device=device
+        )
+        self.routing_unit_counts = torch.zeros(
+            num_modules, dtype=torch.long, device=device
+        )
+        self.slot_counts = torch.zeros(
+            num_modules, num_modules, dtype=torch.long, device=device
+        )
+        self.probability_sums = torch.zeros(
+            num_modules, dtype=torch.float32, device=device
+        )
+        self.probability_observations = torch.zeros(
+            num_modules, dtype=torch.long, device=device
+        )
+        self.weight_sums = torch.zeros(
+            num_modules, dtype=torch.float32, device=device
+        )
+        self.weight_observations = torch.zeros(
+            num_modules, dtype=torch.long, device=device
+        )
+        self.acceptance_sums = torch.zeros(
+            num_modules, dtype=torch.float32, device=device
+        )
+        self.acceptance_observations = torch.zeros(
+            num_modules, dtype=torch.long, device=device
+        )
+        self.contribution_sums = torch.zeros(
+            num_modules, dtype=torch.float32, device=device
+        )
+        self.contribution_observations = torch.zeros(
+            num_modules, dtype=torch.long, device=device
+        )
+        self.active_steps = torch.zeros(
+            num_modules, dtype=torch.long, device=device
+        )
+        self.last_active_step = torch.full(
+            (num_modules,), -1, dtype=torch.long, device=device
+        )
+        self.total_selections = 0
+        self.requests = 0
+        self.routing_units = 0
+
+    def observe(
+        self,
+        selected: Tensor,
+        scores: Tensor,
+        weights: Tensor,
+        *,
+        step: int,
+        acceptance: Tensor | None,
+        contribution: Tensor | None,
+    ) -> None:
+        selected_rows = selected.to(device=self.device, dtype=torch.long).reshape(
+            -1, selected.size(-1)
+        )
+        score_rows = scores.to(device=self.device, dtype=torch.float32).reshape(
+            -1, scores.size(-1)
+        )
+        weight_rows = weights.to(device=self.device, dtype=torch.float32).reshape(
+            -1, weights.size(-1)
+        )
+        one_hot = torch.nn.functional.one_hot(
+            selected_rows, num_classes=self.num_modules
+        )
+        counts = one_hot.sum(dim=(0, 1))
+        request_presence = one_hot.amax(dim=1).sum(dim=0)
+        self.selection_counts.add_(counts)
+        self.request_counts.add_(request_presence)
+        self.routing_unit_counts.add_(request_presence)
+        self.slot_counts[:, : selected_rows.size(1)].add_(
+            one_hot.sum(dim=0).transpose(0, 1)
+        )
+        self.probability_sums.add_(torch.softmax(score_rows, dim=-1).sum(dim=0))
+        self.probability_observations.add_(score_rows.size(0))
+        self.weight_sums.scatter_add_(
+            0, selected_rows.reshape(-1), weight_rows.reshape(-1)
+        )
+        self.weight_observations.add_(counts)
+        acceptance_rows = _proposal_rows(acceptance, selected_rows.shape)
+        if acceptance_rows is not None:
+            self.acceptance_sums.scatter_add_(
+                0,
+                selected_rows.reshape(-1),
+                acceptance_rows.to(self.device).reshape(-1),
+            )
+            self.acceptance_observations.add_(counts)
+        contribution_rows = _proposal_rows(contribution, selected_rows.shape)
+        if contribution_rows is not None:
+            self.contribution_sums.scatter_add_(
+                0,
+                selected_rows.reshape(-1),
+                contribution_rows.to(self.device).reshape(-1),
+            )
+            self.contribution_observations.add_(counts)
+        active = counts > 0
+        self.active_steps.add_(active & (self.last_active_step != step))
+        self.last_active_step.masked_fill_(active, step)
+        self.total_selections += selected_rows.numel()
+        self.requests += selected_rows.size(0)
+        self.routing_units += selected_rows.size(0)
+
+    def materialize(self) -> _Window:
+        window = _Window(self.num_modules, self.families)
+        window.selection_counts = self.selection_counts.cpu().tolist()
+        window.request_counts = self.request_counts.cpu().tolist()
+        window.routing_unit_counts = self.routing_unit_counts.cpu().tolist()
+        slot_rows = self.slot_counts.cpu().tolist()
+        window.slot_counts = [
+            Counter(
+                {
+                    slot: int(count)
+                    for slot, count in enumerate(row)
+                    if count
+                }
+            )
+            for row in slot_rows
+        ]
+        window.probability_sums = self.probability_sums.cpu().tolist()
+        window.probability_observations = (
+            self.probability_observations.cpu().tolist()
+        )
+        window.weight_sums = self.weight_sums.cpu().tolist()
+        window.weight_observations = self.weight_observations.cpu().tolist()
+        window.acceptance_sums = self.acceptance_sums.cpu().tolist()
+        window.acceptance_observations = (
+            self.acceptance_observations.cpu().tolist()
+        )
+        window.contribution_sums = self.contribution_sums.cpu().tolist()
+        window.contribution_observations = (
+            self.contribution_observations.cpu().tolist()
+        )
+        window.active_steps = self.active_steps.cpu().tolist()
+        window.last_active_step = self.last_active_step.cpu().tolist()
+        window.total_selections = self.total_selections
+        window.requests = self.requests
+        window.routing_units = self.routing_units
+        return window
+
+
 class ModuleTelemetry:
     """Streaming, activation-free telemetry for EMC training milestones."""
 
@@ -153,8 +305,17 @@ class ModuleTelemetry:
                 tuple(f"m{index}" for index in range(self.num_modules)),
             )
         )
-        self.cumulative = _Window(self.num_modules, self.families)
-        self.interval = _Window(self.num_modules, self.families)
+        self.device = next(model.parameters()).device
+        if self.n2:
+            self.cumulative = _N2TensorWindow(
+                self.num_modules, self.families, self.device
+            )
+            self.interval = _N2TensorWindow(
+                self.num_modules, self.families, self.device
+            )
+        else:
+            self.cumulative = _Window(self.num_modules, self.families)
+            self.interval = _Window(self.num_modules, self.families)
         self.last_snapshot_step = 0
 
     def observe(self, output: EMCOutput, step: int) -> None:
@@ -231,8 +392,9 @@ class ModuleTelemetry:
             else None
         )
         for window in (self.interval, self.cumulative):
-            window.observe_request(selected, None)
-            window.observe_routing(
+            if not isinstance(window, _N2TensorWindow):
+                raise RuntimeError("N2 telemetry requires a tensor window")
+            window.observe(
                 selected,
                 scores,
                 weights,
@@ -257,11 +419,21 @@ class ModuleTelemetry:
             int(row["module"]): row
             for row in (module_signals or {}).get("modules", [])
         }
+        interval_window = (
+            self.interval.materialize()
+            if isinstance(self.interval, _N2TensorWindow)
+            else self.interval
+        )
+        cumulative_window = (
+            self.cumulative.materialize()
+            if isinstance(self.cumulative, _N2TensorWindow)
+            else self.cumulative
+        )
         interval_modules = self._module_rows(
-            self.interval, model, signals, interval_steps
+            interval_window, model, signals, interval_steps
         )
         cumulative_modules = self._module_rows(
-            self.cumulative, model, signals, step
+            cumulative_window, model, signals, step
         )
         record = {
             "milestone_tokens": milestone_tokens,
@@ -283,7 +455,11 @@ class ModuleTelemetry:
             ),
             "causal": None,
         }
-        self.interval = _Window(self.num_modules, self.families)
+        self.interval = (
+            _N2TensorWindow(self.num_modules, self.families, self.device)
+            if self.n2
+            else _Window(self.num_modules, self.families)
+        )
         self.last_snapshot_step = step
         return record
 

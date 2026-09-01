@@ -56,6 +56,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="mixed",
     )
     parser.add_argument("--n1-depth", type=int, default=3)
+    parser.add_argument(
+        "--n2-execution-mode", choices=("sparse", "dense"), default="sparse"
+    )
+    parser.add_argument("--n2-cuda-streams", action="store_true")
     parser.add_argument("--budget", choices=("quick", "medium", "research"), default="quick")
     parser.add_argument("--steps", type=int)
     parser.add_argument("--train-tokens", type=int)
@@ -165,6 +169,8 @@ def main() -> None:
             population=args.n2_population,
             top_k=args.top_k,
             n1_depth=args.n1_depth,
+            execution_mode=args.n2_execution_mode,
+            use_cuda_streams=args.n2_cuda_streams,
             **model_arguments,
         )
     else:

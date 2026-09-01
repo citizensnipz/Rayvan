@@ -105,7 +105,7 @@ def load_model_checkpoint(
     *,
     device: torch.device | str = "cpu",
 ) -> LoadedModelCheckpoint:
-    payload = _load_payload(path, device)
+    payload = _load_payload(path, "cpu")
     model = _create_model(payload["model_type"], payload["model_config"])
     model.load_state_dict(payload["model_state"])
     _restore_runtime_routing(model, payload.get("runtime_routing", {}))

@@ -89,8 +89,9 @@ class Integrator(nn.Module):
         return_diagnostics: bool = False,
     ) -> Tensor | tuple[Tensor, IntegratorTrace]:
         batch, sequence, selected, latent_dim = module_updates.shape
+        normalized_latent = self.latent_norm(latent)
         normalized_proposals = self.proposal_norm(module_updates)
-        query = self.query_projection(self.latent_norm(latent)).reshape(
+        query = self.query_projection(normalized_latent).reshape(
             batch, sequence, self.num_heads, self.head_dim
         )
         keys = self.key_projection(normalized_proposals).reshape(
@@ -100,25 +101,28 @@ class Integrator(nn.Module):
             batch, sequence, selected, self.num_heads, self.head_dim
         ).permute(0, 1, 3, 2, 4)
 
-        attention_scores = torch.einsum("bshd,bshkd->bshk", query, keys)
+        attention_scores = torch.matmul(
+            query.unsqueeze(-2), keys.transpose(-2, -1)
+        ).squeeze(-2)
         attention_scores = attention_scores / math.sqrt(self.head_dim)
         routing_prior = routing_weights.clamp_min(1e-9).log().unsqueeze(2)
         attention_scores = (
             attention_scores + self.routing_prior_scale * routing_prior
         )
         head_acceptance = torch.softmax(attention_scores, dim=-1)
-        attended_heads = torch.einsum(
-            "bshk,bshkd->bshd", head_acceptance, values
-        )
+        attended_heads = torch.matmul(
+            head_acceptance.unsqueeze(-2), values
+        ).squeeze(-2)
         attended = self.attention_output(
             attended_heads.reshape(batch, sequence, latent_dim)
         )
 
-        proposal_mean = module_updates.mean(dim=2)
-        proposal_variance = module_updates.var(dim=2, unbiased=False)
+        proposal_variance, proposal_mean = torch.var_mean(
+            module_updates, dim=2, unbiased=False
+        )
         integration_input = torch.cat(
             (
-                self.latent_norm(latent),
+                normalized_latent,
                 attended,
                 proposal_mean,
                 proposal_variance,
@@ -156,10 +160,10 @@ def _trace(
     normalized = torch.nn.functional.normalize(proposals, dim=-1)
     similarity = torch.einsum("bskd,bsjd->bskj", normalized, normalized)
     return IntegratorTrace(
-        proposal_acceptance=acceptance.detach().cpu(),
-        proposal_norms=proposals.norm(dim=-1).detach().cpu(),
-        proposal_similarity=similarity.detach().cpu(),
-        proposal_contributions=contributions.detach().cpu(),
-        integrated_update_norm=integrated_update.norm(dim=-1).detach().cpu(),
-        gate_magnitude=gate.abs().mean(dim=-1).detach().cpu(),
+        proposal_acceptance=acceptance.detach(),
+        proposal_norms=proposals.norm(dim=-1).detach(),
+        proposal_similarity=similarity.detach(),
+        proposal_contributions=contributions.detach(),
+        integrated_update_norm=integrated_update.norm(dim=-1).detach(),
+        gate_magnitude=gate.abs().mean(dim=-1).detach(),
     )

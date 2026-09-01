@@ -15,6 +15,14 @@ The pre-N1 `NexusRouter` and `WeightedAverageIntegrator` remain available for is
 
 This research area remains independent from Rayvan's Rust networking code. It contains no networking, distributed execution, pretrained model weights, instruction tuning, semantic module roles, or custom CUDA path.
 
+## N2 CUDA execution
+
+`--model n2_emc` builds one request-routed N2 event over four depth-3 N1 nodes. The mixed population is GPT, SSM, recurrent, and DeltaNet. The default `--n2-execution-mode sparse` keeps top-K semantics: Nexus scores the whole request batch with one projection, GPU tensors sort the selected request/slot assignments by expert, each heterogeneous N1 receives one batched request tensor, and one inverse permutation restores proposals before matrix-native integration. Unselected requests do not execute an N1's local blocks. The only host loop is the fixed four-family launch boundary required by the four different computational graphs; no request or token is dispatched through Python.
+
+Routing, dispatch metadata, proposal tensors, and streaming diagnostic reductions remain on the accelerator. CPU materialization occurs when a diagnostic report or milestone snapshot is requested. `--n2-execution-mode dense` is an experimental training control that executes all four N1s with continuous Nexus probabilities. `--n2-cuda-streams` enables experimental concurrent family streams; both controls are off by default.
+
+The CUDA path uses PyTorch operations only. It does not add custom CUDA/Triton kernels or an external MoE framework. PyTorch grouped GEMM is useful only for compatible homogeneous projections; the heterogeneous N1 graphs remain separate.
+
 ## Chunk-routed N1
 
 `--n1-stage n1_chunked` selects the execution architecture. A request is embedded by a deliberately small shared core, initializes canonical state `[B, shared_state_slots, D]`, selects a request-level descriptor pool once, then processes contiguous `chunk_size` blocks. Chunk routing uses the first causal token plus the previous canonical state; it never summarizes future tokens inside the current chunk.
@@ -224,7 +232,7 @@ TinyStories should eventually yield coherent simple-English story continuations 
 
 ## Deliberately deferred
 
-N1 does not include clusters-of-clusters, a second Nexus hierarchy, adaptive halting, automatic module creation/destruction, semantic routing labels, persistent cross-request state, compact global workspaces, networking, distributed gradients, or online inference-time weight updates. Those remain N2-or-later questions.
+The current N2 stage does not include clusters beyond one four-node N2 event, adaptive halting, automatic module creation/destruction, semantic routing labels, persistent cross-request state, compact global workspaces, networking, distributed gradients, or online inference-time weight updates.
 
 ## Performance diagnostics
 

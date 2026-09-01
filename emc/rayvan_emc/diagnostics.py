@@ -201,6 +201,7 @@ class EMCDiagnostics:
     def __init__(self, model: EMCModel) -> None:
         config = model.config
         shape = (config.num_cycles, config.num_modules)
+        device = next(model.parameters()).device
         self.module_families = model.module_families
         self.expert_names = tuple(
             getattr(
@@ -209,105 +210,172 @@ class EMCDiagnostics:
                 tuple(f"m{index}" for index in range(config.num_modules)),
             )
         )
-        self.selection_counts = torch.zeros(*shape, dtype=torch.long)
-        self.routing_probability_sums = torch.zeros(*shape, dtype=torch.float64)
-        self.acceptance_sums = torch.zeros(*shape, dtype=torch.float64)
-        self.proposal_norm_sums = torch.zeros(*shape, dtype=torch.float64)
-        self.contribution_sums = torch.zeros(*shape, dtype=torch.float64)
-        self.entropy_sums = torch.zeros(config.num_cycles, dtype=torch.float64)
-        self.observations = torch.zeros(config.num_cycles, dtype=torch.long)
-        self.similarity_sum = 0.0
+        self.selection_counts = torch.zeros(*shape, dtype=torch.long, device=device)
+        self.routing_probability_sums = torch.zeros(
+            *shape, dtype=torch.float32, device=device
+        )
+        self.acceptance_sums = torch.zeros(*shape, dtype=torch.float32, device=device)
+        self.proposal_norm_sums = torch.zeros(
+            *shape, dtype=torch.float32, device=device
+        )
+        self.contribution_sums = torch.zeros(
+            *shape, dtype=torch.float32, device=device
+        )
+        self.entropy_sums = torch.zeros(
+            config.num_cycles, dtype=torch.float32, device=device
+        )
+        self.observations = torch.zeros(
+            config.num_cycles, dtype=torch.long, device=device
+        )
+        self.similarity_sum = torch.zeros((), dtype=torch.float32, device=device)
         self.similarity_count = 0
-        self.integrated_update_norm_sum = 0.0
-        self.gate_magnitude_sum = 0.0
+        self.integrated_update_norm_sum = torch.zeros(
+            (), dtype=torch.float32, device=device
+        )
+        self.gate_magnitude_sum = torch.zeros(
+            (), dtype=torch.float32, device=device
+        )
         self.integrator_observations = 0
-        self.routes = [set() for _ in range(config.num_cycles)]
-        self.maximum_router_gradient_norm = 0.0
-        self.maximum_module_gradient_norms = [0.0] * config.num_modules
+        self.reference_routes: list[Tensor | None] = [
+            None for _ in range(config.num_cycles)
+        ]
+        self.route_differences = torch.zeros(
+            config.num_cycles, dtype=torch.bool, device=device
+        )
+        self.maximum_router_gradient_norm = torch.zeros(
+            (), dtype=torch.float32, device=device
+        )
+        self.maximum_module_gradient_norms = torch.zeros(
+            config.num_modules, dtype=torch.float32, device=device
+        )
         self.initial_module_fingerprints = tuple(
             _module_fingerprint(module) for module in model.emc_modules
         )
+        self._on_host = False
+        self.routing_differs_across_inputs = False
 
     def observe_trace(self, trace: tuple[EMCCycleTrace, ...]) -> None:
+        device = self.selection_counts.device
         for cycle_trace in trace:
             cycle_index = cycle_trace.cycle - 1
             if cycle_trace.selected_indices is not None:
-                decisions = cycle_trace.selected_indices.reshape(
+                decisions = cycle_trace.selected_indices.to(device=device).reshape(
                     -1, cycle_trace.selected_indices.size(-1)
                 )
             else:
                 decisions = torch.tensor(
-                    [cycle_trace.selected_modules], dtype=torch.long
+                    [cycle_trace.selected_modules], dtype=torch.long, device=device
                 )
             counts = torch.bincount(
                 decisions.reshape(-1), minlength=self.selection_counts.size(1)
             )
-            self.selection_counts[cycle_index] += counts
+            self.selection_counts[cycle_index].add_(counts)
             probabilities = torch.softmax(
-                cycle_trace.router_scores.to(torch.float64), dim=-1
+                cycle_trace.router_scores.to(device=device, dtype=torch.float32),
+                dim=-1,
             )
-            self.routing_probability_sums[cycle_index] += probabilities.reshape(
-                -1, probabilities.size(-1)
-            ).sum(dim=0)
+            self.routing_probability_sums[cycle_index].add_(
+                probabilities.reshape(-1, probabilities.size(-1)).sum(dim=0)
+            )
             entropies = -(
                 probabilities * probabilities.clamp_min(1e-12).log()
             ).sum(dim=-1)
-            self.entropy_sums[cycle_index] += entropies.sum()
-            self.observations[cycle_index] += entropies.numel()
-            self.routes[cycle_index].update(
-                tuple(decision.tolist()) for decision in decisions
+            self.entropy_sums[cycle_index].add_(entropies.sum())
+            self.observations[cycle_index].add_(entropies.numel())
+            reference = self.reference_routes[cycle_index]
+            if reference is None:
+                reference = decisions[:1].detach().clone()
+                self.reference_routes[cycle_index] = reference
+            self.route_differences[cycle_index].logical_or_(
+                (decisions != reference).any()
             )
 
             integrator_trace = cycle_trace.integrator_trace
             if integrator_trace is None or cycle_trace.selected_indices is None:
                 continue
-            selected = cycle_trace.selected_indices.reshape(-1)
+            selected = cycle_trace.selected_indices.to(device=device).reshape(-1)
             for source, destination in (
                 (integrator_trace.proposal_acceptance, self.acceptance_sums),
                 (integrator_trace.proposal_norms, self.proposal_norm_sums),
                 (integrator_trace.proposal_contributions, self.contribution_sums),
             ):
                 destination[cycle_index].scatter_add_(
-                    0, selected, source.to(torch.float64).reshape(-1)
+                    0, selected, source.to(device=device, dtype=torch.float32).reshape(-1)
                 )
-            similarity = integrator_trace.proposal_similarity
+            similarity = integrator_trace.proposal_similarity.to(device=device)
             selected_count = similarity.size(-1)
             if selected_count > 1:
                 off_diagonal = ~torch.eye(
-                    selected_count, dtype=torch.bool
+                    selected_count, dtype=torch.bool, device=device
                 ).reshape(1, 1, selected_count, selected_count)
                 values = similarity[off_diagonal.expand_as(similarity)]
-                self.similarity_sum += values.sum().item()
+                self.similarity_sum.add_(values.sum())
                 self.similarity_count += values.numel()
-            self.integrated_update_norm_sum += (
-                integrator_trace.integrated_update_norm.sum().item()
+            self.integrated_update_norm_sum.add_(
+                integrator_trace.integrated_update_norm.to(device=device).sum()
             )
-            self.gate_magnitude_sum += integrator_trace.gate_magnitude.sum().item()
+            self.gate_magnitude_sum.add_(
+                integrator_trace.gate_magnitude.to(device=device).sum()
+            )
             self.integrator_observations += (
                 integrator_trace.gate_magnitude.numel()
             )
 
     def observe_router_gradients(self, model: EMCModel) -> None:
-        squared_norm = 0.0
-        for parameter in model.router.parameters():
-            if parameter.grad is not None:
-                squared_norm += parameter.grad.detach().float().square().sum().item()
-        self.maximum_router_gradient_norm = max(
-            self.maximum_router_gradient_norm, squared_norm**0.5
-        )
+        squared = [
+            parameter.grad.detach().float().square().sum()
+            for parameter in model.router.parameters()
+            if parameter.grad is not None
+        ]
+        if squared:
+            norm = torch.stack(squared).sum().sqrt()
+            self.maximum_router_gradient_norm.copy_(
+                torch.maximum(self.maximum_router_gradient_norm, norm)
+            )
 
     def observe_module_gradients(self, model: EMCModel) -> None:
         for index, module in enumerate(model.emc_modules):
-            squared_norm = sum(
-                parameter.grad.detach().float().square().sum().item()
+            squared = [
+                parameter.grad.detach().float().square().sum()
                 for parameter in module.parameters()
                 if parameter.grad is not None
-            )
-            self.maximum_module_gradient_norms[index] = max(
-                self.maximum_module_gradient_norms[index], squared_norm**0.5
+            ]
+            if not squared:
+                continue
+            norm = torch.stack(squared).sum().sqrt()
+            self.maximum_module_gradient_norms[index].copy_(
+                torch.maximum(self.maximum_module_gradient_norms[index], norm)
             )
 
+    def _move_accumulators_to_host(self) -> None:
+        if self._on_host:
+            return
+        for name in (
+            "selection_counts",
+            "routing_probability_sums",
+            "acceptance_sums",
+            "proposal_norm_sums",
+            "contribution_sums",
+            "entropy_sums",
+            "observations",
+        ):
+            setattr(self, name, getattr(self, name).cpu())
+        self.similarity_sum = float(self.similarity_sum.cpu())
+        self.integrated_update_norm_sum = float(
+            self.integrated_update_norm_sum.cpu()
+        )
+        self.gate_magnitude_sum = float(self.gate_magnitude_sum.cpu())
+        self.routing_differs_across_inputs = bool(
+            self.route_differences.any().cpu()
+        )
+        self.maximum_router_gradient_norm = float(
+            self.maximum_router_gradient_norm.cpu()
+        )
+        self.maximum_module_gradient_norms = self.maximum_module_gradient_norms.cpu().tolist()
+        self._on_host = True
+
     def report(self, model: EMCModel) -> RoutingReport:
+        self._move_accumulators_to_host()
         per_cycle_distributions: list[tuple[float, ...]] = []
         mean_entropies: list[float] = []
         for cycle_index in range(self.selection_counts.size(0)):
@@ -426,9 +494,7 @@ class EMCDiagnostics:
             effective_active_modules=effective_active_modules,
             severe_collapse=severe_collapse,
             routing_collapsed=severe_collapse,
-            routing_differs_across_inputs=any(
-                len(cycle_routes) > 1 for cycle_routes in self.routes
-            ),
+            routing_differs_across_inputs=self.routing_differs_across_inputs,
             routing_differs_across_cycles=differs_across_cycles,
             maximum_router_gradient_norm=self.maximum_router_gradient_norm,
             module_gradient_norms=tuple(self.maximum_module_gradient_norms),

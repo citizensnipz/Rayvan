@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import csv
+import gc
 import json
 import math
 import platform
@@ -141,18 +142,26 @@ def evaluate_checkpoint(
 ) -> dict[str, Any]:
     resolved = config or DiagnosticEvaluationConfig()
     loaded = load_model_checkpoint(checkpoint, device=resolved.device)
-    report = evaluate_suite(
-        loaded.model,
-        loaded.tokenizer,
-        resolved,
-        checkpoint=str(checkpoint),
-        checkpoint_training_config=loaded.training_config,
-        checkpoint_training_diagnostics=getattr(
-            loaded, "training_diagnostics", None
-        ),
-    )
-    write_report(report, output_directory)
-    return report
+    try:
+        report = evaluate_suite(
+            loaded.model,
+            loaded.tokenizer,
+            resolved,
+            checkpoint=str(checkpoint),
+            checkpoint_training_config=loaded.training_config,
+            checkpoint_training_diagnostics=getattr(
+                loaded, "training_diagnostics", None
+            ),
+        )
+        write_report(report, output_directory)
+        return report
+    finally:
+        if next(loaded.model.parameters()).device.type == "cuda":
+            loaded.model.to("cpu")
+        del loaded
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 def evaluate_suite(
@@ -1086,7 +1095,9 @@ def _observe_integrator(summary: _TraceSummary, selected: Tensor, trace: Any, ki
             summary.integrator[metric_name][module_index].append(value)
     similarity = trace.proposal_similarity.float()
     if similarity.size(-1) > 1:
-        mask = ~torch.eye(similarity.size(-1), dtype=torch.bool)
+        mask = ~torch.eye(
+            similarity.size(-1), dtype=torch.bool, device=similarity.device
+        )
         summary.proposal_similarities.extend(similarity[..., mask].reshape(-1).tolist())
     summary.gate_magnitudes.extend(trace.gate_magnitude.float().reshape(-1).tolist())
 

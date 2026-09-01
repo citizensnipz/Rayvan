@@ -175,6 +175,8 @@ def create_n2_model(
     top_k: int = 2,
     tie_embeddings: bool = False,
     n1_depth: int = 3,
+    execution_mode: str = "sparse",
+    use_cuda_streams: bool = False,
 ) -> N2EMCModel:
     if population not in N2_POPULATIONS:
         raise ValueError(f"unknown N2 population: {population!r}")
@@ -198,6 +200,8 @@ def create_n2_model(
             "module_families": N2_POPULATIONS[population],
             "n2_population": population,
             "n1_depth": n1_depth,
+            "n2_execution_mode": execution_mode,
+            "n2_use_cuda_streams": use_cuda_streams,
             "loss_free_balance_enabled": False,
         }
     )

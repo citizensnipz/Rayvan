@@ -58,6 +58,7 @@ class EMCConfig:
     delta_internal_dim: int | None = None
     delta_heads: int = 4
     delta_ffn_dim: int | None = None
+    delta_max_transition_bytes: int = 64 * 2**20
 
     def __post_init__(self) -> None:
         positive_fields = {
@@ -73,6 +74,7 @@ class EMCConfig:
             "chunk_size": self.chunk_size,
             "shared_state_slots": self.shared_state_slots,
             "delta_heads": self.delta_heads,
+            "delta_max_transition_bytes": self.delta_max_transition_bytes,
         }
         for name, value in positive_fields.items():
             if value <= 0:

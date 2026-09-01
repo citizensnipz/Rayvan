@@ -40,6 +40,8 @@ class N2Config(EMCConfig):
     architecture_stage: str = "n2"
     n2_population: str = "mixed"
     n1_depth: int = 3
+    n2_execution_mode: str = "sparse"
+    n2_use_cuda_streams: bool = False
     loss_free_balance_enabled: bool = False
 
     def __post_init__(self) -> None:
@@ -59,6 +61,8 @@ class N2Config(EMCConfig):
             raise ValueError("initial N2 experiments support exactly one N2 cycle")
         if self.n1_depth < 2:
             raise ValueError("n1_depth must be at least two substantial local blocks")
+        if self.n2_execution_mode not in {"sparse", "dense"}:
+            raise ValueError("n2_execution_mode must be sparse or dense")
 
 
 @dataclass(frozen=True)
@@ -90,7 +94,7 @@ class N1Diagnostics:
     state_resets: int
     continuation_probability: float | None
     average_lease_length: float | None
-    state_change_magnitude: float | None
+    state_change_magnitude: Tensor | float | None
 
 
 @dataclass(frozen=True)
@@ -118,6 +122,9 @@ class HomogeneousN1Node(nn.Module, ABC):
         self.state_initializer = nn.Linear(
             config.latent_dim, config.shared_state_slots * config.latent_dim
         )
+        self._parameter_count = sum(
+            parameter.numel() for parameter in self.parameters()
+        )
         self._execution_count = 0
 
     @property
@@ -126,7 +133,7 @@ class HomogeneousN1Node(nn.Module, ABC):
 
     @property
     def parameter_count(self) -> int:
-        return sum(parameter.numel() for parameter in self.parameters())
+        return self._parameter_count
 
     @property
     def block_count(self) -> int:
@@ -156,6 +163,17 @@ class HomogeneousN1Node(nn.Module, ABC):
         if latent.ndim != 3 or latent.size(-1) != self.config.latent_dim:
             raise ValueError("shared_latent must have shape [batch, sequence, latent_dim]")
         batch, sequence_length, _ = latent.shape
+        if batch == 0:
+            return N1Output(
+                proposal=latent,
+                local_state=None,
+                diagnostics=self._diagnostics(
+                    sequence_length,
+                    batch=0,
+                    state_change=None,
+                    state_reset=False,
+                ),
+            )
         request_indices = (
             node_input.request_indices.to(device=latent.device, dtype=torch.long)
             if node_input.request_indices is not None
@@ -194,6 +212,36 @@ class HomogeneousN1Node(nn.Module, ABC):
         next_states: list[ModuleLeaseState] = []
         initial_shared = local_shared
         chunks = math.ceil(sequence_length / self.config.chunk_size)
+        node_ids = torch.full_like(request_indices, self.node_id)
+        lease_ids = tuple(
+            torch.stack(
+                (
+                    request_indices,
+                    node_ids,
+                    torch.full_like(request_indices, block_index),
+                ),
+                dim=-1,
+            )
+            for block_index in range(self.block_count)
+        )
+        lease_ages = tuple(
+            torch.full(
+                (batch,),
+                chunk_index + 1,
+                device=latent.device,
+                dtype=torch.long,
+            )
+            for chunk_index in range(chunks)
+        )
+        continuing_leases = tuple(
+            torch.full(
+                (batch,),
+                chunk_index > 0,
+                device=latent.device,
+                dtype=torch.bool,
+            )
+            for chunk_index in range(chunks)
+        )
         for block_index, (block, initial_state) in enumerate(
             zip(self.blocks, incoming_states, strict=True)
         ):
@@ -212,27 +260,10 @@ class HomogeneousN1Node(nn.Module, ABC):
                         metadata=ChunkMetadata(
                             request_indices=request_indices,
                             chunk_index=chunk_index,
-                            lease_ages=torch.full(
-                                (batch,),
-                                chunk_index + 1,
-                                device=latent.device,
-                                dtype=torch.long,
-                            ),
+                            lease_ages=lease_ages[chunk_index],
                             module_index=block_index,
-                            lease_ids=torch.stack(
-                                (
-                                    request_indices,
-                                    torch.full_like(request_indices, self.node_id),
-                                    torch.full_like(request_indices, block_index),
-                                ),
-                                dim=-1,
-                            ),
-                            continuing_lease=torch.full(
-                                (batch,),
-                                chunk_index > 0,
-                                device=latent.device,
-                                dtype=torch.bool,
-                            ),
+                            lease_ids=lease_ids[block_index],
+                            continuing_lease=continuing_leases[chunk_index],
                         ),
                     )
                 )
@@ -245,7 +276,7 @@ class HomogeneousN1Node(nn.Module, ABC):
             next_states.append(lease_state)
 
         state_change = (
-            float((local_shared - initial_shared).float().norm().detach().cpu())
+            (local_shared - initial_shared).float().norm().detach()
             if self.stateful
             else None
         )
@@ -257,24 +288,40 @@ class HomogeneousN1Node(nn.Module, ABC):
         return N1Output(
             proposal=current - latent,
             local_state=persistent_state,
-            diagnostics=N1Diagnostics(
-                node_id=self.node_id,
-                node_name=self.node_name,
-                family=self.family,
-                blocks_executed=self.block_count,
-                chunks_per_block=chunks,
-                block_invocations=self.block_count * chunks,
-                parameters=self.parameter_count,
-                approximate_flops=self.approximate_flops(sequence_length),
-                output_latent_size=self.config.latent_dim,
-                stateful=self.stateful,
-                state_resets=batch if self.stateful and node_input.local_state is None else 0,
-                continuation_probability=(
-                    (chunks - 1) / chunks if self.stateful and chunks else None
-                ),
-                average_lease_length=float(chunks) if self.stateful else None,
-                state_change_magnitude=state_change,
+            diagnostics=self._diagnostics(
+                sequence_length,
+                batch=batch,
+                state_change=state_change,
+                state_reset=node_input.local_state is None,
             ),
+        )
+
+    def _diagnostics(
+        self,
+        sequence_length: int,
+        *,
+        batch: int,
+        state_change: Tensor | None,
+        state_reset: bool,
+    ) -> N1Diagnostics:
+        chunks = math.ceil(sequence_length / self.config.chunk_size)
+        return N1Diagnostics(
+            node_id=self.node_id,
+            node_name=self.node_name,
+            family=self.family,
+            blocks_executed=self.block_count,
+            chunks_per_block=chunks,
+            block_invocations=self.block_count * chunks,
+            parameters=self.parameter_count,
+            approximate_flops=self.approximate_flops(sequence_length),
+            output_latent_size=self.config.latent_dim,
+            stateful=self.stateful,
+            state_resets=batch if self.stateful and state_reset else 0,
+            continuation_probability=(
+                (chunks - 1) / chunks if self.stateful and chunks else None
+            ),
+            average_lease_length=float(chunks) if self.stateful else None,
+            state_change_magnitude=state_change,
         )
 
 
@@ -343,6 +390,69 @@ class N2RoutingDecision:
     selected_indices: Tensor
     selected_weights: Tensor
     selected_slots: Tensor
+
+
+@dataclass(frozen=True)
+class N2DispatchPlan:
+    """CUDA-resident permutation metadata for request-level expert batches."""
+
+    expert_ids: Tensor
+    source_indices: Tensor
+    slot_indices: Tensor
+    permutation: Tensor
+    inverse_permutation: Tensor
+    sorted_expert_ids: Tensor
+    sorted_source_indices: Tensor
+    sorted_slot_indices: Tensor
+    expert_counts: Tensor
+    expert_offsets: Tensor
+
+    @classmethod
+    def from_routing(
+        cls, selected_indices: Tensor, *, num_experts: int
+    ) -> N2DispatchPlan:
+        if selected_indices.ndim != 2:
+            raise ValueError("selected_indices must have shape [batch, selected]")
+        batch, selected = selected_indices.shape
+        expert_ids = selected_indices.reshape(-1)
+        source_indices = (
+            torch.arange(batch, device=selected_indices.device)
+            .unsqueeze(1)
+            .expand(-1, selected)
+            .reshape(-1)
+        )
+        slot_indices = (
+            torch.arange(selected, device=selected_indices.device)
+            .unsqueeze(0)
+            .expand(batch, -1)
+            .reshape(-1)
+        )
+        permutation = torch.argsort(expert_ids, stable=True)
+        assignment_indices = torch.arange(
+            expert_ids.numel(), device=selected_indices.device
+        )
+        inverse_permutation = torch.empty_like(permutation).scatter(
+            0, permutation, assignment_indices
+        )
+        expert_counts = torch.bincount(expert_ids, minlength=num_experts)
+        expert_offsets = torch.cat(
+            (
+                expert_counts.new_zeros(1),
+                expert_counts.cumsum(dim=0),
+            )
+        )
+        return cls(
+            expert_ids=expert_ids,
+            source_indices=source_indices,
+            slot_indices=slot_indices,
+            permutation=permutation,
+            inverse_permutation=inverse_permutation,
+            sorted_expert_ids=expert_ids.index_select(0, permutation),
+            sorted_source_indices=source_indices.index_select(0, permutation),
+            sorted_slot_indices=slot_indices.index_select(0, permutation),
+            expert_counts=expert_counts,
+            expert_offsets=expert_offsets,
+        )
 
 
 class N2Nexus(nn.Module):
@@ -421,6 +531,11 @@ class N2ExecutionTrace:
     selected_node_weights: Tensor
     pre_top_k_probabilities: Tensor
     selected_slots: Tensor
+    dispatch_permutation: Tensor
+    dispatch_inverse_permutation: Tensor
+    dispatch_counts: Tensor
+    dispatch_offsets: Tensor
+    execution_mode: str
     executed_node_ids: tuple[int, ...]
     actual_node_executions: int
     theoretical_all_node_executions: int
@@ -465,6 +580,7 @@ class N2EMCModel(EMCModel):
             nn.init.normal_(self.token_embedding.weight, mean=0.0, std=0.02)
             nn.init.zeros_(self.output_projection.bias)
         self._active_top_k = config.modules_per_cycle
+        self._cuda_streams: tuple[torch.cuda.Stream, ...] | None = None
 
     @property
     def nexus(self) -> N2Nexus:
@@ -519,6 +635,8 @@ class N2EMCModel(EMCModel):
             top_k=self.active_top_k,
             availability_mask=availability_mask,
         )
+        if self.config.n2_execution_mode == "dense":
+            routing = _dense_n2_routing(routing, self.config.num_modules)
         if diagnostic_forced_modules is not None:
             routing = _force_n2_routing(
                 routing,
@@ -527,7 +645,13 @@ class N2EMCModel(EMCModel):
                 top_k=self.active_top_k,
                 num_nodes=self.config.num_modules,
             )
-        proposals, updated_states, diagnostics, executed = self._execute_selected_nodes(
+        (
+            proposals,
+            updated_states,
+            diagnostics,
+            executed,
+            dispatch,
+        ) = self._execute_selected_nodes(
             latent,
             routing.selected_indices,
             n2_state=n2_state,
@@ -576,10 +700,10 @@ class N2EMCModel(EMCModel):
             EMCCycleTrace(
                 cycle=1,
                 selected_modules=executed,
-                router_scores=expanded_scores.detach().cpu(),
-                router_weights=expanded_weights.detach().cpu(),
+                router_scores=expanded_scores.detach(),
+                router_weights=expanded_weights.detach(),
                 latent_shape=tuple(latent.shape),
-                selected_indices=expanded_indices.detach().cpu(),
+                selected_indices=expanded_indices.detach(),
                 integrator_trace=integrator_trace,
                 module_families=self.module_families,
                 expert_names=self.expert_names,
@@ -587,14 +711,19 @@ class N2EMCModel(EMCModel):
             ),
         ) if return_trace else ()
         execution_trace = N2ExecutionTrace(
-            selected_node_ids=routing.selected_indices.detach().cpu(),
-            selected_node_weights=routing.selected_weights.detach().cpu(),
-            pre_top_k_probabilities=routing.pre_top_k_probabilities.detach().cpu(),
-            selected_slots=routing.selected_slots.detach().cpu(),
+            selected_node_ids=routing.selected_indices.detach(),
+            selected_node_weights=routing.selected_weights.detach(),
+            pre_top_k_probabilities=routing.pre_top_k_probabilities.detach(),
+            selected_slots=routing.selected_slots.detach(),
             executed_node_ids=executed,
-            actual_node_executions=int(routing.selected_indices.numel()),
+            actual_node_executions=routing.selected_indices.numel(),
             theoretical_all_node_executions=token_ids.size(0) * self.config.num_modules,
             node_diagnostics=tuple(diagnostics),
+            dispatch_permutation=dispatch.permutation.detach(),
+            dispatch_inverse_permutation=dispatch.inverse_permutation.detach(),
+            dispatch_counts=dispatch.expert_counts.detach(),
+            dispatch_offsets=dispatch.expert_offsets.detach(),
+            execution_mode=self.config.n2_execution_mode,
         )
         balance_loss = router_balance_loss(
             expanded_scores,
@@ -621,45 +750,137 @@ class N2EMCModel(EMCModel):
         dict[int, N1PersistentState],
         list[N1Diagnostics],
         tuple[int, ...],
+        N2DispatchPlan,
     ]:
         batch, sequence, latent_dim = latent.shape
-        top_k = selected_indices.size(1)
-        flattened = latent.new_zeros(batch * top_k, sequence, latent_dim)
+        selected = selected_indices.size(1)
+        dispatch = N2DispatchPlan.from_routing(
+            selected_indices, num_experts=self.config.num_modules
+        )
+        node_batches: list[tuple[Tensor, Tensor]] = []
+        for node_id in range(self.config.num_modules):
+            node_mask = dispatch.sorted_expert_ids == node_id
+            request_rows = dispatch.sorted_source_indices[node_mask]
+            node_batches.append(
+                (
+                    latent.index_select(0, request_rows),
+                    request_rows,
+                )
+            )
+
+        if self.config.n2_use_cuda_streams and latent.is_cuda:
+            node_outputs = self._execute_node_batches_concurrently(
+                node_batches, n2_state=n2_state
+            )
+        else:
+            node_outputs = [
+                self._execute_node_batch(
+                    node_id,
+                    node_batch,
+                    request_rows,
+                    n2_state=n2_state,
+                )
+                for node_id, (node_batch, request_rows) in enumerate(node_batches)
+            ]
+
         states: dict[int, N1PersistentState] = {}
         diagnostics: list[N1Diagnostics] = []
         executed: list[int] = []
-        for node_id, node in enumerate(self.n1_nodes):
-            locations = torch.nonzero(selected_indices == node_id, as_tuple=False)
-            if locations.numel() == 0:
+        grouped_proposals: list[Tensor] = []
+        for node_id, node_output in enumerate(node_outputs):
+            grouped_proposals.append(node_output.proposal)
+            if node_output.proposal.size(0) == 0:
                 continue
-            request_rows = locations[:, 0]
-            if torch.unique(request_rows).numel() != request_rows.numel():
-                raise RuntimeError("top-K routing selected one N1 node twice per request")
-            node_output = node(
-                N1Input(
-                    shared_latent=latent.index_select(0, request_rows),
-                    local_state=(
-                        n2_state.local_states.get(node_id)
-                        if n2_state is not None
-                        else None
-                    ),
-                    request_indices=request_rows,
-                )
-            )
-            flat_locations = request_rows * top_k + locations[:, 1]
-            node_buffer = latent.new_zeros(batch * top_k, sequence, latent_dim)
-            node_buffer = node_buffer.index_copy(
-                0, flat_locations, node_output.proposal
-            )
-            flattened = flattened + node_buffer
             if node_output.local_state is not None:
                 states[node_id] = node_output.local_state
             diagnostics.append(node_output.diagnostics)
             executed.append(node_id)
-        proposals = flattened.reshape(batch, top_k, sequence, latent_dim).permute(
-            0, 2, 1, 3
+        sorted_proposals = torch.cat(grouped_proposals, dim=0)
+        flattened = sorted_proposals.index_select(
+            0, dispatch.inverse_permutation
         )
-        return proposals, states, diagnostics, tuple(executed)
+        proposals = flattened.reshape(
+            batch, selected, sequence, latent_dim
+        ).permute(0, 2, 1, 3)
+        return proposals, states, diagnostics, tuple(executed), dispatch
+
+    def _execute_node_batch(
+        self,
+        node_id: int,
+        latent: Tensor,
+        request_rows: Tensor,
+        *,
+        n2_state: N2State | None,
+    ) -> N1Output:
+        return self.n1_nodes[node_id](
+            N1Input(
+                shared_latent=latent,
+                local_state=(
+                    n2_state.local_states.get(node_id)
+                    if n2_state is not None
+                    else None
+                ),
+                request_indices=request_rows,
+            )
+        )
+
+    def _execute_node_batches_concurrently(
+        self,
+        node_batches: list[tuple[Tensor, Tensor]],
+        *,
+        n2_state: N2State | None,
+    ) -> list[N1Output]:
+        device = node_batches[0][0].device
+        if self._cuda_streams is None:
+            self._cuda_streams = tuple(
+                torch.cuda.Stream(device=device)
+                for _ in range(self.config.num_modules)
+            )
+        current_stream = torch.cuda.current_stream(device)
+        outputs: list[N1Output] = []
+        for node_id, ((node_batch, request_rows), stream) in enumerate(
+            zip(node_batches, self._cuda_streams, strict=True)
+        ):
+            stream.wait_stream(current_stream)
+            node_batch.record_stream(stream)
+            request_rows.record_stream(stream)
+            with torch.cuda.stream(stream):
+                outputs.append(
+                    self._execute_node_batch(
+                        node_id,
+                        node_batch,
+                        request_rows,
+                        n2_state=n2_state,
+                    )
+                )
+        for stream, output in zip(self._cuda_streams, outputs, strict=True):
+            current_stream.wait_stream(stream)
+            output.proposal.record_stream(current_stream)
+            if output.local_state is not None:
+                output.local_state.shared_state.record_stream(current_stream)
+                for block_state in output.local_state.block_states:
+                    for tensor in block_state.tensors.values():
+                        tensor.record_stream(current_stream)
+        return outputs
+
+
+def _dense_n2_routing(
+    routing: N2RoutingDecision, num_nodes: int
+) -> N2RoutingDecision:
+    batch = routing.scores.size(0)
+    selected = torch.arange(
+        num_nodes, device=routing.scores.device
+    ).expand(batch, -1)
+    slots = torch.arange(
+        num_nodes, device=routing.scores.device
+    ).expand_as(selected)
+    return N2RoutingDecision(
+        scores=routing.scores,
+        pre_top_k_probabilities=routing.pre_top_k_probabilities,
+        selected_indices=selected,
+        selected_weights=routing.pre_top_k_probabilities,
+        selected_slots=slots,
+    )
 
 
 def _force_n2_routing(
