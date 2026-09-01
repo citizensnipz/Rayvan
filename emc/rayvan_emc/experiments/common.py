@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Literal
 
 import torch
@@ -15,6 +16,7 @@ from ..diagnostics import (
     parameter_counts,
 )
 from ..model import EMCConfig, EMCModel
+from ..n2 import N2_POPULATIONS, N2Config, N2EMCModel
 from ..tokenization import DEFAULT_TOKENIZER_IDENTIFIER
 
 Preset = Literal["quick", "research"]
@@ -40,6 +42,7 @@ MODULE_POPULATIONS = (
     "recurrent-delta",
     "mixed",
 )
+N2_POPULATION_PRESETS = tuple(N2_POPULATIONS)
 DatasetName = Literal["tiny", "tinystories"]
 
 TOKEN_BUDGETS: dict[BudgetPreset, int] = {
@@ -162,6 +165,58 @@ def create_emc_model(
     return EMCModel(config)
 
 
+def create_n2_model(
+    vocab_size: int,
+    preset: Preset,
+    *,
+    maximum_sequence_length: int,
+    seed: int,
+    population: str = "mixed",
+    top_k: int = 2,
+    tie_embeddings: bool = False,
+    n1_depth: int = 3,
+) -> N2EMCModel:
+    if population not in N2_POPULATIONS:
+        raise ValueError(f"unknown N2 population: {population!r}")
+    torch.manual_seed(seed)
+    template = create_emc_model(
+        vocab_size,
+        preset,
+        maximum_sequence_length=maximum_sequence_length,
+        seed=seed,
+        tie_embeddings=tie_embeddings,
+        n1_stage="n1_chunked",
+        module_population="mixed",
+    )
+    values = asdict(template.config)
+    values.update(
+        {
+            "architecture_stage": "n2",
+            "num_cycles": 1,
+            "modules_per_cycle": top_k,
+            "active_top_k": top_k,
+            "module_families": N2_POPULATIONS[population],
+            "n2_population": population,
+            "n1_depth": n1_depth,
+            "loss_free_balance_enabled": False,
+        }
+    )
+    if preset == "quick":
+        values.update(
+            {
+                "module_hidden_dim": 192,
+                "state_space_dim": 88,
+                "recurrent_dim": 66,
+                "delta_internal_dim": 48,
+                "delta_ffn_dim": 144,
+            }
+        )
+    else:
+        values["delta_ffn_dim"] = 5_120
+    torch.manual_seed(seed)
+    return N2EMCModel(N2Config(**values))
+
+
 def create_baseline_model(
     vocab_size: int,
     preset: Preset,
@@ -253,9 +308,12 @@ def print_parameter_summary(name: str, model: nn.Module) -> None:
 def print_routing_report(
     report: RoutingReport, *, include_training_signals: bool = True
 ) -> None:
+    labels = report.expert_names or tuple(
+        f"m{index}" for index in range(len(report.traffic_fraction))
+    )
     traffic = ", ".join(
-        f"m{index}={fraction:.1%}"
-        for index, fraction in enumerate(report.traffic_fraction)
+        f"{label}={fraction:.1%}"
+        for label, fraction in zip(labels, report.traffic_fraction, strict=True)
     )
     print(f"EMC module traffic: {traffic}")
     family_traffic = ", ".join(
@@ -305,7 +363,7 @@ def print_routing_report(
         )
     ):
         print(
-            f"  m{index}: route_p={probability:.3f} | "
+            f"  {labels[index]}: route_p={probability:.3f} | "
             f"accept={acceptance:.3f} | proposal_norm={proposal_norm:.3f} | "
             f"contribution={contribution:.3f} | params={parameter_count:,}"
         )

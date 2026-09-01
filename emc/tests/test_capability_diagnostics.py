@@ -578,12 +578,14 @@ def test_smoke_evaluation_writes_json_csv_and_markdown(tmp_path: Path) -> None:
             max_notable_examples=2,
         ),
     )
+    report["runtime"]["non_finite_test_value"] = float("nan")
     write_report(report, tmp_path)
 
     assert (tmp_path / "report.json").is_file()
     assert (tmp_path / "metrics.csv").is_file()
     assert (tmp_path / "report.md").is_file()
     loaded = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    assert loaded["runtime"]["non_finite_test_value"] is None
     assert set(loaded["capability_results"]) == set(CAPABILITIES)
     assert "nexus_analysis" in loaded
     assert "causal_ablations" in loaded

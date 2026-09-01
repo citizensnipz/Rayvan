@@ -99,8 +99,8 @@ class EMCConfig:
             raise ValueError("active_top_k must be positive when provided")
         if self.resolved_active_top_k > self.num_modules:
             raise ValueError("active_top_k cannot exceed num_modules")
-        if self.architecture_stage not in {"token", "n1_chunked"}:
-            raise ValueError("architecture_stage must be token or n1_chunked")
+        if self.architecture_stage not in {"token", "n1_chunked", "n2"}:
+            raise ValueError("architecture_stage must be token, n1_chunked, or n2")
         if not 0 <= self.minimum_lease_chunks:
             raise ValueError("minimum_lease_chunks cannot be negative")
         if not 0 <= self.balance_warmup_chunks:
@@ -215,6 +215,8 @@ class EMCCycleTrace:
     selected_indices: Tensor | None = None
     integrator_trace: IntegratorTrace | None = None
     module_families: tuple[str, ...] = ()
+    expert_names: tuple[str, ...] = ()
+    local_diagnostics: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -224,6 +226,7 @@ class EMCOutput:
     router_balance_loss: Tensor | None = None
     cycle_logits: tuple[Tensor, ...] | None = None
     chunk_trace: object | None = None
+    n2_state: object | None = None
 
 
 class EMCModel(nn.Module):
@@ -256,10 +259,20 @@ class EMCModel(nn.Module):
             self.output_projection.weight = self.token_embedding.weight
             nn.init.normal_(self.token_embedding.weight, mean=0.0, std=0.02)
             nn.init.zeros_(self.output_projection.bias)
+        self._active_top_k = config.modules_per_cycle
 
     @property
     def module_families(self) -> tuple[str, ...]:
         return tuple(module.family for module in self.emc_modules)
+
+    @property
+    def active_top_k(self) -> int:
+        return self._active_top_k
+
+    def set_active_top_k(self, top_k: int) -> None:
+        if not 1 <= top_k <= self.config.num_modules:
+            raise ValueError("active top-K must be between one and num_modules")
+        self._active_top_k = top_k
 
     def execute_selected_modules(
         self, latent: Tensor, selected_indices: Tensor
@@ -335,6 +348,7 @@ class EMCModel(nn.Module):
                 latent,
                 availability_mask=availability_mask,
                 module_descriptors=module_descriptors,
+                top_k=self.active_top_k,
             )
             if diagnostic_forced_modules is not None:
                 routing = _force_token_routing(
@@ -342,7 +356,7 @@ class EMCModel(nn.Module):
                     diagnostic_forced_modules,
                     batch=token_ids.size(0),
                     sequence=sequence_length,
-                    modules_per_cycle=self.config.modules_per_cycle,
+                    modules_per_cycle=self.active_top_k,
                     num_modules=self.config.num_modules,
                 )
             if return_trace:

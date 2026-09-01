@@ -11,6 +11,8 @@ from torch import nn
 from .baseline import TransformerConfig, TransformerLanguageModel
 from .chunked import ChunkedEMCModel
 from .model import EMCConfig, EMCModel
+from .n2 import N2Config, N2EMCModel
+from .serial import HeterogeneousSerialModel
 from .tokenization import TextTokenizer, tokenizer_from_config
 
 
@@ -58,6 +60,7 @@ def save_training_checkpoint(
         "model_type": _model_type(model),
         "model_config": asdict(model.config),
         "model_state": model.state_dict(),
+        "runtime_routing": _runtime_routing(model),
         "optimizer_state": optimizer.state_dict(),
         "step": step,
         "tokens_processed": tokens_processed,
@@ -90,6 +93,7 @@ def load_training_checkpoint(
             f"checkpoint contains {payload['model_type']}, expected {expected_type}"
         )
     model.load_state_dict(payload["model_state"])
+    _restore_runtime_routing(model, payload.get("runtime_routing", {}))
     optimizer.load_state_dict(payload["optimizer_state"])
     if payload.get("torch_rng_state") is not None:
         torch.random.set_rng_state(payload["torch_rng_state"].cpu())
@@ -104,6 +108,7 @@ def load_model_checkpoint(
     payload = _load_payload(path, device)
     model = _create_model(payload["model_type"], payload["model_config"])
     model.load_state_dict(payload["model_state"])
+    _restore_runtime_routing(model, payload.get("runtime_routing", {}))
     model.to(device)
     tokenizer = tokenizer_from_config(payload["tokenizer"])
     return LoadedModelCheckpoint(
@@ -125,23 +130,45 @@ def _load_payload(path: str | Path, device: torch.device | str) -> dict[str, Any
 
 
 def _model_type(model: nn.Module) -> str:
+    if isinstance(model, N2EMCModel):
+        return "n2_emc"
     if isinstance(model, ChunkedEMCModel):
         return "emc_chunked"
     if isinstance(model, EMCModel):
         return "emc"
+    if isinstance(model, HeterogeneousSerialModel):
+        return "heterogeneous_serial"
     if isinstance(model, TransformerLanguageModel):
         return "baseline"
     raise TypeError(f"unsupported checkpoint model type: {type(model).__name__}")
 
 
 def _create_model(model_type: str, config: dict[str, Any]) -> nn.Module:
+    if model_type == "n2_emc":
+        return N2EMCModel(N2Config(**config))
     if model_type == "emc":
         return EMCModel(EMCConfig(**config))
     if model_type == "emc_chunked":
         return ChunkedEMCModel(EMCConfig(**config))
     if model_type == "baseline":
         return TransformerLanguageModel(TransformerConfig(**config))
+    if model_type == "heterogeneous_serial":
+        return HeterogeneousSerialModel(EMCConfig(**config))
     raise ValueError(f"unknown checkpoint model type: {model_type!r}")
+
+
+def _runtime_routing(model: nn.Module) -> dict[str, Any]:
+    active_top_k = getattr(model, "active_top_k", None)
+    return {"active_top_k": int(active_top_k)} if active_top_k is not None else {}
+
+
+def _restore_runtime_routing(
+    model: nn.Module, state: dict[str, Any]
+) -> None:
+    active_top_k = state.get("active_top_k")
+    setter = getattr(model, "set_active_top_k", None)
+    if active_top_k is not None and setter is not None:
+        setter(int(active_top_k))
 
 
 def _progress_from_payload(payload: dict[str, Any]) -> CheckpointProgress:

@@ -31,6 +31,7 @@ from .chunked import ChunkedEMCModel, ChunkedExecutionTrace
 from .diagnostics import count_parameters, parameter_counts
 from .generation import generate_text
 from .model import EMCCycleTrace, EMCModel, EMCOutput
+from .n2 import N2ExecutionTrace
 from .tokenization import TextTokenizer
 
 REPORT_SCHEMA_VERSION = 3
@@ -348,13 +349,21 @@ def compare_checkpoints(
             name: report["runtime"]["wall_time_seconds"] for name, report in reports
         },
     }
+    serializable_comparison = _replace_non_finite(comparison)
     (destination / "comparison.json").write_text(
-        json.dumps(comparison, indent=2, sort_keys=True, allow_nan=False),
+        json.dumps(
+            serializable_comparison,
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        ),
         encoding="utf-8",
     )
-    _write_comparison_csv(comparison, destination / "comparison.csv")
+    _write_comparison_csv(
+        serializable_comparison, destination / "comparison.csv"
+    )
     (destination / "comparison.md").write_text(
-        _comparison_markdown(comparison), encoding="utf-8"
+        _comparison_markdown(serializable_comparison), encoding="utf-8"
     )
     return comparison
 
@@ -362,12 +371,30 @@ def compare_checkpoints(
 def write_report(report: Mapping[str, Any], output_directory: str | Path) -> None:
     destination = Path(output_directory)
     destination.mkdir(parents=True, exist_ok=True)
+    serializable_report = _replace_non_finite(report)
     (destination / "report.json").write_text(
-        json.dumps(report, indent=2, sort_keys=True, allow_nan=False),
+        json.dumps(
+            serializable_report,
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        ),
         encoding="utf-8",
     )
-    _write_metrics_csv(report, destination / "metrics.csv")
-    (destination / "report.md").write_text(_report_markdown(report), encoding="utf-8")
+    _write_metrics_csv(serializable_report, destination / "metrics.csv")
+    (destination / "report.md").write_text(
+        _report_markdown(serializable_report), encoding="utf-8"
+    )
+
+
+def _replace_non_finite(value: Any) -> Any:
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, Mapping):
+        return {key: _replace_non_finite(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_replace_non_finite(item) for item in value]
+    return value
 
 
 def _evaluate_example(
@@ -475,6 +502,17 @@ def _run_ablations(
                         {"availability_mask": availability},
                     )
                 )
+        if config.run_zero_proposal:
+            for module_index in range(model.config.num_modules):
+                zero = torch.zeros(model.config.num_modules, dtype=torch.bool)
+                zero[module_index] = True
+                interventions.append(
+                    (
+                        "zero_module_proposal",
+                        str(module_index),
+                        {"zero_mask": zero},
+                    )
+                )
         if config.run_family_ablations:
             for family in unique_families:
                 availability = torch.tensor(
@@ -503,11 +541,23 @@ def _run_ablations(
                 key=lambda item: -int(counts.get(str(item), 0)),
             )
             top_family = families[normal_order[0]] if normal_order else families[0]
-            top_k = (
-                model.config.resolved_active_top_k
-                if isinstance(model, ChunkedEMCModel)
-                else model.config.modules_per_cycle
+            top_k = int(
+                getattr(model, "active_top_k", model.config.modules_per_cycle)
             )
+            for candidate in range(model.config.num_modules):
+                forced = [candidate]
+                forced.extend(
+                    index
+                    for index in normal_order
+                    if index != candidate and index not in forced
+                )
+                interventions.append(
+                    (
+                        "force_node_alternative",
+                        str(candidate),
+                        {"forced_modules": torch.tensor(forced[:top_k])},
+                    )
+                )
             for family in unique_families:
                 if family == top_family:
                     continue
@@ -586,16 +636,22 @@ def _validate_intervention(
             "unsupported_intervention",
             "forward trace unavailable; active path could not be validated",
         )
+    node_interventions = {
+        "disable_module",
+        "zero_module_proposal",
+        "force_node_alternative",
+    }
     target_modules = (
         {int(target)}
-        if intervention_type == "disable_module"
+        if intervention_type in node_interventions
         else {index for index, family in enumerate(families) if family == target}
     )
     baseline_active = set(baseline_trace.get("unique_modules", ()))
     intervened_active = set(intervened_trace.get("unique_modules", ()))
-    if intervention_type != "force_family_alternative" and not (
-        baseline_active & target_modules
-    ):
+    if intervention_type not in {
+        "force_family_alternative",
+        "force_node_alternative",
+    } and not (baseline_active & target_modules):
         return (
             "target_not_selected",
             "target was absent from the baseline active forward path",
@@ -610,7 +666,7 @@ def _validate_intervention(
             "active_intervention",
             "target was active at baseline and absent from intervened routing",
         )
-    if intervention_type == "zero_family_proposal":
+    if intervention_type in {"zero_family_proposal", "zero_module_proposal"}:
         norms = intervened_trace.get("integrator", {}).get("proposal_norm", {})
         observed = [
             norms.get(str(index))
@@ -631,11 +687,14 @@ def _validate_intervention(
             "active_intervention",
             "selected target proposal was zero at the Integrator input",
         )
-    if intervention_type == "force_family_alternative":
+    if intervention_type in {
+        "force_family_alternative",
+        "force_node_alternative",
+    }:
         if not (intervened_active & target_modules):
             return (
                 "intervention_no_effect",
-                "forced family did not appear in intervened routing",
+                "forced target did not appear in intervened routing",
             )
         routing_changed = bool(
             baseline_trace.get("module_counts")
@@ -650,7 +709,7 @@ def _validate_intervention(
             )
         return (
             "active_intervention",
-            "forced family appeared and routing counts or slots changed",
+            "forced target appeared and routing counts or slots changed",
         )
     return "unsupported_intervention", "unknown intervention type"
 
@@ -883,6 +942,30 @@ def _summarize_trace(output: EMCOutput, model: nn.Module) -> _TraceSummary:
         summary.population_fraction_touched = float(
             chunked.population_fraction_touched
         )
+    if isinstance(output.chunk_trace, N2ExecutionTrace):
+        n2_trace = output.chunk_trace
+        summary.requested_pairs = n2_trace.actual_node_executions
+        summary.executed_pairs = n2_trace.actual_node_executions
+        summary.discarded_pairs = 0
+        summary.actual_unique_executed_per_chunk = [
+            len(n2_trace.executed_node_ids)
+        ]
+        summary.executed_module_sets = [n2_trace.executed_node_ids]
+        summary.population_fraction_touched = (
+            len(n2_trace.executed_node_ids) / model.config.num_modules
+        )
+        for diagnostics in n2_trace.node_diagnostics:
+            if diagnostics.average_lease_length is not None:
+                summary.lease_ages.append(diagnostics.average_lease_length)
+            if diagnostics.continuation_probability is not None:
+                summary.continuation_rates.append(
+                    diagnostics.continuation_probability
+                )
+            if diagnostics.state_change_magnitude is not None:
+                summary.lease_state_changes.append(
+                    diagnostics.state_change_magnitude
+                )
+            summary.state_reset_count += diagnostics.state_resets
     return summary
 
 
@@ -1393,6 +1476,22 @@ def _aggregate_interventions(
                     )
     family_matrix = matrices.get("disable_family", {})
     specialization = _specialization_analysis(family_matrix)
+    expert_names = tuple(
+        getattr(
+            model,
+            "expert_names",
+            tuple(f"m{index}" for index in range(model.config.num_modules)),
+        )
+    )
+    module_matrix = matrices.get("disable_module", {})
+    named_module_matrix = {
+        capability: {
+            expert_names[int(target)]: metrics
+            for target, metrics in values.items()
+        }
+        for capability, values in module_matrix.items()
+    }
+    node_specialization = _specialization_analysis(named_module_matrix)
     active = [
         result for result in results if result.status == "active_intervention"
     ]
@@ -1434,6 +1533,14 @@ def _aggregate_interventions(
         "specialization_status": specialization["status"],
         "specialization_statement": specialization["statement"],
         "specialization_criteria": specialization["criteria"],
+        "node_capability_causal_impact": node_specialization["impact_matrix"],
+        "most_important_node_by_capability": node_specialization[
+            "most_important_family_by_capability"
+        ],
+        "same_family_specialization_status": node_specialization["status"],
+        "same_family_specialization_statement": node_specialization["statement"],
+        "same_family_specialization_criteria": node_specialization["criteria"],
+        "expert_names": list(expert_names),
         "statistical_confidence": (
             "not estimated; sampled interventions are descriptive and no "
             "independence or variance assumptions are imposed"
@@ -1739,39 +1846,109 @@ def _has_differential_family_effect(
 
 
 def _surface_vs_operation(records: list[dict[str, Any]]) -> dict[str, Any]:
-    observations: list[tuple[str, str, str]] = []
+    family_observations: list[tuple[str, str, str, str]] = []
+    node_observations: list[tuple[str, str, str, str]] = []
     for row in records:
         trace = row.get("trace")
         if not trace:
             continue
+        metadata = row["metadata"]
+        prefix = (
+            metadata.get("capability", metadata["operation"]),
+            metadata["operation"],
+            metadata["surface_format"],
+        )
         for family, count in trace["family_counts"].items():
-            observations.extend(
-                (
-                    row["metadata"]["operation"],
-                    row["metadata"]["surface_format"],
-                    family,
-                )
-                for _ in range(count)
-            )
-    operation_pairs = [(operation, family) for operation, _, family in observations]
-    surface_pairs = [(surface, family) for _, surface, family in observations]
+            family_observations.extend((*prefix, family) for _ in range(count))
+        for module, count in trace.get("module_counts", {}).items():
+            node_observations.extend((*prefix, str(module)) for _ in range(count))
+    family = _routing_association(family_observations)
+    nodes = _routing_association(node_observations)
+    relative = family["relative_association"]
+    strength = family["association_strength"]
+    if family["insufficient_routing_diversity"]:
+        statement = (
+            f"{relative}, but family-routing diversity is too low for a strong "
+            "operation-dependent routing claim."
+        )
+    else:
+        statement = (
+            f"{relative}; the larger normalized family association is {strength}, "
+            "which is descriptive rather than evidence of causal specialization."
+        )
+    return {
+        "routing_variable": "selected family and individual N1 node per top-k slot",
+        "samples": family["samples"],
+        "operation_selection_mutual_information_nats": family[
+            "operation_mutual_information_nats"
+        ],
+        "surface_selection_mutual_information_nats": family[
+            "surface_mutual_information_nats"
+        ],
+        "operation_selection_normalized_mutual_information": family[
+            "operation_normalized_mutual_information"
+        ],
+        "surface_selection_normalized_mutual_information": family[
+            "surface_normalized_mutual_information"
+        ],
+        "capability_selection_mutual_information_nats": family[
+            "capability_mutual_information_nats"
+        ],
+        "capability_selection_normalized_mutual_information": family[
+            "capability_normalized_mutual_information"
+        ],
+        "operation_to_surface_ratio": family["operation_to_surface_ratio"],
+        "routing_family_entropy_nats": family["target_entropy_nats"],
+        "routing_family_normalized_entropy": family["target_normalized_entropy"],
+        "effective_routing_family_count": family["effective_target_count"],
+        "insufficient_routing_diversity": family[
+            "insufficient_routing_diversity"
+        ],
+        "association_strength": strength,
+        "statement": statement,
+        "operation_family_matrix": family["operation_target_matrix"],
+        "surface_family_matrix": family["surface_target_matrix"],
+        "capability_family_matrix": family["capability_target_matrix"],
+        "individual_n1_node_analysis": nodes,
+        "weak_association_warning": (
+            "Individual-node association is too weak to interpret."
+            if nodes["association_strength"] == "very_weak"
+            else None
+        ),
+    }
+
+
+def _routing_association(
+    observations: list[tuple[str, str, str, str]],
+) -> dict[str, Any]:
+    capability_pairs = [
+        (capability, target) for capability, _, _, target in observations
+    ]
+    operation_pairs = [
+        (operation, target) for _, operation, _, target in observations
+    ]
+    surface_pairs = [
+        (surface, target) for _, _, surface, target in observations
+    ]
+    capability_mi = _mutual_information(capability_pairs)
     operation_mi = _mutual_information(operation_pairs)
     surface_mi = _mutual_information(surface_pairs)
+    capability_nmi = _normalized_mutual_information(capability_pairs)
     operation_nmi = _normalized_mutual_information(operation_pairs)
     surface_nmi = _normalized_mutual_information(surface_pairs)
-    family_counts = Counter(family for _, _, family in observations)
-    family_entropy = _categorical_entropy(family_counts)
-    family_categories = len(family_counts)
-    normalized_family_entropy = (
-        family_entropy / math.log(family_categories)
-        if family_categories > 1
+    target_counts = Counter(target for _, _, _, target in observations)
+    target_entropy = _categorical_entropy(target_counts)
+    target_categories = len(target_counts)
+    normalized_entropy = (
+        target_entropy / math.log(target_categories)
+        if target_categories > 1
         else 0.0
     )
-    effective_families = math.exp(family_entropy) if family_counts else 0.0
-    insufficient_diversity = bool(
-        family_categories < 2
-        or normalized_family_entropy < 0.35
-        or effective_families < 1.5
+    effective_targets = math.exp(target_entropy) if target_counts else 0.0
+    insufficient = bool(
+        target_categories < 2
+        or normalized_entropy < 0.35
+        or effective_targets < 1.5
     )
     if operation_mi > surface_mi * 1.1:
         relative = "operation correlates more strongly than surface"
@@ -1779,7 +1956,7 @@ def _surface_vs_operation(records: list[dict[str, Any]]) -> dict[str, Any]:
         relative = "surface correlates more strongly than operation"
     else:
         relative = "operation and surface have similar association"
-    maximum_nmi = max(operation_nmi, surface_nmi)
+    maximum_nmi = max(capability_nmi, operation_nmi, surface_nmi)
     if maximum_nmi < 0.05:
         strength = "very_weak"
     elif maximum_nmi < 0.15:
@@ -1788,35 +1965,26 @@ def _surface_vs_operation(records: list[dict[str, Any]]) -> dict[str, Any]:
         strength = "moderate"
     else:
         strength = "strong"
-    if insufficient_diversity:
-        statement = (
-            f"{relative}, but routing diversity is too low for a strong "
-            "operation-dependent routing claim."
-        )
-    else:
-        statement = (
-            f"{relative}; the larger normalized association is {strength}, "
-            "which is descriptive rather than evidence of causal "
-            "specialization."
-        )
     return {
-        "routing_variable": "selected family per top-k slot",
         "samples": len(observations),
-        "operation_selection_mutual_information_nats": operation_mi,
-        "surface_selection_mutual_information_nats": surface_mi,
-        "operation_selection_normalized_mutual_information": operation_nmi,
-        "surface_selection_normalized_mutual_information": surface_nmi,
+        "capability_mutual_information_nats": capability_mi,
+        "operation_mutual_information_nats": operation_mi,
+        "surface_mutual_information_nats": surface_mi,
+        "capability_normalized_mutual_information": capability_nmi,
+        "operation_normalized_mutual_information": operation_nmi,
+        "surface_normalized_mutual_information": surface_nmi,
         "operation_to_surface_ratio": (
             operation_mi / surface_mi if surface_mi else None
         ),
-        "routing_family_entropy_nats": family_entropy,
-        "routing_family_normalized_entropy": normalized_family_entropy,
-        "effective_routing_family_count": effective_families,
-        "insufficient_routing_diversity": insufficient_diversity,
+        "target_entropy_nats": target_entropy,
+        "target_normalized_entropy": normalized_entropy,
+        "effective_target_count": effective_targets,
+        "insufficient_routing_diversity": insufficient,
         "association_strength": strength,
-        "statement": statement,
-        "operation_family_matrix": _categorical_matrix(observations, 0, 2),
-        "surface_family_matrix": _categorical_matrix(observations, 1, 2),
+        "relative_association": relative,
+        "capability_target_matrix": _categorical_matrix(observations, 0, 3),
+        "operation_target_matrix": _categorical_matrix(observations, 1, 3),
+        "surface_target_matrix": _categorical_matrix(observations, 2, 3),
     }
 
 
@@ -2110,6 +2278,13 @@ def _module_diagnostics(
         for row in (training_diagnostics or {}).get("modules", ())
         if "module" in row
     }
+    expert_names = tuple(
+        getattr(
+            model,
+            "expert_names",
+            tuple(f"m{item}" for item in range(model.config.num_modules)),
+        )
+    )
     modules = []
     any_live_gradients = False
     for index, module in enumerate(model.emc_modules):
@@ -2150,6 +2325,7 @@ def _module_diagnostics(
             {
                 "module": index,
                 "family": model.module_families[index],
+                "expert_name": expert_names[index],
                 "gradient_norm": gradient_norm,
                 "gradient_source": gradient_source,
                 "parameter_norm": parameter_squared**0.5,

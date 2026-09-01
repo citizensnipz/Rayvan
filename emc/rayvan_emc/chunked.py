@@ -138,12 +138,22 @@ class ChunkNexus(nn.Module):
             "chunks_observed", torch.zeros((), dtype=torch.long), persistent=True
         )
 
+    @property
+    def active_top_k(self) -> int:
+        return getattr(
+            self, "_active_top_k", self.config.resolved_active_top_k
+        )
+
+    def set_active_top_k(self, top_k: int) -> None:
+        self._active_top_k = top_k
+
     def select_request_pool(
         self,
         first_token: Tensor,
         shared_state: Tensor,
         availability_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
+        top_k = self.active_top_k
         context = first_token + shared_state.mean(dim=1)
         query = self.request_query(self.context_norm(context))
         scores = torch.einsum("bd,md->bm", query, self.module_descriptors)
@@ -153,7 +163,7 @@ class ChunkNexus(nn.Module):
             first_token.size(0), availability_mask
         )
         eligible_count = int(eligible[0].sum().item())
-        if eligible_count < self.config.resolved_active_top_k:
+        if eligible_count < top_k:
             raise ValueError("availability leaves fewer modules than active top-K")
         scores = scores.masked_fill(~eligible, -torch.inf)
         pool = torch.topk(
@@ -173,6 +183,7 @@ class ChunkNexus(nn.Module):
         lease_ages: Tensor,
         availability_mask: Tensor | None = None,
     ) -> ChunkRoutingDecision:
+        top_k = self.active_top_k
         context = first_token + shared_state.mean(dim=1)
         query = self.chunk_query(self.context_norm(context))
         relevance = torch.einsum(
@@ -195,11 +206,11 @@ class ChunkNexus(nn.Module):
         eligible = pool_mask & self._availability_mask(
             first_token.size(0), availability_mask
         )
-        if torch.any(eligible.sum(dim=-1) < self.config.resolved_active_top_k):
+        if torch.any(eligible.sum(dim=-1) < top_k):
             raise ValueError("request pool leaves fewer modules than active top-K")
         scores = scores.masked_fill(~eligible, -torch.inf)
         selected_scores, selected = torch.topk(
-            scores, k=self.config.resolved_active_top_k, dim=-1
+            scores, k=top_k, dim=-1
         )
         weights = torch.softmax(selected_scores, dim=-1)
         if self.training:
@@ -336,10 +347,25 @@ class ChunkedEMCModel(nn.Module):
             nn.init.normal_(self.token_embedding.weight, mean=0.0, std=0.02)
             nn.init.zeros_(self.output_projection.bias)
         self.last_execution_trace: ChunkedExecutionTrace | None = None
+        self._active_top_k = config.resolved_active_top_k
 
     @property
     def module_families(self) -> tuple[str, ...]:
         return tuple(module.family for module in self.emc_modules)
+
+    @property
+    def active_top_k(self) -> int:
+        return self._active_top_k
+
+    def set_active_top_k(self, top_k: int) -> None:
+        if not 1 <= top_k <= self.config.num_modules:
+            raise ValueError("active top-K must be between one and num_modules")
+        if top_k > self.config.resolved_request_pool_size:
+            raise ValueError("active top-K cannot exceed request_pool_size")
+        self._active_top_k = top_k
+        router_setter = getattr(self.router, "set_active_top_k", None)
+        if router_setter is not None:
+            router_setter(top_k)
 
     def forward(
         self,
@@ -416,7 +442,7 @@ class ChunkedEMCModel(nn.Module):
                     decision,
                     diagnostic_forced_modules,
                     batch=batch,
-                    active_top_k=self.config.resolved_active_top_k,
+                    active_top_k=self.active_top_k,
                     num_modules=self.config.num_modules,
                 )
             selected_mask = torch.zeros_like(previous_active)
@@ -524,10 +550,8 @@ class ChunkedEMCModel(nn.Module):
                         ),
                         balance_bias=self.router.balance_bias.detach().cpu().clone(),
                         executed_modules=executed,
-                        computed_chunk_module_pairs=batch
-                        * self.config.resolved_active_top_k,
-                        retained_chunk_module_pairs=batch
-                        * self.config.resolved_active_top_k,
+                        computed_chunk_module_pairs=batch * self.active_top_k,
+                        retained_chunk_module_pairs=batch * self.active_top_k,
                         lease_state_norm=lease_state_norm,
                         lease_state_change=lease_state_change,
                         state_reset_count=int(

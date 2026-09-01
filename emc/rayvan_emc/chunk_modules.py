@@ -386,9 +386,10 @@ def _parallel_diagonal_scan(
     causal = torch.ones(
         length, length, dtype=torch.bool, device=log_decay.device
     ).tril()
-    coefficients = torch.exp(log_coefficients).masked_fill(
-        ~causal.reshape(1, 1, length, length), 0.0
+    masked_log_coefficients = log_coefficients.masked_fill(
+        ~causal.reshape(1, 1, length, length), -torch.inf
     )
+    coefficients = torch.exp(masked_log_coefficients)
     accumulated = torch.einsum("bhtj,bjh->bth", coefficients, write)
     initial_contribution = torch.exp(log_prefix) * initial_state.unsqueeze(1)
     return accumulated + initial_contribution

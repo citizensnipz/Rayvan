@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import math
 import time
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import torch
 from torch import Tensor, nn
@@ -16,6 +17,11 @@ from .chunked import ChunkedEMCModel
 from .data import LanguageCorpus
 from .diagnostics import EMCDiagnostics, RoutingReport
 from .model import EMCModel, EMCOutput
+from .telemetry import (
+    ModuleTelemetry,
+    attach_causal_report,
+    write_developmental_record,
+)
 
 
 @dataclass(frozen=True)
@@ -35,10 +41,23 @@ class TrainingConfig:
     precision: str = "fp32"
     checkpoint_directory: str | None = None
     checkpoint_prefix: str = "emc"
+    retain_best_checkpoint: bool = True
     resume_from: str | None = None
     seed: int = 42
     device: str = "cpu"
     collect_module_diagnostics: bool = False
+    diagnostic_milestones: tuple[int, ...] = (
+        100_000,
+        250_000,
+        500_000,
+        750_000,
+        1_000_000,
+    )
+    retain_milestone_checkpoints: bool = True
+    collect_milestone_telemetry: bool = False
+    milestone_causal_diagnostics: bool = False
+    milestone_causal_sample_size: int = 2
+    top_k_schedule: tuple[tuple[int, int], ...] | None = None
 
     def __post_init__(self) -> None:
         positive_fields = {
@@ -69,6 +88,35 @@ class TrainingConfig:
             )
         if self.precision not in {"auto", "fp32", "fp16", "bf16"}:
             raise ValueError("precision must be auto, fp32, fp16, or bf16")
+        if any(milestone <= 0 for milestone in self.diagnostic_milestones):
+            raise ValueError("diagnostic milestones must be positive token counts")
+        if tuple(sorted(set(self.diagnostic_milestones))) != self.diagnostic_milestones:
+            raise ValueError("diagnostic milestones must be sorted and unique")
+        if self.milestone_causal_sample_size <= 0:
+            raise ValueError("milestone causal sample size must be positive")
+        if self.milestone_causal_diagnostics and not self.retain_milestone_checkpoints:
+            raise ValueError(
+                "milestone causal diagnostics require retained milestone checkpoints"
+            )
+        if self.top_k_schedule is not None:
+            starts = tuple(start for start, _ in self.top_k_schedule)
+            if not starts or starts[0] != 0:
+                raise ValueError("top-K schedule must begin at token zero")
+            if starts != tuple(sorted(set(starts))):
+                raise ValueError("top-K schedule transitions must be sorted and unique")
+            if any(top_k <= 0 for _, top_k in self.top_k_schedule):
+                raise ValueError("scheduled top-K values must be positive")
+        if (
+            (self.collect_milestone_telemetry or self.milestone_causal_diagnostics)
+            and self.checkpoint_directory is None
+        ):
+            raise ValueError(
+                "milestone telemetry and causal diagnostics require a checkpoint directory"
+            )
+        if self.milestone_causal_diagnostics and not self.collect_milestone_telemetry:
+            raise ValueError(
+                "milestone causal diagnostics require milestone telemetry"
+            )
 
     @property
     def planned_steps(self) -> int:
@@ -91,6 +139,8 @@ class TrainingMetrics:
     training_loss: float
     validation_loss: float
     validation_perplexity: float
+    training_token_accuracy: float
+    validation_token_accuracy: float
     router_balance_loss: float
     weighted_balance_contribution: float
     tokens_per_second: float
@@ -108,6 +158,8 @@ class TrainingResult:
     final_validation_loss: float
     final_validation_perplexity: float
     best_validation_loss: float
+    final_training_token_accuracy: float
+    final_validation_token_accuracy: float
     average_router_balance_loss: float
     average_weighted_balance_contribution: float
     tokens_per_second: float
@@ -120,6 +172,8 @@ class TrainingResult:
     module_diagnostics: dict[str, Any] | None
 
 
+    milestone_checkpoints: tuple[str, ...]
+    telemetry_path: str | None
 @dataclass(frozen=True)
 class CycleEvaluationMetrics:
     cycle: int
@@ -164,6 +218,20 @@ def evaluate_model(
     split: str = "validation",
     generator: torch.Generator | None = None,
 ) -> tuple[float, float]:
+    loss, perplexity, _ = evaluate_model_metrics(
+        model, corpus, config, split=split, generator=generator
+    )
+    return loss, perplexity
+
+
+def evaluate_model_metrics(
+    model: nn.Module,
+    corpus: LanguageCorpus,
+    config: TrainingConfig,
+    *,
+    split: str = "validation",
+    generator: torch.Generator | None = None,
+) -> tuple[float, float, float]:
     if split not in {"train", "validation"}:
         raise ValueError("split must be 'train' or 'validation'")
     device = torch.device(config.device)
@@ -172,6 +240,8 @@ def evaluate_model(
     was_training = model.training
     model.eval()
     losses: list[float] = []
+    correct = 0
+    tokens = 0
     with torch.no_grad():
         for _ in range(config.evaluation_batches):
             inputs, targets = corpus.sample_batch(
@@ -185,9 +255,11 @@ def evaluate_model(
                 output = model(inputs)
                 logits = output.logits if isinstance(output, EMCOutput) else output
                 losses.append(next_token_loss(logits, targets).item())
+            correct += int((logits.argmax(dim=-1) == targets).sum().item())
+            tokens += targets.numel()
     model.train(was_training)
     mean_loss = sum(losses) / len(losses)
-    return mean_loss, math.exp(min(mean_loss, 20.0))
+    return mean_loss, math.exp(min(mean_loss, 20.0)), correct / tokens
 
 
 def evaluate_emc_cycles(
@@ -320,6 +392,14 @@ def train_model(
         )
 
     emc_diagnostics = EMCDiagnostics(model) if isinstance(model, EMCModel) else None
+    telemetry = (
+        ModuleTelemetry(model)
+        if config.collect_milestone_telemetry
+        and isinstance(model, (EMCModel, ChunkedEMCModel))
+        else None
+    )
+    if config.collect_milestone_telemetry and telemetry is None:
+        raise ValueError("milestone module telemetry is available only for EMC models")
     history: list[TrainingMetrics] = []
     started = time.perf_counter()
     initial_tokens = tokens_processed
@@ -328,21 +408,53 @@ def train_model(
     completed_steps_this_run = 0
     latest_checkpoint: Path | None = None
     best_checkpoint: Path | None = None
+    checkpoint_directory: Path | None = None
+    milestone_checkpoints: list[str] = []
+    telemetry_path: str | None = None
     latest_module_diagnostics: dict[str, Any] = {}
     if config.checkpoint_directory is not None:
         checkpoint_directory = Path(config.checkpoint_directory)
-        latest_checkpoint = checkpoint_directory / f"{config.checkpoint_prefix}-latest.pt"
-        best_checkpoint = checkpoint_directory / f"{config.checkpoint_prefix}-best.pt"
+        latest_checkpoint = checkpoint_directory / _checkpoint_filename(
+            config.checkpoint_prefix, "latest"
+        )
+        best_checkpoint = (
+            checkpoint_directory / _checkpoint_filename(
+                config.checkpoint_prefix, "best"
+            )
+            if config.retain_best_checkpoint
+            else None
+        )
+    pending_milestones = tuple(
+        milestone
+        for milestone in config.diagnostic_milestones
+        if milestone > tokens_processed
+    )
+    planned_step_tokens = (
+        config.batch_size
+        * config.sequence_length
+        * config.gradient_accumulation_steps
+    )
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
 
     for step in range(start_step + 1, total_steps + 1):
+        _apply_top_k_schedule(model, config.top_k_schedule, tokens_processed)
+        crossed_milestones = tuple(
+            milestone
+            for milestone in pending_milestones
+            if tokens_processed < milestone <= tokens_processed + planned_step_tokens
+        )
+        evaluation_due = bool(
+            step % config.evaluation_interval == 0
+            or step == total_steps
+            or crossed_milestones
+        )
         optimizer.zero_grad(set_to_none=True)
         step_balance_loss = 0.0
         step_tokens = 0
         capture_module_diagnostics = bool(
-            config.collect_module_diagnostics
-            and (step % config.evaluation_interval == 0 or step == total_steps)
+            (config.collect_module_diagnostics or telemetry is not None)
+            and evaluation_due
             and isinstance(model, (EMCModel, ChunkedEMCModel))
         )
         parameter_snapshot: list[list[Tensor]] | None = None
@@ -377,6 +489,8 @@ def train_model(
                         balance_loss = output.router_balance_loss
                         if emc_diagnostics is not None:
                             emc_diagnostics.observe_trace(output.trace)
+                        if telemetry is not None:
+                            telemetry.observe(output, step)
                     else:
                         logits = model(inputs)
                         balance_loss = logits.new_zeros(())
@@ -388,6 +502,11 @@ def train_model(
                         language_model_loss + weighted_balance
                     ) / config.gradient_accumulation_steps
 
+                if not bool(torch.isfinite(total_loss.detach()).item()):
+                    raise FloatingPointError(
+                        "training produced a non-finite loss before backward; "
+                        "the optimizer step was not applied"
+                    )
                 scaler.scale(total_loss).backward()
                 step_balance_loss += balance_loss.detach().item()
                 step_tokens += targets.numel()
@@ -400,7 +519,9 @@ def train_model(
                 emc_diagnostics.observe_router_gradients(model)
                 emc_diagnostics.observe_module_gradients(model)
             torch.nn.utils.clip_grad_norm_(
-                model.parameters(), config.gradient_clip_norm
+                model.parameters(),
+                config.gradient_clip_norm,
+                error_if_nonfinite=True,
             )
             scaler.step(optimizer)
             scaler.update()
@@ -425,16 +546,20 @@ def train_model(
             step_balance_loss / config.gradient_accumulation_steps
         )
 
-        if step % config.evaluation_interval == 0 or step == total_steps:
+        if evaluation_due:
             evaluation_started = time.perf_counter()
-            training_loss, _ = evaluate_model(
+            training_loss, _, training_token_accuracy = evaluate_model_metrics(
                 model,
                 corpus,
                 config,
                 split="train",
                 generator=evaluation_generator,
             )
-            validation_loss, validation_perplexity = evaluate_model(
+            (
+                validation_loss,
+                validation_perplexity,
+                validation_token_accuracy,
+            ) = evaluate_model_metrics(
                 model,
                 corpus,
                 config,
@@ -461,6 +586,8 @@ def train_model(
                 training_loss=training_loss,
                 validation_loss=validation_loss,
                 validation_perplexity=validation_perplexity,
+                training_token_accuracy=training_token_accuracy,
+                validation_token_accuracy=validation_token_accuracy,
                 router_balance_loss=average_balance,
                 weighted_balance_contribution=(
                     config.router_balance_coefficient * average_balance
@@ -475,6 +602,35 @@ def train_model(
             is_best = validation_loss < best_validation_loss
             if is_best:
                 best_validation_loss = validation_loss
+
+            if telemetry is not None and crossed_milestones:
+                if checkpoint_directory is None:
+                    raise RuntimeError("telemetry checkpoint directory disappeared")
+                base_record = telemetry.snapshot(
+                    model,
+                    milestone_tokens=crossed_milestones[0],
+                    observed_tokens=tokens_processed,
+                    step=step,
+                    active_top_k=_active_top_k(model),
+                    module_signals=latest_module_diagnostics,
+                )
+                for milestone in crossed_milestones:
+                    record = deepcopy(base_record)
+                    record["milestone_tokens"] = milestone
+                    record["metrics"] = asdict(metrics)
+                    record["checkpoint"] = (
+                        str(
+                            checkpoint_directory
+                            / _checkpoint_filename(
+                                config.checkpoint_prefix, str(milestone)
+                            )
+                        )
+                        if config.retain_milestone_checkpoints
+                        else None
+                    )
+                    telemetry_path = str(
+                        write_developmental_record(checkpoint_directory, record)
+                    )
 
             if latest_checkpoint is not None:
                 checkpoint_arguments = {
@@ -493,7 +649,24 @@ def train_model(
                 save_training_checkpoint(latest_checkpoint, **checkpoint_arguments)
                 if is_best and best_checkpoint is not None:
                     save_training_checkpoint(best_checkpoint, **checkpoint_arguments)
-
+                if config.retain_milestone_checkpoints:
+                    if checkpoint_directory is None:
+                        raise RuntimeError("milestone checkpoint directory disappeared")
+                    for milestone in crossed_milestones:
+                        milestone_path = checkpoint_directory / _checkpoint_filename(
+                            config.checkpoint_prefix, str(milestone)
+                        )
+                        save_training_checkpoint(
+                            milestone_path, **checkpoint_arguments
+                        )
+                        milestone_checkpoints.append(str(milestone_path))
+                        if config.milestone_causal_diagnostics:
+                            _run_milestone_causal_diagnostics(
+                                milestone_path,
+                                checkpoint_directory,
+                                milestone,
+                                config,
+                            )
             if print_progress:
                 gpu_suffix = (
                     f" | gpu {gpu_memory_used / 2**30:.2f} GiB "
@@ -523,6 +696,8 @@ def train_model(
         final_training_loss=final_metrics.training_loss,
         final_validation_loss=final_metrics.validation_loss,
         final_validation_perplexity=final_metrics.validation_perplexity,
+        final_training_token_accuracy=final_metrics.training_token_accuracy,
+        final_validation_token_accuracy=final_metrics.validation_token_accuracy,
         best_validation_loss=best_validation_loss,
         average_router_balance_loss=final_metrics.router_balance_loss,
         average_weighted_balance_contribution=(
@@ -536,6 +711,8 @@ def train_model(
         latest_checkpoint=(str(latest_checkpoint) if latest_checkpoint else None),
         best_checkpoint=(str(best_checkpoint) if best_checkpoint else None),
         module_diagnostics=latest_module_diagnostics or None,
+        milestone_checkpoints=tuple(milestone_checkpoints),
+        telemetry_path=telemetry_path,
     )
 
 
@@ -587,6 +764,11 @@ def _module_update_diagnostics(
                 "module": index,
                 "family": model.module_families[index],
                 "gradient_norm": gradient_norm,
+                "parameter_norm": sum(
+                    parameter.detach().float().square().sum().item()
+                    for parameter in current
+                )
+                ** 0.5,
                 "update_norm": update_squared**0.5,
             }
         )
@@ -600,6 +782,79 @@ def _module_update_diagnostics(
         ),
         "modules": modules,
     }
+
+
+def _checkpoint_filename(prefix: str, label: str) -> str:
+    return f"{prefix}-{label}.pt" if prefix else f"{label}.pt"
+
+
+def _active_top_k(model: nn.Module) -> int | None:
+    value = getattr(model, "active_top_k", None)
+    return int(value) if value is not None else None
+
+
+def _apply_top_k_schedule(
+    model: nn.Module,
+    schedule: tuple[tuple[int, int], ...] | None,
+    tokens_processed: int,
+) -> None:
+    if schedule is None:
+        return
+    setter = getattr(model, "set_active_top_k", None)
+    if setter is None:
+        raise ValueError("top-K schedules require an EMC model")
+    active = schedule[0][1]
+    for transition_tokens, top_k in schedule:
+        if tokens_processed < transition_tokens:
+            break
+        active = top_k
+    setter(active)
+
+
+def _run_milestone_causal_diagnostics(
+    checkpoint: Path,
+    checkpoint_directory: Path,
+    milestone: int,
+    config: TrainingConfig,
+) -> None:
+    from .evaluate import DiagnosticEvaluationConfig, evaluate_checkpoint
+
+    diagnostic_directory = (
+        checkpoint_directory / "milestone-diagnostics" / str(milestone)
+    )
+    random_state = torch.random.get_rng_state()
+    cuda_states = (
+        torch.cuda.get_rng_state_all()
+        if torch.cuda.is_available()
+        else None
+    )
+    try:
+        report = evaluate_checkpoint(
+            checkpoint,
+            diagnostic_directory,
+            DiagnosticEvaluationConfig(
+                seed=config.seed,
+                examples_per_capability=max(
+                    4, config.milestone_causal_sample_size
+                ),
+                ablation_examples_per_capability=(
+                    config.milestone_causal_sample_size
+                ),
+                run_module_ablations=True,
+                run_family_ablations=True,
+                run_zero_proposal=False,
+                run_forced_alternatives=False,
+                max_notable_examples=0,
+                device=config.device,
+                precision=config.precision,
+                smoke=True,
+            ),
+        )
+        attach_causal_report(checkpoint_directory, milestone, report)
+    finally:
+        torch.random.set_rng_state(random_state)
+        if cuda_states is not None:
+            torch.cuda.set_rng_state_all(cuda_states)
 
 def _resolved_precision(precision: str, device: torch.device) -> str:
     if precision == "auto":

@@ -471,6 +471,20 @@ def test_parallel_ssm_scan_matches_sequential_recurrence() -> None:
     torch.testing.assert_close(parallel, torch.stack(expected, dim=1))
 
 
+def test_parallel_ssm_scan_masks_noncausal_terms_before_exponentiation() -> None:
+    log_decay = torch.full((1, 64, 4), -100.0, requires_grad=True)
+    candidate = torch.randn(1, 64, 4, requires_grad=True)
+    initial = torch.randn(1, 4, requires_grad=True)
+
+    states = _parallel_diagonal_scan(log_decay, candidate, initial)
+    states.square().mean().backward()
+
+    assert torch.isfinite(states).all()
+    assert torch.isfinite(log_decay.grad).all()
+    assert torch.isfinite(candidate.grad).all()
+    assert torch.isfinite(initial.grad).all()
+
+
 def test_parallel_delta_affine_scan_matches_sequential_composition() -> None:
     torch.manual_seed(4)
     transition = torch.randn(1, 5, 2, 3, 3) * 0.05

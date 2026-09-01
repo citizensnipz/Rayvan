@@ -30,15 +30,17 @@ class NexusRouter(nn.Module):
         *,
         availability_mask: Tensor | None = None,
         module_descriptors: Tensor | None = None,
+        top_k: int | None = None,
     ) -> RoutingDecision:
         if module_descriptors is not None:
             raise ValueError("fixed-index Nexus does not accept module descriptors")
+        active_top_k = top_k or self.modules_per_cycle
         scores = self.score_projection(self.input_norm(latent))
         scores = _mask_unavailable(
-            scores, availability_mask, self.modules_per_cycle
+            scores, availability_mask, active_top_k
         )
         selected_scores, selected_indices = torch.topk(
-            scores, k=self.modules_per_cycle, dim=-1
+            scores, k=active_top_k, dim=-1
         )
         selected_weights = torch.softmax(selected_scores, dim=-1)
         return RoutingDecision(scores, selected_indices, selected_weights)
@@ -64,6 +66,7 @@ class ModuleAwareNexusRouter(nn.Module):
         *,
         availability_mask: Tensor | None = None,
         module_descriptors: Tensor | None = None,
+        top_k: int | None = None,
     ) -> RoutingDecision:
         descriptors = (
             self.module_descriptors
@@ -74,14 +77,15 @@ class ModuleAwareNexusRouter(nn.Module):
             raise ValueError(
                 "module descriptors must have shape [modules, descriptor_dim]"
             )
+        active_top_k = top_k or self.modules_per_cycle
         query = self.query_projection(self.input_norm(latent))
         scores = torch.einsum("bsd,md->bsm", query, descriptors)
         scores = scores / math.sqrt(self.descriptor_dim)
         scores = _mask_unavailable(
-            scores, availability_mask, self.modules_per_cycle
+            scores, availability_mask, active_top_k
         )
         selected_scores, selected_indices = torch.topk(
-            scores, k=self.modules_per_cycle, dim=-1
+            scores, k=active_top_k, dim=-1
         )
         selected_weights = torch.softmax(selected_scores, dim=-1)
         return RoutingDecision(scores, selected_indices, selected_weights)

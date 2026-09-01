@@ -194,6 +194,7 @@ class RoutingReport:
     mean_proposal_similarity: float
     mean_integrated_update_norm: float
     mean_gate_magnitude: float
+    expert_names: tuple[str, ...] = ()
 
 
 class EMCDiagnostics:
@@ -201,6 +202,13 @@ class EMCDiagnostics:
         config = model.config
         shape = (config.num_cycles, config.num_modules)
         self.module_families = model.module_families
+        self.expert_names = tuple(
+            getattr(
+                model,
+                "expert_names",
+                tuple(f"m{index}" for index in range(config.num_modules)),
+            )
+        )
         self.selection_counts = torch.zeros(*shape, dtype=torch.long)
         self.routing_probability_sums = torch.zeros(*shape, dtype=torch.float64)
         self.acceptance_sums = torch.zeros(*shape, dtype=torch.float64)
@@ -450,6 +458,7 @@ class EMCDiagnostics:
                 if self.integrator_observations
                 else 0.0
             ),
+            expert_names=self.expert_names,
         )
 
 
