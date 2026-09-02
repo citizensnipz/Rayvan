@@ -2,6 +2,11 @@
 #include "rayvan_emc/model.hpp"
 
 #include <torch/torch.h>
+#include <torch/version.h>
+
+#if defined(RAYVAN_TORCH_CUDA)
+#include <ATen/cuda/CUDAContextLight.h>
+#endif
 
 #include <iostream>
 #include <string>
@@ -20,6 +25,22 @@ int main(int argc, char** argv) {
         if (use_cuda && !torch::cuda::is_available()) {
             std::cerr << "CUDA requested but this LibTorch build has no available CUDA device\n";
             return 2;
+        }
+        std::cout << "libtorch=" << TORCH_VERSION
+                  << " cuda_available=" << (torch::cuda::is_available() ? "true" : "false");
+#if defined(RAYVAN_TORCH_CUDA)
+        if (use_cuda) {
+            const auto* properties = at::cuda::getDeviceProperties(0);
+            std::cout << " gpu=\"" << properties->name << "\""
+                      << " compute_capability=" << properties->major << '.' << properties->minor;
+        }
+#endif
+        std::cout << '\n';
+        if (use_cuda) {
+            const auto left = torch::ones({16, 16}, torch::TensorOptions().device(device).dtype(torch::kBFloat16));
+            const auto right = torch::ones({16, 16}, torch::TensorOptions().device(device).dtype(torch::kBFloat16));
+            const auto bf16_result = torch::matmul(left, right);
+            std::cout << "bf16_matmul=" << (bf16_result.scalar_type() == torch::kBFloat16 ? "passed" : "failed") << '\n';
         }
         model.to(device);
         model.eval();

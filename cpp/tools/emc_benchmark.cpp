@@ -1,5 +1,6 @@
 #include "rayvan_emc/diagnostics/diagnostics.hpp"
 #include "rayvan_emc/model.hpp"
+#include "rayvan_emc/training/foreach_adamw.hpp"
 
 #include <ATen/autocast_mode.h>
 #include <torch/cuda.h>
@@ -98,28 +99,57 @@ double time_iterations(const torch::Device& device, int iterations, Function&& f
 
 int main(int argc, char** argv) {
     try {
-        if (argc < 2) throw std::invalid_argument("usage: rayvan-emc-benchmark <fixture-directory> [--cpu] [--bf16]");
+        if (argc < 2) throw std::invalid_argument("usage: rayvan-emc-benchmark <fixture-directory> [--cpu] [--bf16] [--realistic] [--warmup N] [--iterations N]");
         const std::filesystem::path fixture(argv[1]);
         bool cpu = false;
         bool bf16 = false;
+        bool realistic = false;
+        int warmup = 10;
+        int iterations = 100;
         for (int index = 2; index < argc; ++index) {
             const std::string argument(argv[index]);
             if (argument == "--cpu") cpu = true;
             else if (argument == "--bf16") bf16 = true;
+            else if (argument == "--realistic") realistic = true;
+            else if (argument == "--warmup" && index + 1 < argc) warmup = std::stoi(argv[++index]);
+            else if (argument == "--iterations" && index + 1 < argc) iterations = std::stoi(argv[++index]);
             else throw std::invalid_argument("unknown benchmark option: " + argument);
         }
+        if (warmup < 0 || iterations <= 0) throw std::invalid_argument("benchmark counts must be non-negative warmup and positive iterations");
         const torch::Device device = cpu ? torch::Device(torch::kCPU) : torch::Device(torch::kCUDA, 0);
         if (device.is_cuda() && !torch::cuda::is_available()) throw std::runtime_error("CUDA is unavailable");
         if (bf16 && !device.is_cuda()) throw std::runtime_error("BF16 benchmark requires CUDA");
         torch::set_num_threads(1);
         torch::manual_seed(20260902);
-        emc::EMCModel model(emc::load_model_config(fixture / "model.rvcfg"));
-        model.import_python_weights(fixture / "weights.pt");
+        emc::ModelConfig model_config;
+        if (realistic) {
+            model_config.latent_dim = 64;
+            model_config.vocab_size = 8192;
+            model_config.max_sequence_length = 128;
+            model_config.attention_heads = 4;
+            model_config.integrator_heads = 4;
+            model_config.module_hidden_dim = 128;
+            model_config.state_space_dim = 96;
+            model_config.state_space_kernel_size = 3;
+            model_config.recurrent_dim = 64;
+            model_config.chunk_size = 16;
+            model_config.shared_state_slots = 4;
+            model_config.n1_depth = 2;
+            model_config.top_k = 2;
+            model_config.tie_embeddings = true;
+            model_config.population = {emc::N1Family::gpt, emc::N1Family::ssm, emc::N1Family::recurrent};
+        } else {
+            model_config = emc::load_model_config(fixture / "model.rvcfg");
+        }
+        emc::EMCModel model(model_config);
+        if (!realistic) model.import_python_weights(fixture / "weights.pt");
         model.to(device);
-        auto tokens = bundle_tensor(fixture / "forward.pt", "tokens").to(device, torch::kLong);
-        auto targets = bundle_tensor(fixture / "forward.pt", "targets").to(device, torch::kLong);
-        constexpr int warmup = 10;
-        constexpr int iterations = 100;
+        auto tokens = realistic
+            ? torch::randint(model_config.vocab_size, {4, 128}, torch::TensorOptions().device(device).dtype(torch::kLong))
+            : bundle_tensor(fixture / "forward.pt", "tokens").to(device, torch::kLong);
+        auto targets = realistic
+            ? torch::roll(tokens, {-1}, {1})
+            : bundle_tensor(fixture / "forward.pt", "targets").to(device, torch::kLong);
 
         model.eval();
         {
@@ -136,7 +166,7 @@ int main(int argc, char** argv) {
         }
 
         model.train();
-        torch::optim::AdamW optimizer(model.parameters(), torch::optim::AdamWOptions(3e-4).weight_decay(0.01));
+        emc::ForeachAdamW optimizer(model.parameters(), torch::optim::AdamWOptions(3e-4).weight_decay(0.01));
         for (int index = 0; index < warmup; ++index) {
             optimizer.zero_grad();
             Autocast autocast(device, bf16);

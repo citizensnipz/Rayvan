@@ -2,6 +2,7 @@ D:/Personal/Projects/Rayvan/build/emc-cuda-ninja/CMakeFiles/rayvan_emc.dir
 D:/Personal/Projects/Rayvan/build/emc-cuda-ninja/CMakeFiles/rayvan-emc-smoke.dir
 D:/Personal/Projects/Rayvan/build/emc-cuda-ninja/CMakeFiles/rayvan-emc-benchmark.dir
 D:/Personal/Projects/Rayvan/build/emc-cuda-ninja/CMakeFiles/rayvan-emc-checkpoint-probe.dir
+D:/Personal/Projects/Rayvan/build/emc-cuda-ninja/CMakeFiles/rayvan-emc-optimizer-profile.dir
 D:/Personal/Projects/Rayvan/build/emc-cuda-ninja/CMakeFiles/Experimental.dir
 D:/Personal/Projects/Rayvan/build/emc-cuda-ninja/CMakeFiles/Nightly.dir
 D:/Personal/Projects/Rayvan/build/emc-cuda-ninja/CMakeFiles/Continuous.dir

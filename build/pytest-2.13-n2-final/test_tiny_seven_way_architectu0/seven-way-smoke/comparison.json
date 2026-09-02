@@ -1,0 +1,2610 @@
+{
+  "accounting": {
+    "homogeneous_serial": {
+      "approximate_active_parameters": 338329,
+      "approximate_flops_per_token": 683186,
+      "approximate_parameter_uses_per_forward": 1345892,
+      "architecture": "homogeneous_serial",
+      "blocks_per_n1": null,
+      "embedding_parameters": 1856,
+      "integrator_parameters": 0,
+      "limitations": [
+        "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+        "Embedding lookup table storage is excluded; tied output weights remain compute.",
+        "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded."
+      ],
+      "method": "All decoder blocks and the output projection execute for every token; attention score/value products add 4*L*D per block and token.",
+      "module_computations_per_forward": 10.0,
+      "nexus_parameters": 0,
+      "node_flops_per_invocation": [],
+      "node_parameters": [],
+      "routable_parameters": 0,
+      "selected_nodes_per_event": null,
+      "sequence_length": 4,
+      "shared_parameters": 338329,
+      "theoretical_all_nodes_flops_per_token": null,
+      "total_parameters": 338329
+    },
+    "n2_delta4": {
+      "approximate_active_parameters": 407342,
+      "approximate_flops_per_token": 814684,
+      "approximate_parameter_uses_per_forward": 1629368,
+      "architecture": "n2_delta4",
+      "blocks_per_n1": 3,
+      "embedding_parameters": 1856,
+      "integrator_parameters": 49793,
+      "limitations": [
+        "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+        "Embedding lookup table storage is excluded; tied output weights remain compute.",
+        "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+        "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+      ],
+      "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+      "module_computations_per_forward": 2.0,
+      "nexus_parameters": 388,
+      "node_flops_per_invocation": [
+        1421632,
+        1421632,
+        1421632,
+        1421632
+      ],
+      "node_parameters": [
+        177704,
+        177704,
+        177704,
+        177704
+      ],
+      "routable_parameters": 710816,
+      "selected_nodes_per_event": 2,
+      "sequence_length": 4,
+      "shared_parameters": 53790,
+      "theoretical_all_nodes_flops_per_token": 1525500,
+      "total_parameters": 764606
+    },
+    "n2_gpt4": {
+      "approximate_active_parameters": 410846,
+      "approximate_flops_per_token": 846268,
+      "approximate_parameter_uses_per_forward": 1643384,
+      "architecture": "n2_gpt4",
+      "blocks_per_n1": 3,
+      "embedding_parameters": 1856,
+      "integrator_parameters": 49793,
+      "limitations": [
+        "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+        "Embedding lookup table storage is excluded; tied output weights remain compute.",
+        "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+        "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+      ],
+      "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+      "module_computations_per_forward": 2.0,
+      "nexus_parameters": 388,
+      "node_flops_per_invocation": [
+        1484800,
+        1484800,
+        1484800,
+        1484800
+      ],
+      "node_parameters": [
+        179456,
+        179456,
+        179456,
+        179456
+      ],
+      "routable_parameters": 717824,
+      "selected_nodes_per_event": 2,
+      "sequence_length": 4,
+      "shared_parameters": 53790,
+      "theoretical_all_nodes_flops_per_token": 1588668,
+      "total_parameters": 771614
+    },
+    "n2_mixed": {
+      "approximate_active_parameters": 405626,
+      "approximate_flops_per_token": 817396,
+      "approximate_parameter_uses_per_forward": 1622504,
+      "architecture": "n2_mixed",
+      "blocks_per_n1": 3,
+      "embedding_parameters": 1856,
+      "integrator_parameters": 49793,
+      "limitations": [
+        "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+        "Embedding lookup table storage is excluded; tied output weights remain compute.",
+        "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+        "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+      ],
+      "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+      "module_computations_per_forward": 2.0,
+      "nexus_parameters": 388,
+      "node_flops_per_invocation": [
+        1484800,
+        1422016,
+        1379776,
+        1421632
+      ],
+      "node_parameters": [
+        179456,
+        177752,
+        172472,
+        177704
+      ],
+      "routable_parameters": 707384,
+      "selected_nodes_per_event": 2,
+      "sequence_length": 4,
+      "shared_parameters": 53790,
+      "theoretical_all_nodes_flops_per_token": 1530924,
+      "total_parameters": 761174
+    },
+    "n2_recurrent4": {
+      "approximate_active_parameters": 396878,
+      "approximate_flops_per_token": 793756,
+      "approximate_parameter_uses_per_forward": 1587512,
+      "architecture": "n2_recurrent4",
+      "blocks_per_n1": 3,
+      "embedding_parameters": 1856,
+      "integrator_parameters": 49793,
+      "limitations": [
+        "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+        "Embedding lookup table storage is excluded; tied output weights remain compute.",
+        "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+        "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+      ],
+      "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+      "module_computations_per_forward": 2.0,
+      "nexus_parameters": 388,
+      "node_flops_per_invocation": [
+        1379776,
+        1379776,
+        1379776,
+        1379776
+      ],
+      "node_parameters": [
+        172472,
+        172472,
+        172472,
+        172472
+      ],
+      "routable_parameters": 689888,
+      "selected_nodes_per_event": 2,
+      "sequence_length": 4,
+      "shared_parameters": 53790,
+      "theoretical_all_nodes_flops_per_token": 1483644,
+      "total_parameters": 743678
+    },
+    "n2_ssm4": {
+      "approximate_active_parameters": 407438,
+      "approximate_flops_per_token": 814876,
+      "approximate_parameter_uses_per_forward": 1629752,
+      "architecture": "n2_ssm4",
+      "blocks_per_n1": 3,
+      "embedding_parameters": 1856,
+      "integrator_parameters": 49793,
+      "limitations": [
+        "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+        "Embedding lookup table storage is excluded; tied output weights remain compute.",
+        "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+        "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+      ],
+      "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+      "module_computations_per_forward": 2.0,
+      "nexus_parameters": 388,
+      "node_flops_per_invocation": [
+        1422016,
+        1422016,
+        1422016,
+        1422016
+      ],
+      "node_parameters": [
+        177752,
+        177752,
+        177752,
+        177752
+      ],
+      "routable_parameters": 711008,
+      "selected_nodes_per_event": 2,
+      "sequence_length": 4,
+      "shared_parameters": 53790,
+      "theoretical_all_nodes_flops_per_token": 1525884,
+      "total_parameters": 764798
+    },
+    "old_emc": {
+      "approximate_active_parameters": 234511,
+      "approximate_flops_per_token": 477214,
+      "approximate_parameter_uses_per_forward": 938044,
+      "architecture": "emc",
+      "blocks_per_n1": null,
+      "embedding_parameters": 1856,
+      "integrator_parameters": 0,
+      "limitations": [
+        "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+        "Embedding lookup table storage is excluded; tied output weights remain compute.",
+        "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+        "Heterogeneous expert cost uses the population mean before routing trajectories exist."
+      ],
+      "method": "router, both Integrators, SharedCore, and output projection are included in a once-per-token parameter-use proxy. Attention score/value products add 4*C*D per GPT execution and token.",
+      "module_computations_per_forward": 2.0,
+      "nexus_parameters": 0,
+      "node_flops_per_invocation": [],
+      "node_parameters": [],
+      "routable_parameters": 214632,
+      "selected_nodes_per_event": null,
+      "sequence_length": 4,
+      "shared_parameters": 343683,
+      "theoretical_all_nodes_flops_per_token": null,
+      "total_parameters": 343683
+    }
+  },
+  "aggregate": {
+    "homogeneous_serial": {
+      "approximate_training_flops": {
+        "mean": 2732744.0,
+        "std": 0.0,
+        "values": [
+          2732744.0
+        ]
+      },
+      "final_training_loss": {
+        "mean": 3.253201961517334,
+        "std": 0.0,
+        "values": [
+          3.253201961517334
+        ]
+      },
+      "final_training_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "final_validation_loss": {
+        "mean": 3.0566651821136475,
+        "std": 0.0,
+        "values": [
+          3.0566651821136475
+        ]
+      },
+      "final_validation_perplexity": {
+        "mean": 21.256552103204847,
+        "std": 0.0,
+        "values": [
+          21.256552103204847
+        ]
+      },
+      "final_validation_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "inference_latency_seconds": {
+        "mean": 0.0009220999199897051,
+        "std": 0.0,
+        "values": [
+          0.0009220999199897051
+        ]
+      },
+      "peak_ram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "peak_vram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "tokens_per_second": {
+        "mean": 405.19870558075604,
+        "std": 0.0,
+        "values": [
+          405.19870558075604
+        ]
+      },
+      "wall_clock_seconds": {
+        "mean": 0.01273859990760684,
+        "std": 0.0,
+        "values": [
+          0.01273859990760684
+        ]
+      }
+    },
+    "n2_delta4": {
+      "approximate_training_flops": {
+        "mean": 3258736.0,
+        "std": 0.0,
+        "values": [
+          3258736.0
+        ]
+      },
+      "final_training_loss": {
+        "mean": 3.8097221851348877,
+        "std": 0.0,
+        "values": [
+          3.8097221851348877
+        ]
+      },
+      "final_training_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "final_validation_loss": {
+        "mean": 3.318659543991089,
+        "std": 0.0,
+        "values": [
+          3.318659543991089
+        ]
+      },
+      "final_validation_perplexity": {
+        "mean": 27.623297914669628,
+        "std": 0.0,
+        "values": [
+          27.623297914669628
+        ]
+      },
+      "final_validation_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "inference_latency_seconds": {
+        "mean": 0.00285349995829165,
+        "std": 0.0,
+        "values": [
+          0.00285349995829165
+        ]
+      },
+      "peak_ram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "peak_vram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "tokens_per_second": {
+        "mean": 148.30689072987082,
+        "std": 0.0,
+        "values": [
+          148.30689072987082
+        ]
+      },
+      "wall_clock_seconds": {
+        "mean": 0.03451530006714165,
+        "std": 0.0,
+        "values": [
+          0.03451530006714165
+        ]
+      }
+    },
+    "n2_gpt4": {
+      "approximate_training_flops": {
+        "mean": 3385072.0,
+        "std": 0.0,
+        "values": [
+          3385072.0
+        ]
+      },
+      "final_training_loss": {
+        "mean": 3.8820199966430664,
+        "std": 0.0,
+        "values": [
+          3.8820199966430664
+        ]
+      },
+      "final_training_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "final_validation_loss": {
+        "mean": 3.8488950729370117,
+        "std": 0.0,
+        "values": [
+          3.8488950729370117
+        ]
+      },
+      "final_validation_perplexity": {
+        "mean": 46.941167999744785,
+        "std": 0.0,
+        "values": [
+          46.941167999744785
+        ]
+      },
+      "final_validation_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "inference_latency_seconds": {
+        "mean": 0.0018521000165492296,
+        "std": 0.0,
+        "values": [
+          0.0018521000165492296
+        ]
+      },
+      "peak_ram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "peak_vram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "tokens_per_second": {
+        "mean": 219.86720027485913,
+        "std": 0.0,
+        "values": [
+          219.86720027485913
+        ]
+      },
+      "wall_clock_seconds": {
+        "mean": 0.023715399904176593,
+        "std": 0.0,
+        "values": [
+          0.023715399904176593
+        ]
+      }
+    },
+    "n2_mixed": {
+      "approximate_training_flops": {
+        "mean": 3269584.0,
+        "std": 0.0,
+        "values": [
+          3269584.0
+        ]
+      },
+      "final_training_loss": {
+        "mean": 2.824812412261963,
+        "std": 0.0,
+        "values": [
+          2.824812412261963
+        ]
+      },
+      "final_training_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "final_validation_loss": {
+        "mean": 3.0700817108154297,
+        "std": 0.0,
+        "values": [
+          3.0700817108154297
+        ]
+      },
+      "final_validation_perplexity": {
+        "mean": 21.54366295335181,
+        "std": 0.0,
+        "values": [
+          21.54366295335181
+        ]
+      },
+      "final_validation_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "inference_latency_seconds": {
+        "mean": 0.002799100009724498,
+        "std": 0.0,
+        "values": [
+          0.002799100009724498
+        ]
+      },
+      "peak_ram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "peak_vram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "tokens_per_second": {
+        "mean": 208.2129607713372,
+        "std": 0.0,
+        "values": [
+          208.2129607713372
+        ]
+      },
+      "wall_clock_seconds": {
+        "mean": 0.025222399970516562,
+        "std": 0.0,
+        "values": [
+          0.025222399970516562
+        ]
+      }
+    },
+    "n2_recurrent4": {
+      "approximate_training_flops": {
+        "mean": 3175024.0,
+        "std": 0.0,
+        "values": [
+          3175024.0
+        ]
+      },
+      "final_training_loss": {
+        "mean": 3.4501686096191406,
+        "std": 0.0,
+        "values": [
+          3.4501686096191406
+        ]
+      },
+      "final_training_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "final_validation_loss": {
+        "mean": 3.3493947982788086,
+        "std": 0.0,
+        "values": [
+          3.3493947982788086
+        ]
+      },
+      "final_validation_perplexity": {
+        "mean": 28.485488959090183,
+        "std": 0.0,
+        "values": [
+          28.485488959090183
+        ]
+      },
+      "final_validation_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "inference_latency_seconds": {
+        "mean": 0.001711999997496605,
+        "std": 0.0,
+        "values": [
+          0.001711999997496605
+        ]
+      },
+      "peak_ram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "peak_vram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "tokens_per_second": {
+        "mean": 230.6791784353554,
+        "std": 0.0,
+        "values": [
+          230.6791784353554
+        ]
+      },
+      "wall_clock_seconds": {
+        "mean": 0.021845699986442924,
+        "std": 0.0,
+        "values": [
+          0.021845699986442924
+        ]
+      }
+    },
+    "n2_ssm4": {
+      "approximate_training_flops": {
+        "mean": 3259504.0,
+        "std": 0.0,
+        "values": [
+          3259504.0
+        ]
+      },
+      "final_training_loss": {
+        "mean": 3.2451717853546143,
+        "std": 0.0,
+        "values": [
+          3.2451717853546143
+        ]
+      },
+      "final_training_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "final_validation_loss": {
+        "mean": 3.308279514312744,
+        "std": 0.0,
+        "values": [
+          3.308279514312744
+        ]
+      },
+      "final_validation_perplexity": {
+        "mean": 27.338050263208657,
+        "std": 0.0,
+        "values": [
+          27.338050263208657
+        ]
+      },
+      "final_validation_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "inference_latency_seconds": {
+        "mean": 0.0025723001454025507,
+        "std": 0.0,
+        "values": [
+          0.0025723001454025507
+        ]
+      },
+      "peak_ram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "peak_vram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "tokens_per_second": {
+        "mean": 195.20765405267923,
+        "std": 0.0,
+        "values": [
+          195.20765405267923
+        ]
+      },
+      "wall_clock_seconds": {
+        "mean": 0.02791329985484481,
+        "std": 0.0,
+        "values": [
+          0.02791329985484481
+        ]
+      }
+    },
+    "old_emc": {
+      "approximate_training_flops": {
+        "mean": 1908856.0,
+        "std": 0.0,
+        "values": [
+          1908856.0
+        ]
+      },
+      "final_training_loss": {
+        "mean": 2.9078426361083984,
+        "std": 0.0,
+        "values": [
+          2.9078426361083984
+        ]
+      },
+      "final_training_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "final_validation_loss": {
+        "mean": 3.417726516723633,
+        "std": 0.0,
+        "values": [
+          3.417726516723633
+        ]
+      },
+      "final_validation_perplexity": {
+        "mean": 30.499994909863563,
+        "std": 0.0,
+        "values": [
+          30.499994909863563
+        ]
+      },
+      "final_validation_token_accuracy": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "inference_latency_seconds": {
+        "mean": 0.0019269001204520464,
+        "std": 0.0,
+        "values": [
+          0.0019269001204520464
+        ]
+      },
+      "peak_ram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "peak_vram_bytes": {
+        "mean": 0.0,
+        "std": 0.0,
+        "values": [
+          0.0
+        ]
+      },
+      "tokens_per_second": {
+        "mean": 361.683276343222,
+        "std": 0.0,
+        "values": [
+          361.683276343222
+        ]
+      },
+      "wall_clock_seconds": {
+        "mean": 0.015450299950316548,
+        "std": 0.0,
+        "values": [
+          0.015450299950316548
+        ]
+      }
+    }
+  },
+  "configuration": {
+    "causal_diagnostics": false,
+    "dataset": "tiny",
+    "fairness_mode": "capacity",
+    "milestones": [
+      4
+    ],
+    "models": [
+      "homogeneous_serial",
+      "n2_delta4",
+      "n2_gpt4",
+      "n2_mixed",
+      "n2_recurrent4",
+      "n2_ssm4",
+      "old_emc"
+    ],
+    "n1_depth": 3,
+    "precision": "auto",
+    "seeds": [
+      42
+    ],
+    "tokenizer": "gpt2",
+    "top_k": 2,
+    "top_k_schedule": null,
+    "train_tokens": 4
+  },
+  "fairness_mismatches": {
+    "homogeneous_serial": {
+      "active_parameter_difference": 0,
+      "active_parameter_ratio": 1.0,
+      "flops_per_token_difference": 0,
+      "flops_per_token_ratio": 1.0,
+      "total_parameter_difference": 0,
+      "total_parameter_ratio": 1.0
+    },
+    "n2_delta4": {
+      "active_parameter_difference": 69013,
+      "active_parameter_ratio": 1.2039819229211803,
+      "flops_per_token_difference": 131498,
+      "flops_per_token_ratio": 1.1924775976088502,
+      "total_parameter_difference": 426277,
+      "total_parameter_ratio": 2.259948156971469
+    },
+    "n2_gpt4": {
+      "active_parameter_difference": 72517,
+      "active_parameter_ratio": 1.2143387058159365,
+      "flops_per_token_difference": 163082,
+      "flops_per_token_ratio": 1.238708053150972,
+      "total_parameter_difference": 433285,
+      "total_parameter_ratio": 2.280661722760981
+    },
+    "n2_mixed": {
+      "active_parameter_difference": 67297,
+      "active_parameter_ratio": 1.1989099367775153,
+      "flops_per_token_difference": 134210,
+      "flops_per_token_ratio": 1.196447233988987,
+      "total_parameter_difference": 422845,
+      "total_parameter_ratio": 2.249804184684139
+    },
+    "n2_recurrent4": {
+      "active_parameter_difference": 58549,
+      "active_parameter_ratio": 1.1730534479751957,
+      "flops_per_token_difference": 110570,
+      "flops_per_token_ratio": 1.1618446513833713,
+      "total_parameter_difference": 405349,
+      "total_parameter_ratio": 2.1980912070794996
+    },
+    "n2_ssm4": {
+      "active_parameter_difference": 69109,
+      "active_parameter_ratio": 1.204265670397749,
+      "flops_per_token_difference": 131690,
+      "flops_per_token_ratio": 1.1927586338127538,
+      "total_parameter_difference": 426469,
+      "total_parameter_ratio": 2.260515651924606
+    },
+    "old_emc": {
+      "active_parameter_difference": -103818,
+      "active_parameter_ratio": 0.6931448383082739,
+      "flops_per_token_difference": -205972,
+      "flops_per_token_ratio": 0.6985125573416318,
+      "total_parameter_difference": 5354,
+      "total_parameter_ratio": 1.015824833224465
+    }
+  },
+  "runs": [
+    {
+      "accounting": {
+        "approximate_active_parameters": 338329,
+        "approximate_flops_per_token": 683186,
+        "approximate_parameter_uses_per_forward": 1345892,
+        "architecture": "homogeneous_serial",
+        "blocks_per_n1": null,
+        "embedding_parameters": 1856,
+        "integrator_parameters": 0,
+        "limitations": [
+          "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+          "Embedding lookup table storage is excluded; tied output weights remain compute.",
+          "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded."
+        ],
+        "method": "All decoder blocks and the output projection execute for every token; attention score/value products add 4*L*D per block and token.",
+        "module_computations_per_forward": 10.0,
+        "nexus_parameters": 0,
+        "node_flops_per_invocation": [],
+        "node_parameters": [],
+        "routable_parameters": 0,
+        "selected_nodes_per_event": null,
+        "sequence_length": 4,
+        "shared_parameters": 338329,
+        "theoretical_all_nodes_flops_per_token": null,
+        "total_parameters": 338329
+      },
+      "active_compute_relative_to_all_n1s": null,
+      "approximate_training_flops": 2732744,
+      "architecture": "homogeneous_serial",
+      "fairness_mode": "capacity",
+      "final_training_loss": 3.253201961517334,
+      "final_training_token_accuracy": 0.0,
+      "final_validation_loss": 3.0566651821136475,
+      "final_validation_perplexity": 21.256552103204847,
+      "final_validation_token_accuracy": 0.0,
+      "history": [
+        {
+          "approximate_cumulative_flops": 2732744,
+          "elapsed_seconds": 0.01273859990760684,
+          "gpu_memory_used_bytes": 0,
+          "gpu_peak_memory_bytes": 0,
+          "router_balance_loss": 0.0,
+          "step": 1,
+          "tokens_per_second": 405.19870558075604,
+          "tokens_processed": 4,
+          "training_loss": 3.253201961517334,
+          "training_token_accuracy": 0.0,
+          "validation_loss": 3.0566651821136475,
+          "validation_perplexity": 21.256552103204847,
+          "validation_token_accuracy": 0.0,
+          "weighted_balance_contribution": 0.0
+        }
+      ],
+      "inference_latency_seconds": 0.0009220999199897051,
+      "manifest": {
+        "class": "TransformerLanguageModel",
+        "config": {
+          "attention_heads": 4,
+          "feed_forward_dim": 128,
+          "latent_dim": 64,
+          "max_sequence_length": 4,
+          "num_layers": 10,
+          "tie_embeddings": false,
+          "vocab_size": 25
+        },
+        "expert_names": [],
+        "module_order": []
+      },
+      "milestone_checkpoints": [
+        "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\homogeneous_serial\\seed-42\\4.pt"
+      ],
+      "module_computation_count": 10.0,
+      "module_diagnostics": null,
+      "n1_nodes_actually_selected": null,
+      "peak_ram_bytes": 0,
+      "peak_ram_measurement": "process-lifetime high-water mark; because jobs run sequentially in one process, later jobs can inherit an earlier job's peak",
+      "peak_vram_bytes": 0,
+      "routed_emc_path": false,
+      "routing": null,
+      "seed": 42,
+      "serial_execution_order": [],
+      "stream_fingerprint": "94e1ffd92647dac50d5ac843971aad15920285f24febbc4282ac285aed9e1e44",
+      "telemetry_path": null,
+      "tokens_per_second": 405.19870558075604,
+      "tokens_processed": 4,
+      "wall_clock_seconds": 0.01273859990760684
+    },
+    {
+      "accounting": {
+        "approximate_active_parameters": 234511,
+        "approximate_flops_per_token": 477214,
+        "approximate_parameter_uses_per_forward": 938044,
+        "architecture": "emc",
+        "blocks_per_n1": null,
+        "embedding_parameters": 1856,
+        "integrator_parameters": 0,
+        "limitations": [
+          "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+          "Embedding lookup table storage is excluded; tied output weights remain compute.",
+          "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+          "Heterogeneous expert cost uses the population mean before routing trajectories exist."
+        ],
+        "method": "router, both Integrators, SharedCore, and output projection are included in a once-per-token parameter-use proxy. Attention score/value products add 4*C*D per GPT execution and token.",
+        "module_computations_per_forward": 2.0,
+        "nexus_parameters": 0,
+        "node_flops_per_invocation": [],
+        "node_parameters": [],
+        "routable_parameters": 214632,
+        "selected_nodes_per_event": null,
+        "sequence_length": 4,
+        "shared_parameters": 343683,
+        "theoretical_all_nodes_flops_per_token": null,
+        "total_parameters": 343683
+      },
+      "active_compute_relative_to_all_n1s": null,
+      "approximate_training_flops": 1908856,
+      "architecture": "old_emc",
+      "fairness_mode": "capacity",
+      "final_training_loss": 2.9078426361083984,
+      "final_training_token_accuracy": 0.0,
+      "final_validation_loss": 3.417726516723633,
+      "final_validation_perplexity": 30.499994909863563,
+      "final_validation_token_accuracy": 0.0,
+      "history": [
+        {
+          "approximate_cumulative_flops": 1908856,
+          "elapsed_seconds": 0.015450299950316548,
+          "gpu_memory_used_bytes": 0,
+          "gpu_peak_memory_bytes": 0,
+          "router_balance_loss": 0.0,
+          "step": 1,
+          "tokens_per_second": 361.683276343222,
+          "tokens_processed": 4,
+          "training_loss": 2.9078426361083984,
+          "training_token_accuracy": 0.0,
+          "validation_loss": 3.417726516723633,
+          "validation_perplexity": 30.499994909863563,
+          "validation_token_accuracy": 0.0,
+          "weighted_balance_contribution": 0.0
+        }
+      ],
+      "inference_latency_seconds": 0.0019269001204520464,
+      "manifest": {
+        "class": "ChunkedEMCModel",
+        "config": {
+          "active_top_k": null,
+          "architecture_stage": "n1_chunked",
+          "attention_heads": 4,
+          "balance_bias_limit": 0.25,
+          "balance_bias_lr": 0.01,
+          "balance_target_utilization": null,
+          "balance_warmup_chunks": 0,
+          "chunk_size": 16,
+          "delta_backend": "parallel_delta",
+          "delta_ffn_dim": 128,
+          "delta_heads": 4,
+          "delta_internal_dim": 64,
+          "delta_max_transition_bytes": 67108864,
+          "integrator_heads": 4,
+          "integrator_type": "proposal_attention",
+          "latent_dim": 64,
+          "loss_free_balance_enabled": true,
+          "max_sequence_length": 4,
+          "minimum_lease_chunks": 0,
+          "module_families": [
+            "gpt",
+            "ssm",
+            "recurrent",
+            "delta"
+          ],
+          "module_hidden_dim": 128,
+          "modules_per_cycle": 2,
+          "num_cycles": 2,
+          "num_modules": 4,
+          "persistence_bonus": 0.1,
+          "recurrent_backend": "gru",
+          "recurrent_dim": 64,
+          "recurrent_precision": "fp16",
+          "request_pool_size": 4,
+          "router_descriptor_dim": 64,
+          "router_type": "module_aware",
+          "shared_core_enabled": true,
+          "shared_core_hidden_dim": null,
+          "shared_state_slots": 4,
+          "ssm_backend": "parallel_scan",
+          "state_space_dim": 96,
+          "state_space_kernel_size": 4,
+          "switch_cost": 0.05,
+          "tie_embeddings": false,
+          "vocab_size": 25
+        },
+        "expert_names": [],
+        "module_order": [
+          "gpt",
+          "ssm",
+          "recurrent",
+          "delta"
+        ]
+      },
+      "milestone_checkpoints": [
+        "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\old_emc\\seed-42\\4.pt"
+      ],
+      "module_computation_count": 2.0,
+      "module_diagnostics": {
+        "modules": [
+          {
+            "family": "gpt",
+            "gradient_norm": null,
+            "module": 0,
+            "parameter_norm": 20.452166564362162,
+            "update_norm": 0.0
+          },
+          {
+            "family": "ssm",
+            "gradient_norm": 0.14844913660479545,
+            "module": 1,
+            "parameter_norm": 18.145373248223486,
+            "update_norm": 0.06784565208969025
+          },
+          {
+            "family": "recurrent",
+            "gradient_norm": 0.1880277435108136,
+            "module": 2,
+            "parameter_norm": 17.41389463345453,
+            "update_norm": 0.06105228001696965
+          },
+          {
+            "family": "delta",
+            "gradient_norm": null,
+            "module": 3,
+            "parameter_norm": 19.76024384857597,
+            "update_norm": 0.0
+          }
+        ],
+        "optimizer_state_available": true,
+        "sampling": "single unscaled gradient and optimizer update norm sampled at checkpoint/evaluation interval; no gradient history retained",
+        "source": "live_training",
+        "step": 1
+      },
+      "n1_nodes_actually_selected": null,
+      "peak_ram_bytes": 0,
+      "peak_ram_measurement": "process-lifetime high-water mark; because jobs run sequentially in one process, later jobs can inherit an earlier job's peak",
+      "peak_vram_bytes": 0,
+      "routed_emc_path": true,
+      "routing": null,
+      "seed": 42,
+      "serial_execution_order": [],
+      "stream_fingerprint": "94e1ffd92647dac50d5ac843971aad15920285f24febbc4282ac285aed9e1e44",
+      "telemetry_path": "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\old_emc\\seed-42\\telemetry.json",
+      "tokens_per_second": 361.683276343222,
+      "tokens_processed": 4,
+      "wall_clock_seconds": 0.015450299950316548
+    },
+    {
+      "accounting": {
+        "approximate_active_parameters": 405626,
+        "approximate_flops_per_token": 817396,
+        "approximate_parameter_uses_per_forward": 1622504,
+        "architecture": "n2_mixed",
+        "blocks_per_n1": 3,
+        "embedding_parameters": 1856,
+        "integrator_parameters": 49793,
+        "limitations": [
+          "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+          "Embedding lookup table storage is excluded; tied output weights remain compute.",
+          "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+          "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+        ],
+        "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+        "module_computations_per_forward": 2.0,
+        "nexus_parameters": 388,
+        "node_flops_per_invocation": [
+          1484800,
+          1422016,
+          1379776,
+          1421632
+        ],
+        "node_parameters": [
+          179456,
+          177752,
+          172472,
+          177704
+        ],
+        "routable_parameters": 707384,
+        "selected_nodes_per_event": 2,
+        "sequence_length": 4,
+        "shared_parameters": 53790,
+        "theoretical_all_nodes_flops_per_token": 1530924,
+        "total_parameters": 761174
+      },
+      "active_compute_relative_to_all_n1s": 0.5339233038348082,
+      "approximate_training_flops": 3269584,
+      "architecture": "n2_mixed",
+      "fairness_mode": "capacity",
+      "final_training_loss": 2.824812412261963,
+      "final_training_token_accuracy": 0.0,
+      "final_validation_loss": 3.0700817108154297,
+      "final_validation_perplexity": 21.54366295335181,
+      "final_validation_token_accuracy": 0.0,
+      "history": [
+        {
+          "approximate_cumulative_flops": 3269584,
+          "elapsed_seconds": 0.025222399970516562,
+          "gpu_memory_used_bytes": 0,
+          "gpu_peak_memory_bytes": 0,
+          "router_balance_loss": 0.0,
+          "step": 1,
+          "tokens_per_second": 208.2129607713372,
+          "tokens_processed": 4,
+          "training_loss": 2.824812412261963,
+          "training_token_accuracy": 0.0,
+          "validation_loss": 3.0700817108154297,
+          "validation_perplexity": 21.54366295335181,
+          "validation_token_accuracy": 0.0,
+          "weighted_balance_contribution": 0.0
+        }
+      ],
+      "inference_latency_seconds": 0.002799100009724498,
+      "manifest": {
+        "class": "N2EMCModel",
+        "config": {
+          "active_top_k": 2,
+          "architecture_stage": "n2",
+          "attention_heads": 4,
+          "balance_bias_limit": 0.25,
+          "balance_bias_lr": 0.01,
+          "balance_target_utilization": null,
+          "balance_warmup_chunks": 0,
+          "chunk_size": 16,
+          "delta_backend": "parallel_delta",
+          "delta_ffn_dim": 144,
+          "delta_heads": 4,
+          "delta_internal_dim": 48,
+          "delta_max_transition_bytes": 67108864,
+          "integrator_heads": 4,
+          "integrator_type": "proposal_attention",
+          "latent_dim": 64,
+          "loss_free_balance_enabled": false,
+          "max_sequence_length": 4,
+          "minimum_lease_chunks": 0,
+          "module_families": [
+            "gpt",
+            "ssm",
+            "recurrent",
+            "delta"
+          ],
+          "module_hidden_dim": 192,
+          "modules_per_cycle": 2,
+          "n1_depth": 3,
+          "n2_execution_mode": "sparse",
+          "n2_population": "mixed",
+          "n2_use_cuda_streams": false,
+          "num_cycles": 1,
+          "num_modules": 4,
+          "persistence_bonus": 0.1,
+          "recurrent_backend": "gru",
+          "recurrent_dim": 66,
+          "recurrent_precision": "fp16",
+          "request_pool_size": 4,
+          "router_descriptor_dim": 64,
+          "router_type": "module_aware",
+          "shared_core_enabled": true,
+          "shared_core_hidden_dim": null,
+          "shared_state_slots": 4,
+          "ssm_backend": "parallel_scan",
+          "state_space_dim": 88,
+          "state_space_kernel_size": 4,
+          "switch_cost": 0.05,
+          "tie_embeddings": false,
+          "vocab_size": 25
+        },
+        "expert_names": [
+          "GPT-N1-A",
+          "SSM-N1-A",
+          "Recurrent-N1-A",
+          "Delta-N1-A"
+        ],
+        "module_order": [
+          "gpt",
+          "ssm",
+          "recurrent",
+          "delta"
+        ]
+      },
+      "milestone_checkpoints": [
+        "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_mixed\\seed-42\\4.pt"
+      ],
+      "module_computation_count": 2.0,
+      "module_diagnostics": {
+        "modules": [
+          {
+            "family": "gpt",
+            "gradient_norm": null,
+            "module": 0,
+            "parameter_norm": 37.49171917710883,
+            "update_norm": 0.0
+          },
+          {
+            "family": "ssm",
+            "gradient_norm": 0.09492311834149648,
+            "module": 1,
+            "parameter_norm": 32.11335739664576,
+            "update_norm": 0.12159461787939897
+          },
+          {
+            "family": "recurrent",
+            "gradient_norm": 0.1310151014721516,
+            "module": 2,
+            "parameter_norm": 31.75692695615689,
+            "update_norm": 0.12022060015083129
+          },
+          {
+            "family": "delta",
+            "gradient_norm": null,
+            "module": 3,
+            "parameter_norm": 34.31120407981338,
+            "update_norm": 0.0
+          }
+        ],
+        "optimizer_state_available": true,
+        "sampling": "single unscaled gradient and optimizer update norm sampled at checkpoint/evaluation interval; no gradient history retained",
+        "source": "live_training",
+        "step": 1
+      },
+      "n1_nodes_actually_selected": 2,
+      "peak_ram_bytes": 0,
+      "peak_ram_measurement": "process-lifetime high-water mark; because jobs run sequentially in one process, later jobs can inherit an earlier job's peak",
+      "peak_vram_bytes": 0,
+      "routed_emc_path": true,
+      "routing": {
+        "all_modules_used": false,
+        "average_integrator_acceptance": [
+          0.0,
+          0.446895956993103,
+          0.553104043006897,
+          0.0
+        ],
+        "average_proposal_contribution": [
+          0.0,
+          2.011345624923706,
+          2.5892982482910156,
+          0.0
+        ],
+        "average_proposal_norm": [
+          0.0,
+          0.5046053528785706,
+          1.0393531322479248,
+          0.0
+        ],
+        "average_routing_probability": [
+          0.15898767113685608,
+          0.32082217931747437,
+          0.3520261347293854,
+          0.16816401481628418
+        ],
+        "dominant_modules": [
+          1,
+          2
+        ],
+        "dominant_traffic_fraction": 1.0,
+        "effective_active_modules": 2.0,
+        "expert_names": [
+          "GPT-N1-A",
+          "SSM-N1-A",
+          "Recurrent-N1-A",
+          "Delta-N1-A"
+        ],
+        "family_integrator_acceptance": [
+          [
+            "delta",
+            0.0
+          ],
+          [
+            "gpt",
+            0.0
+          ],
+          [
+            "recurrent",
+            0.553104043006897
+          ],
+          [
+            "ssm",
+            0.446895956993103
+          ]
+        ],
+        "family_traffic_fraction": [
+          [
+            "delta",
+            0.0
+          ],
+          [
+            "gpt",
+            0.0
+          ],
+          [
+            "recurrent",
+            0.5
+          ],
+          [
+            "ssm",
+            0.5
+          ]
+        ],
+        "maximum_router_gradient_norm": 0.0017561683198437095,
+        "mean_gate_magnitude": 0.5089112520217896,
+        "mean_integrated_update_norm": 2.287313938140869,
+        "mean_proposal_similarity": -0.0159938745200634,
+        "mean_router_entropy": [
+          1.3244377374649048
+        ],
+        "minimum_module_share": 0.0,
+        "module_gradient_norms": [
+          0.0,
+          0.09492311626672745,
+          0.1310151070356369,
+          0.0
+        ],
+        "module_parameter_counts": [
+          179456,
+          177752,
+          172472,
+          177704
+        ],
+        "module_update_norms": [
+          0.0,
+          0.009454615414142609,
+          0.008276001550257206,
+          0.0
+        ],
+        "module_updates_diverged": true,
+        "normalized_routing_entropy": 0.5,
+        "routing_collapsed": true,
+        "routing_differs_across_cycles": false,
+        "routing_differs_across_inputs": false,
+        "routing_distribution_per_cycle": [
+          [
+            0.0,
+            0.5,
+            0.5,
+            0.0
+          ]
+        ],
+        "selection_counts": [
+          [
+            0,
+            4,
+            4,
+            0
+          ]
+        ],
+        "severe_collapse": true,
+        "top_1_traffic_share": 0.5,
+        "top_2_traffic_share": 1.0,
+        "traffic_fraction": [
+          0.0,
+          0.5,
+          0.5,
+          0.0
+        ]
+      },
+      "seed": 42,
+      "serial_execution_order": [],
+      "stream_fingerprint": "94e1ffd92647dac50d5ac843971aad15920285f24febbc4282ac285aed9e1e44",
+      "telemetry_path": "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_mixed\\seed-42\\telemetry.json",
+      "tokens_per_second": 208.2129607713372,
+      "tokens_processed": 4,
+      "wall_clock_seconds": 0.025222399970516562
+    },
+    {
+      "accounting": {
+        "approximate_active_parameters": 410846,
+        "approximate_flops_per_token": 846268,
+        "approximate_parameter_uses_per_forward": 1643384,
+        "architecture": "n2_gpt4",
+        "blocks_per_n1": 3,
+        "embedding_parameters": 1856,
+        "integrator_parameters": 49793,
+        "limitations": [
+          "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+          "Embedding lookup table storage is excluded; tied output weights remain compute.",
+          "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+          "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+        ],
+        "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+        "module_computations_per_forward": 2.0,
+        "nexus_parameters": 388,
+        "node_flops_per_invocation": [
+          1484800,
+          1484800,
+          1484800,
+          1484800
+        ],
+        "node_parameters": [
+          179456,
+          179456,
+          179456,
+          179456
+        ],
+        "routable_parameters": 717824,
+        "selected_nodes_per_event": 2,
+        "sequence_length": 4,
+        "shared_parameters": 53790,
+        "theoretical_all_nodes_flops_per_token": 1588668,
+        "total_parameters": 771614
+      },
+      "active_compute_relative_to_all_n1s": 0.5326902789003115,
+      "approximate_training_flops": 3385072,
+      "architecture": "n2_gpt4",
+      "fairness_mode": "capacity",
+      "final_training_loss": 3.8820199966430664,
+      "final_training_token_accuracy": 0.0,
+      "final_validation_loss": 3.8488950729370117,
+      "final_validation_perplexity": 46.941167999744785,
+      "final_validation_token_accuracy": 0.0,
+      "history": [
+        {
+          "approximate_cumulative_flops": 3385072,
+          "elapsed_seconds": 0.023715399904176593,
+          "gpu_memory_used_bytes": 0,
+          "gpu_peak_memory_bytes": 0,
+          "router_balance_loss": 0.0,
+          "step": 1,
+          "tokens_per_second": 219.86720027485913,
+          "tokens_processed": 4,
+          "training_loss": 3.8820199966430664,
+          "training_token_accuracy": 0.0,
+          "validation_loss": 3.8488950729370117,
+          "validation_perplexity": 46.941167999744785,
+          "validation_token_accuracy": 0.0,
+          "weighted_balance_contribution": 0.0
+        }
+      ],
+      "inference_latency_seconds": 0.0018521000165492296,
+      "manifest": {
+        "class": "N2EMCModel",
+        "config": {
+          "active_top_k": 2,
+          "architecture_stage": "n2",
+          "attention_heads": 4,
+          "balance_bias_limit": 0.25,
+          "balance_bias_lr": 0.01,
+          "balance_target_utilization": null,
+          "balance_warmup_chunks": 0,
+          "chunk_size": 16,
+          "delta_backend": "parallel_delta",
+          "delta_ffn_dim": 144,
+          "delta_heads": 4,
+          "delta_internal_dim": 48,
+          "delta_max_transition_bytes": 67108864,
+          "integrator_heads": 4,
+          "integrator_type": "proposal_attention",
+          "latent_dim": 64,
+          "loss_free_balance_enabled": false,
+          "max_sequence_length": 4,
+          "minimum_lease_chunks": 0,
+          "module_families": [
+            "gpt",
+            "gpt",
+            "gpt",
+            "gpt"
+          ],
+          "module_hidden_dim": 192,
+          "modules_per_cycle": 2,
+          "n1_depth": 3,
+          "n2_execution_mode": "sparse",
+          "n2_population": "gpt4",
+          "n2_use_cuda_streams": false,
+          "num_cycles": 1,
+          "num_modules": 4,
+          "persistence_bonus": 0.1,
+          "recurrent_backend": "gru",
+          "recurrent_dim": 66,
+          "recurrent_precision": "fp16",
+          "request_pool_size": 4,
+          "router_descriptor_dim": 64,
+          "router_type": "module_aware",
+          "shared_core_enabled": true,
+          "shared_core_hidden_dim": null,
+          "shared_state_slots": 4,
+          "ssm_backend": "parallel_scan",
+          "state_space_dim": 88,
+          "state_space_kernel_size": 4,
+          "switch_cost": 0.05,
+          "tie_embeddings": false,
+          "vocab_size": 25
+        },
+        "expert_names": [
+          "GPT-N1-A",
+          "GPT-N1-B",
+          "GPT-N1-C",
+          "GPT-N1-D"
+        ],
+        "module_order": [
+          "gpt",
+          "gpt",
+          "gpt",
+          "gpt"
+        ]
+      },
+      "milestone_checkpoints": [
+        "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_gpt4\\seed-42\\4.pt"
+      ],
+      "module_computation_count": 2.0,
+      "module_diagnostics": {
+        "modules": [
+          {
+            "family": "gpt",
+            "gradient_norm": null,
+            "module": 0,
+            "parameter_norm": 37.49171917710883,
+            "update_norm": 0.0
+          },
+          {
+            "family": "gpt",
+            "gradient_norm": 0.18388492883033045,
+            "module": 1,
+            "parameter_norm": 37.4786025552427,
+            "update_norm": 0.12382589725621539
+          },
+          {
+            "family": "gpt",
+            "gradient_norm": 0.17070027941941507,
+            "module": 2,
+            "parameter_norm": 37.447115118266794,
+            "update_norm": 0.12375052029146995
+          },
+          {
+            "family": "gpt",
+            "gradient_norm": null,
+            "module": 3,
+            "parameter_norm": 37.477171899394726,
+            "update_norm": 0.0
+          }
+        ],
+        "optimizer_state_available": true,
+        "sampling": "single unscaled gradient and optimizer update norm sampled at checkpoint/evaluation interval; no gradient history retained",
+        "source": "live_training",
+        "step": 1
+      },
+      "n1_nodes_actually_selected": 2,
+      "peak_ram_bytes": 0,
+      "peak_ram_measurement": "process-lifetime high-water mark; because jobs run sequentially in one process, later jobs can inherit an earlier job's peak",
+      "peak_vram_bytes": 0,
+      "routed_emc_path": true,
+      "routing": {
+        "all_modules_used": false,
+        "average_integrator_acceptance": [
+          0.0,
+          0.5246498584747314,
+          0.47535017132759094,
+          0.0
+        ],
+        "average_proposal_contribution": [
+          0.0,
+          2.5730819702148438,
+          2.008115530014038,
+          0.0
+        ],
+        "average_proposal_norm": [
+          0.0,
+          2.1050331592559814,
+          2.2259843349456787,
+          0.0
+        ],
+        "average_routing_probability": [
+          0.15898767113685608,
+          0.32082217931747437,
+          0.3520261347293854,
+          0.16816401481628418
+        ],
+        "dominant_modules": [
+          1,
+          2
+        ],
+        "dominant_traffic_fraction": 1.0,
+        "effective_active_modules": 2.0,
+        "expert_names": [
+          "GPT-N1-A",
+          "GPT-N1-B",
+          "GPT-N1-C",
+          "GPT-N1-D"
+        ],
+        "family_integrator_acceptance": [
+          [
+            "gpt",
+            1.0
+          ]
+        ],
+        "family_traffic_fraction": [
+          [
+            "gpt",
+            1.0
+          ]
+        ],
+        "maximum_router_gradient_norm": 0.0004208541940897703,
+        "mean_gate_magnitude": 0.4993079900741577,
+        "mean_integrated_update_norm": 2.290271282196045,
+        "mean_proposal_similarity": 0.004671002738177776,
+        "mean_router_entropy": [
+          1.3244377374649048
+        ],
+        "minimum_module_share": 0.0,
+        "module_gradient_norms": [
+          0.0,
+          0.18388493359088898,
+          0.1707002818584442,
+          0.0
+        ],
+        "module_parameter_counts": [
+          179456,
+          179456,
+          179456,
+          179456
+        ],
+        "module_update_norms": [
+          0.0,
+          0.008728337474167347,
+          0.008732983842492104,
+          0.0
+        ],
+        "module_updates_diverged": true,
+        "normalized_routing_entropy": 0.5,
+        "routing_collapsed": true,
+        "routing_differs_across_cycles": false,
+        "routing_differs_across_inputs": false,
+        "routing_distribution_per_cycle": [
+          [
+            0.0,
+            0.5,
+            0.5,
+            0.0
+          ]
+        ],
+        "selection_counts": [
+          [
+            0,
+            4,
+            4,
+            0
+          ]
+        ],
+        "severe_collapse": true,
+        "top_1_traffic_share": 0.5,
+        "top_2_traffic_share": 1.0,
+        "traffic_fraction": [
+          0.0,
+          0.5,
+          0.5,
+          0.0
+        ]
+      },
+      "seed": 42,
+      "serial_execution_order": [],
+      "stream_fingerprint": "94e1ffd92647dac50d5ac843971aad15920285f24febbc4282ac285aed9e1e44",
+      "telemetry_path": "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_gpt4\\seed-42\\telemetry.json",
+      "tokens_per_second": 219.86720027485913,
+      "tokens_processed": 4,
+      "wall_clock_seconds": 0.023715399904176593
+    },
+    {
+      "accounting": {
+        "approximate_active_parameters": 407438,
+        "approximate_flops_per_token": 814876,
+        "approximate_parameter_uses_per_forward": 1629752,
+        "architecture": "n2_ssm4",
+        "blocks_per_n1": 3,
+        "embedding_parameters": 1856,
+        "integrator_parameters": 49793,
+        "limitations": [
+          "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+          "Embedding lookup table storage is excluded; tied output weights remain compute.",
+          "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+          "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+        ],
+        "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+        "module_computations_per_forward": 2.0,
+        "nexus_parameters": 388,
+        "node_flops_per_invocation": [
+          1422016,
+          1422016,
+          1422016,
+          1422016
+        ],
+        "node_parameters": [
+          177752,
+          177752,
+          177752,
+          177752
+        ],
+        "routable_parameters": 711008,
+        "selected_nodes_per_event": 2,
+        "sequence_length": 4,
+        "shared_parameters": 53790,
+        "theoretical_all_nodes_flops_per_token": 1525884,
+        "total_parameters": 764798
+      },
+      "active_compute_relative_to_all_n1s": 0.5340353526218244,
+      "approximate_training_flops": 3259504,
+      "architecture": "n2_ssm4",
+      "fairness_mode": "capacity",
+      "final_training_loss": 3.2451717853546143,
+      "final_training_token_accuracy": 0.0,
+      "final_validation_loss": 3.308279514312744,
+      "final_validation_perplexity": 27.338050263208657,
+      "final_validation_token_accuracy": 0.0,
+      "history": [
+        {
+          "approximate_cumulative_flops": 3259504,
+          "elapsed_seconds": 0.02791329985484481,
+          "gpu_memory_used_bytes": 0,
+          "gpu_peak_memory_bytes": 0,
+          "router_balance_loss": 0.0,
+          "step": 1,
+          "tokens_per_second": 195.20765405267923,
+          "tokens_processed": 4,
+          "training_loss": 3.2451717853546143,
+          "training_token_accuracy": 0.0,
+          "validation_loss": 3.308279514312744,
+          "validation_perplexity": 27.338050263208657,
+          "validation_token_accuracy": 0.0,
+          "weighted_balance_contribution": 0.0
+        }
+      ],
+      "inference_latency_seconds": 0.0025723001454025507,
+      "manifest": {
+        "class": "N2EMCModel",
+        "config": {
+          "active_top_k": 2,
+          "architecture_stage": "n2",
+          "attention_heads": 4,
+          "balance_bias_limit": 0.25,
+          "balance_bias_lr": 0.01,
+          "balance_target_utilization": null,
+          "balance_warmup_chunks": 0,
+          "chunk_size": 16,
+          "delta_backend": "parallel_delta",
+          "delta_ffn_dim": 144,
+          "delta_heads": 4,
+          "delta_internal_dim": 48,
+          "delta_max_transition_bytes": 67108864,
+          "integrator_heads": 4,
+          "integrator_type": "proposal_attention",
+          "latent_dim": 64,
+          "loss_free_balance_enabled": false,
+          "max_sequence_length": 4,
+          "minimum_lease_chunks": 0,
+          "module_families": [
+            "ssm",
+            "ssm",
+            "ssm",
+            "ssm"
+          ],
+          "module_hidden_dim": 192,
+          "modules_per_cycle": 2,
+          "n1_depth": 3,
+          "n2_execution_mode": "sparse",
+          "n2_population": "ssm4",
+          "n2_use_cuda_streams": false,
+          "num_cycles": 1,
+          "num_modules": 4,
+          "persistence_bonus": 0.1,
+          "recurrent_backend": "gru",
+          "recurrent_dim": 66,
+          "recurrent_precision": "fp16",
+          "request_pool_size": 4,
+          "router_descriptor_dim": 64,
+          "router_type": "module_aware",
+          "shared_core_enabled": true,
+          "shared_core_hidden_dim": null,
+          "shared_state_slots": 4,
+          "ssm_backend": "parallel_scan",
+          "state_space_dim": 88,
+          "state_space_kernel_size": 4,
+          "switch_cost": 0.05,
+          "tie_embeddings": false,
+          "vocab_size": 25
+        },
+        "expert_names": [
+          "SSM-N1-A",
+          "SSM-N1-B",
+          "SSM-N1-C",
+          "SSM-N1-D"
+        ],
+        "module_order": [
+          "ssm",
+          "ssm",
+          "ssm",
+          "ssm"
+        ]
+      },
+      "milestone_checkpoints": [
+        "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_ssm4\\seed-42\\4.pt"
+      ],
+      "module_computation_count": 2.0,
+      "module_diagnostics": {
+        "modules": [
+          {
+            "family": "ssm",
+            "gradient_norm": null,
+            "module": 0,
+            "parameter_norm": 32.11279793521667,
+            "update_norm": 0.0
+          },
+          {
+            "family": "ssm",
+            "gradient_norm": 0.0736143055173372,
+            "module": 1,
+            "parameter_norm": 32.14913035662506,
+            "update_norm": 0.1209754897743473
+          },
+          {
+            "family": "ssm",
+            "gradient_norm": 0.09716810466459208,
+            "module": 2,
+            "parameter_norm": 32.03947283587179,
+            "update_norm": 0.12183926905277326
+          },
+          {
+            "family": "ssm",
+            "gradient_norm": null,
+            "module": 3,
+            "parameter_norm": 32.113761366037046,
+            "update_norm": 0.0
+          }
+        ],
+        "optimizer_state_available": true,
+        "sampling": "single unscaled gradient and optimizer update norm sampled at checkpoint/evaluation interval; no gradient history retained",
+        "source": "live_training",
+        "step": 1
+      },
+      "n1_nodes_actually_selected": 2,
+      "peak_ram_bytes": 0,
+      "peak_ram_measurement": "process-lifetime high-water mark; because jobs run sequentially in one process, later jobs can inherit an earlier job's peak",
+      "peak_vram_bytes": 0,
+      "routed_emc_path": true,
+      "routing": {
+        "all_modules_used": false,
+        "average_integrator_acceptance": [
+          0.0,
+          0.45228949189186096,
+          0.5477105379104614,
+          0.0
+        ],
+        "average_proposal_contribution": [
+          0.0,
+          1.9025390148162842,
+          2.7756834030151367,
+          0.0
+        ],
+        "average_proposal_norm": [
+          0.0,
+          0.6149784922599792,
+          0.5963493585586548,
+          0.0
+        ],
+        "average_routing_probability": [
+          0.15898767113685608,
+          0.32082217931747437,
+          0.3520261347293854,
+          0.16816401481628418
+        ],
+        "dominant_modules": [
+          1,
+          2
+        ],
+        "dominant_traffic_fraction": 1.0,
+        "effective_active_modules": 2.0,
+        "expert_names": [
+          "SSM-N1-A",
+          "SSM-N1-B",
+          "SSM-N1-C",
+          "SSM-N1-D"
+        ],
+        "family_integrator_acceptance": [
+          [
+            "ssm",
+            1.0
+          ]
+        ],
+        "family_traffic_fraction": [
+          [
+            "ssm",
+            1.0
+          ]
+        ],
+        "maximum_router_gradient_norm": 0.007569852750748396,
+        "mean_gate_magnitude": 0.5018571019172668,
+        "mean_integrated_update_norm": 2.448225736618042,
+        "mean_proposal_similarity": -0.22561250627040863,
+        "mean_router_entropy": [
+          1.3244377374649048
+        ],
+        "minimum_module_share": 0.0,
+        "module_gradient_norms": [
+          0.0,
+          0.07361429929733276,
+          0.09716811031103134,
+          0.0
+        ],
+        "module_parameter_counts": [
+          177752,
+          177752,
+          177752,
+          177752
+        ],
+        "module_update_norms": [
+          0.0,
+          0.009421874769032001,
+          0.009468489326536655,
+          0.0
+        ],
+        "module_updates_diverged": true,
+        "normalized_routing_entropy": 0.5,
+        "routing_collapsed": true,
+        "routing_differs_across_cycles": false,
+        "routing_differs_across_inputs": false,
+        "routing_distribution_per_cycle": [
+          [
+            0.0,
+            0.5,
+            0.5,
+            0.0
+          ]
+        ],
+        "selection_counts": [
+          [
+            0,
+            4,
+            4,
+            0
+          ]
+        ],
+        "severe_collapse": true,
+        "top_1_traffic_share": 0.5,
+        "top_2_traffic_share": 1.0,
+        "traffic_fraction": [
+          0.0,
+          0.5,
+          0.5,
+          0.0
+        ]
+      },
+      "seed": 42,
+      "serial_execution_order": [],
+      "stream_fingerprint": "94e1ffd92647dac50d5ac843971aad15920285f24febbc4282ac285aed9e1e44",
+      "telemetry_path": "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_ssm4\\seed-42\\telemetry.json",
+      "tokens_per_second": 195.20765405267923,
+      "tokens_processed": 4,
+      "wall_clock_seconds": 0.02791329985484481
+    },
+    {
+      "accounting": {
+        "approximate_active_parameters": 396878,
+        "approximate_flops_per_token": 793756,
+        "approximate_parameter_uses_per_forward": 1587512,
+        "architecture": "n2_recurrent4",
+        "blocks_per_n1": 3,
+        "embedding_parameters": 1856,
+        "integrator_parameters": 49793,
+        "limitations": [
+          "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+          "Embedding lookup table storage is excluded; tied output weights remain compute.",
+          "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+          "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+        ],
+        "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+        "module_computations_per_forward": 2.0,
+        "nexus_parameters": 388,
+        "node_flops_per_invocation": [
+          1379776,
+          1379776,
+          1379776,
+          1379776
+        ],
+        "node_parameters": [
+          172472,
+          172472,
+          172472,
+          172472
+        ],
+        "routable_parameters": 689888,
+        "selected_nodes_per_event": 2,
+        "sequence_length": 4,
+        "shared_parameters": 53790,
+        "theoretical_all_nodes_flops_per_token": 1483644,
+        "total_parameters": 743678
+      },
+      "active_compute_relative_to_all_n1s": 0.5350043541442556,
+      "approximate_training_flops": 3175024,
+      "architecture": "n2_recurrent4",
+      "fairness_mode": "capacity",
+      "final_training_loss": 3.4501686096191406,
+      "final_training_token_accuracy": 0.0,
+      "final_validation_loss": 3.3493947982788086,
+      "final_validation_perplexity": 28.485488959090183,
+      "final_validation_token_accuracy": 0.0,
+      "history": [
+        {
+          "approximate_cumulative_flops": 3175024,
+          "elapsed_seconds": 0.021845699986442924,
+          "gpu_memory_used_bytes": 0,
+          "gpu_peak_memory_bytes": 0,
+          "router_balance_loss": 0.0,
+          "step": 1,
+          "tokens_per_second": 230.6791784353554,
+          "tokens_processed": 4,
+          "training_loss": 3.4501686096191406,
+          "training_token_accuracy": 0.0,
+          "validation_loss": 3.3493947982788086,
+          "validation_perplexity": 28.485488959090183,
+          "validation_token_accuracy": 0.0,
+          "weighted_balance_contribution": 0.0
+        }
+      ],
+      "inference_latency_seconds": 0.001711999997496605,
+      "manifest": {
+        "class": "N2EMCModel",
+        "config": {
+          "active_top_k": 2,
+          "architecture_stage": "n2",
+          "attention_heads": 4,
+          "balance_bias_limit": 0.25,
+          "balance_bias_lr": 0.01,
+          "balance_target_utilization": null,
+          "balance_warmup_chunks": 0,
+          "chunk_size": 16,
+          "delta_backend": "parallel_delta",
+          "delta_ffn_dim": 144,
+          "delta_heads": 4,
+          "delta_internal_dim": 48,
+          "delta_max_transition_bytes": 67108864,
+          "integrator_heads": 4,
+          "integrator_type": "proposal_attention",
+          "latent_dim": 64,
+          "loss_free_balance_enabled": false,
+          "max_sequence_length": 4,
+          "minimum_lease_chunks": 0,
+          "module_families": [
+            "recurrent",
+            "recurrent",
+            "recurrent",
+            "recurrent"
+          ],
+          "module_hidden_dim": 192,
+          "modules_per_cycle": 2,
+          "n1_depth": 3,
+          "n2_execution_mode": "sparse",
+          "n2_population": "recurrent4",
+          "n2_use_cuda_streams": false,
+          "num_cycles": 1,
+          "num_modules": 4,
+          "persistence_bonus": 0.1,
+          "recurrent_backend": "gru",
+          "recurrent_dim": 66,
+          "recurrent_precision": "fp16",
+          "request_pool_size": 4,
+          "router_descriptor_dim": 64,
+          "router_type": "module_aware",
+          "shared_core_enabled": true,
+          "shared_core_hidden_dim": null,
+          "shared_state_slots": 4,
+          "ssm_backend": "parallel_scan",
+          "state_space_dim": 88,
+          "state_space_kernel_size": 4,
+          "switch_cost": 0.05,
+          "tie_embeddings": false,
+          "vocab_size": 25
+        },
+        "expert_names": [
+          "Recurrent-N1-A",
+          "Recurrent-N1-B",
+          "Recurrent-N1-C",
+          "Recurrent-N1-D"
+        ],
+        "module_order": [
+          "recurrent",
+          "recurrent",
+          "recurrent",
+          "recurrent"
+        ]
+      },
+      "milestone_checkpoints": [
+        "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_recurrent4\\seed-42\\4.pt"
+      ],
+      "module_computation_count": 2.0,
+      "module_diagnostics": {
+        "modules": [
+          {
+            "family": "recurrent",
+            "gradient_norm": null,
+            "module": 0,
+            "parameter_norm": 31.80164502728747,
+            "update_norm": 0.0
+          },
+          {
+            "family": "recurrent",
+            "gradient_norm": 0.09597901208346453,
+            "module": 1,
+            "parameter_norm": 31.76133468393457,
+            "update_norm": 0.11975602619905804
+          },
+          {
+            "family": "recurrent",
+            "gradient_norm": 0.10963742135188438,
+            "module": 2,
+            "parameter_norm": 31.759267387288563,
+            "update_norm": 0.11986456357478353
+          },
+          {
+            "family": "recurrent",
+            "gradient_norm": null,
+            "module": 3,
+            "parameter_norm": 31.770444530885676,
+            "update_norm": 0.0
+          }
+        ],
+        "optimizer_state_available": true,
+        "sampling": "single unscaled gradient and optimizer update norm sampled at checkpoint/evaluation interval; no gradient history retained",
+        "source": "live_training",
+        "step": 1
+      },
+      "n1_nodes_actually_selected": 2,
+      "peak_ram_bytes": 0,
+      "peak_ram_measurement": "process-lifetime high-water mark; because jobs run sequentially in one process, later jobs can inherit an earlier job's peak",
+      "peak_vram_bytes": 0,
+      "routed_emc_path": true,
+      "routing": {
+        "all_modules_used": false,
+        "average_integrator_acceptance": [
+          0.0,
+          0.4626220762729645,
+          0.5373779535293579,
+          0.0
+        ],
+        "average_proposal_contribution": [
+          0.0,
+          2.2152774333953857,
+          2.3511438369750977,
+          0.0
+        ],
+        "average_proposal_norm": [
+          0.0,
+          0.99076908826828,
+          1.050399899482727,
+          0.0
+        ],
+        "average_routing_probability": [
+          0.15898767113685608,
+          0.32082217931747437,
+          0.3520261347293854,
+          0.16816401481628418
+        ],
+        "dominant_modules": [
+          1,
+          2
+        ],
+        "dominant_traffic_fraction": 1.0,
+        "effective_active_modules": 2.0,
+        "expert_names": [
+          "Recurrent-N1-A",
+          "Recurrent-N1-B",
+          "Recurrent-N1-C",
+          "Recurrent-N1-D"
+        ],
+        "family_integrator_acceptance": [
+          [
+            "recurrent",
+            1.0
+          ]
+        ],
+        "family_traffic_fraction": [
+          [
+            "recurrent",
+            1.0
+          ]
+        ],
+        "maximum_router_gradient_norm": 0.020241638645529747,
+        "mean_gate_magnitude": 0.49656474590301514,
+        "mean_integrated_update_norm": 2.29646372795105,
+        "mean_proposal_similarity": -0.07377597689628601,
+        "mean_router_entropy": [
+          1.3244377374649048
+        ],
+        "minimum_module_share": 0.0,
+        "module_gradient_norms": [
+          0.0,
+          0.09597901999950409,
+          0.10963743180036545,
+          0.0
+        ],
+        "module_parameter_counts": [
+          172472,
+          172472,
+          172472,
+          172472
+        ],
+        "module_update_norms": [
+          0.0,
+          0.008245192468166351,
+          0.008262060582637787,
+          0.0
+        ],
+        "module_updates_diverged": true,
+        "normalized_routing_entropy": 0.5,
+        "routing_collapsed": true,
+        "routing_differs_across_cycles": false,
+        "routing_differs_across_inputs": false,
+        "routing_distribution_per_cycle": [
+          [
+            0.0,
+            0.5,
+            0.5,
+            0.0
+          ]
+        ],
+        "selection_counts": [
+          [
+            0,
+            4,
+            4,
+            0
+          ]
+        ],
+        "severe_collapse": true,
+        "top_1_traffic_share": 0.5,
+        "top_2_traffic_share": 1.0,
+        "traffic_fraction": [
+          0.0,
+          0.5,
+          0.5,
+          0.0
+        ]
+      },
+      "seed": 42,
+      "serial_execution_order": [],
+      "stream_fingerprint": "94e1ffd92647dac50d5ac843971aad15920285f24febbc4282ac285aed9e1e44",
+      "telemetry_path": "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_recurrent4\\seed-42\\telemetry.json",
+      "tokens_per_second": 230.6791784353554,
+      "tokens_processed": 4,
+      "wall_clock_seconds": 0.021845699986442924
+    },
+    {
+      "accounting": {
+        "approximate_active_parameters": 407342,
+        "approximate_flops_per_token": 814684,
+        "approximate_parameter_uses_per_forward": 1629368,
+        "architecture": "n2_delta4",
+        "blocks_per_n1": 3,
+        "embedding_parameters": 1856,
+        "integrator_parameters": 49793,
+        "limitations": [
+          "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+          "Embedding lookup table storage is excluded; tied output weights remain compute.",
+          "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+          "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+        ],
+        "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+        "module_computations_per_forward": 2.0,
+        "nexus_parameters": 388,
+        "node_flops_per_invocation": [
+          1421632,
+          1421632,
+          1421632,
+          1421632
+        ],
+        "node_parameters": [
+          177704,
+          177704,
+          177704,
+          177704
+        ],
+        "routable_parameters": 710816,
+        "selected_nodes_per_event": 2,
+        "sequence_length": 4,
+        "shared_parameters": 53790,
+        "theoretical_all_nodes_flops_per_token": 1525500,
+        "total_parameters": 764606
+      },
+      "active_compute_relative_to_all_n1s": 0.5340439200262209,
+      "approximate_training_flops": 3258736,
+      "architecture": "n2_delta4",
+      "fairness_mode": "capacity",
+      "final_training_loss": 3.8097221851348877,
+      "final_training_token_accuracy": 0.0,
+      "final_validation_loss": 3.318659543991089,
+      "final_validation_perplexity": 27.623297914669628,
+      "final_validation_token_accuracy": 0.0,
+      "history": [
+        {
+          "approximate_cumulative_flops": 3258736,
+          "elapsed_seconds": 0.03451530006714165,
+          "gpu_memory_used_bytes": 0,
+          "gpu_peak_memory_bytes": 0,
+          "router_balance_loss": 0.0,
+          "step": 1,
+          "tokens_per_second": 148.30689072987082,
+          "tokens_processed": 4,
+          "training_loss": 3.8097221851348877,
+          "training_token_accuracy": 0.0,
+          "validation_loss": 3.318659543991089,
+          "validation_perplexity": 27.623297914669628,
+          "validation_token_accuracy": 0.0,
+          "weighted_balance_contribution": 0.0
+        }
+      ],
+      "inference_latency_seconds": 0.00285349995829165,
+      "manifest": {
+        "class": "N2EMCModel",
+        "config": {
+          "active_top_k": 2,
+          "architecture_stage": "n2",
+          "attention_heads": 4,
+          "balance_bias_limit": 0.25,
+          "balance_bias_lr": 0.01,
+          "balance_target_utilization": null,
+          "balance_warmup_chunks": 0,
+          "chunk_size": 16,
+          "delta_backend": "parallel_delta",
+          "delta_ffn_dim": 144,
+          "delta_heads": 4,
+          "delta_internal_dim": 48,
+          "delta_max_transition_bytes": 67108864,
+          "integrator_heads": 4,
+          "integrator_type": "proposal_attention",
+          "latent_dim": 64,
+          "loss_free_balance_enabled": false,
+          "max_sequence_length": 4,
+          "minimum_lease_chunks": 0,
+          "module_families": [
+            "delta",
+            "delta",
+            "delta",
+            "delta"
+          ],
+          "module_hidden_dim": 192,
+          "modules_per_cycle": 2,
+          "n1_depth": 3,
+          "n2_execution_mode": "sparse",
+          "n2_population": "delta4",
+          "n2_use_cuda_streams": false,
+          "num_cycles": 1,
+          "num_modules": 4,
+          "persistence_bonus": 0.1,
+          "recurrent_backend": "gru",
+          "recurrent_dim": 66,
+          "recurrent_precision": "fp16",
+          "request_pool_size": 4,
+          "router_descriptor_dim": 64,
+          "router_type": "module_aware",
+          "shared_core_enabled": true,
+          "shared_core_hidden_dim": null,
+          "shared_state_slots": 4,
+          "ssm_backend": "parallel_scan",
+          "state_space_dim": 88,
+          "state_space_kernel_size": 4,
+          "switch_cost": 0.05,
+          "tie_embeddings": false,
+          "vocab_size": 25
+        },
+        "expert_names": [
+          "Delta-N1-A",
+          "Delta-N1-B",
+          "Delta-N1-C",
+          "Delta-N1-D"
+        ],
+        "module_order": [
+          "delta",
+          "delta",
+          "delta",
+          "delta"
+        ]
+      },
+      "milestone_checkpoints": [
+        "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_delta4\\seed-42\\4.pt"
+      ],
+      "module_computation_count": 2.0,
+      "module_diagnostics": {
+        "modules": [
+          {
+            "family": "delta",
+            "gradient_norm": null,
+            "module": 0,
+            "parameter_norm": 34.326688455639534,
+            "update_norm": 0.0
+          },
+          {
+            "family": "delta",
+            "gradient_norm": 0.14748622457917154,
+            "module": 1,
+            "parameter_norm": 34.29882160008786,
+            "update_norm": 0.12107505863355632
+          },
+          {
+            "family": "delta",
+            "gradient_norm": 0.13855658015379013,
+            "module": 2,
+            "parameter_norm": 34.282489518056146,
+            "update_norm": 0.12105832168630022
+          },
+          {
+            "family": "delta",
+            "gradient_norm": null,
+            "module": 3,
+            "parameter_norm": 34.32332259053236,
+            "update_norm": 0.0
+          }
+        ],
+        "optimizer_state_available": true,
+        "sampling": "single unscaled gradient and optimizer update norm sampled at checkpoint/evaluation interval; no gradient history retained",
+        "source": "live_training",
+        "step": 1
+      },
+      "n1_nodes_actually_selected": 2,
+      "peak_ram_bytes": 0,
+      "peak_ram_measurement": "process-lifetime high-water mark; because jobs run sequentially in one process, later jobs can inherit an earlier job's peak",
+      "peak_vram_bytes": 0,
+      "routed_emc_path": true,
+      "routing": {
+        "all_modules_used": false,
+        "average_integrator_acceptance": [
+          0.0,
+          0.4780765175819397,
+          0.5219235420227051,
+          0.0
+        ],
+        "average_proposal_contribution": [
+          0.0,
+          2.1945879459381104,
+          2.0753531455993652,
+          0.0
+        ],
+        "average_proposal_norm": [
+          0.0,
+          1.6047288179397583,
+          1.6456137895584106,
+          0.0
+        ],
+        "average_routing_probability": [
+          0.15898767113685608,
+          0.32082217931747437,
+          0.3520261347293854,
+          0.16816401481628418
+        ],
+        "dominant_modules": [
+          1,
+          2
+        ],
+        "dominant_traffic_fraction": 1.0,
+        "effective_active_modules": 2.0,
+        "expert_names": [
+          "Delta-N1-A",
+          "Delta-N1-B",
+          "Delta-N1-C",
+          "Delta-N1-D"
+        ],
+        "family_integrator_acceptance": [
+          [
+            "delta",
+            1.0
+          ]
+        ],
+        "family_traffic_fraction": [
+          [
+            "delta",
+            1.0
+          ]
+        ],
+        "maximum_router_gradient_norm": 0.004268735181540251,
+        "mean_gate_magnitude": 0.49638256430625916,
+        "mean_integrated_update_norm": 2.3580451011657715,
+        "mean_proposal_similarity": 0.02504124864935875,
+        "mean_router_entropy": [
+          1.3244377374649048
+        ],
+        "minimum_module_share": 0.0,
+        "module_gradient_norms": [
+          0.0,
+          0.14748622477054596,
+          0.1385565847158432,
+          0.0
+        ],
+        "module_parameter_counts": [
+          177704,
+          177704,
+          177704,
+          177704
+        ],
+        "module_update_norms": [
+          0.0,
+          0.010930684395134449,
+          0.011004501953721046,
+          0.0
+        ],
+        "module_updates_diverged": true,
+        "normalized_routing_entropy": 0.5,
+        "routing_collapsed": true,
+        "routing_differs_across_cycles": false,
+        "routing_differs_across_inputs": false,
+        "routing_distribution_per_cycle": [
+          [
+            0.0,
+            0.5,
+            0.5,
+            0.0
+          ]
+        ],
+        "selection_counts": [
+          [
+            0,
+            4,
+            4,
+            0
+          ]
+        ],
+        "severe_collapse": true,
+        "top_1_traffic_share": 0.5,
+        "top_2_traffic_share": 1.0,
+        "traffic_fraction": [
+          0.0,
+          0.5,
+          0.5,
+          0.0
+        ]
+      },
+      "seed": 42,
+      "serial_execution_order": [],
+      "stream_fingerprint": "94e1ffd92647dac50d5ac843971aad15920285f24febbc4282ac285aed9e1e44",
+      "telemetry_path": "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2-final\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_delta4\\seed-42\\telemetry.json",
+      "tokens_per_second": 148.30689072987082,
+      "tokens_processed": 4,
+      "wall_clock_seconds": 0.03451530006714165
+    }
+  ],
+  "schema_version": 1,
+  "scientific_interpretation": "No architecture is preferred by the harness. Quality and causal usefulness take precedence over balanced utilization."
+}

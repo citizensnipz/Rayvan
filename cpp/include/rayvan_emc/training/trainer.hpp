@@ -5,6 +5,7 @@
 #include "rayvan_emc/diagnostics/telemetry.hpp"
 #include "rayvan_emc/model.hpp"
 #include "rayvan_emc/training/dataset.hpp"
+#include "rayvan_emc/training/foreach_adamw.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -46,7 +47,7 @@ public:
     [[nodiscard]] std::pair<double, double> evaluate(
         const TokenStream& stream,
         std::int64_t batches);
-    [[nodiscard]] torch::optim::AdamW& optimizer() noexcept { return optimizer_; }
+    [[nodiscard]] ForeachAdamW& optimizer() noexcept { return optimizer_; }
 
 private:
     Tensor next_token_loss(const Tensor& logits, const Tensor& targets) const;
@@ -54,7 +55,7 @@ private:
     EMCModel& model_;
     TrainingConfig config_;
     torch::Device device_;
-    torch::optim::AdamW optimizer_;
+    ForeachAdamW optimizer_;
     torch::Generator train_generator_;
     torch::Generator evaluation_generator_;
     std::int64_t resumed_step_ = 0;

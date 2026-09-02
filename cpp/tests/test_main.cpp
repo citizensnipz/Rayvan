@@ -2,6 +2,7 @@
 #include "rayvan_emc/diagnostics/causal.hpp"
 #include "rayvan_emc/diagnostics/diagnostics.hpp"
 #include "rayvan_emc/model.hpp"
+#include "rayvan_emc/training/foreach_adamw.hpp"
 #include "rayvan_emc/n1/n1.hpp"
 #include "rayvan_emc/n2/dispatch.hpp"
 #include "rayvan_emc/n2/integrator.hpp"
@@ -19,6 +20,7 @@
 #include <filesystem>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <numeric>
 #include <stdexcept>
 #include <string>
@@ -369,7 +371,7 @@ void training_parity() {
     emc::EMCModel model(emc::load_model_config(root / "model.rvcfg"));
     model.import_python_weights(root / "weights.pt");
     model.train();
-    torch::optim::AdamW optimizer(model.parameters(), torch::optim::AdamWOptions(3e-4).weight_decay(0.01));
+    emc::ForeachAdamW optimizer(model.parameters(), torch::optim::AdamWOptions(3e-4).weight_decay(0.01));
     std::vector<torch::Tensor> losses;
     std::vector<torch::Tensor> routes;
     std::vector<torch::Tensor> norms;
@@ -446,6 +448,139 @@ void trainer_resume_and_telemetry() {
     std::filesystem::remove_all(root);
 }
 
+void foreach_adamw_parity_on(const torch::Device& device) {
+    const auto python = load_bundle(fixture_root() / "adamw.pt");
+    std::vector<torch::Tensor> reference_parameters{
+        torch::linspace(-0.5, 0.5, 17, torch::TensorOptions().device(device).dtype(torch::kFloat32)).set_requires_grad(true),
+        torch::linspace(-0.25, 0.75, 35, torch::TensorOptions().device(device).dtype(torch::kFloat32)).reshape({7, 5}).set_requires_grad(true),
+        torch::full({}, 0.125, torch::TensorOptions().device(device).dtype(torch::kFloat32)).set_requires_grad(true),
+        torch::linspace(-1.0, 1.0, 129, torch::TensorOptions().device(device).dtype(torch::kFloat32)).set_requires_grad(true),
+    };
+    std::vector<torch::Tensor> foreach_parameters;
+    foreach_parameters.reserve(reference_parameters.size());
+    for (const auto& parameter : reference_parameters) {
+        foreach_parameters.push_back(parameter.detach().clone().set_requires_grad(true));
+    }
+
+    auto options = torch::optim::AdamWOptions(3e-4)
+        .betas({0.9, 0.999})
+        .eps(1e-8)
+        .weight_decay(0.01)
+        .amsgrad(false);
+    torch::optim::AdamW reference(reference_parameters, options);
+    emc::ForeachAdamW foreach(foreach_parameters, options);
+
+    for (int step = 1; step <= 100; ++step) {
+        for (std::size_t index = 0; index < reference_parameters.size(); ++index) {
+            auto gradient = torch::arange(
+                reference_parameters[index].numel(),
+                torch::TensorOptions().device(device).dtype(torch::kFloat32))
+                .reshape(reference_parameters[index].sizes());
+            gradient = gradient.mul(1e-3).add(step * 1e-4 + static_cast<double>(index) * 1e-2);
+            reference_parameters[index].mutable_grad() = gradient;
+            foreach_parameters[index].mutable_grad() = gradient.clone();
+        }
+        reference.step();
+        foreach.step();
+
+        if (step == 1 || step == 10 || step == 100) {
+            for (std::size_t index = 0; index < reference_parameters.size(); ++index) {
+                close(foreach_parameters[index], reference_parameters[index].detach().to(torch::kCPU), 2e-7, 2e-6, "foreach AdamW parameter");
+                const auto* reference_state = dynamic_cast<const torch::optim::AdamWParamState*>(
+                    reference.state().at(reference_parameters[index].unsafeGetTensorImpl()).get());
+                const auto* foreach_state = dynamic_cast<const torch::optim::AdamWParamState*>(
+                    foreach.state().at(foreach_parameters[index].unsafeGetTensorImpl()).get());
+                CHECK(reference_state && foreach_state);
+                CHECK(reference_state->step() == foreach_state->step());
+                close(foreach_state->exp_avg(), reference_state->exp_avg().detach().to(torch::kCPU), 2e-7, 2e-6, "foreach AdamW first moment");
+                close(foreach_state->exp_avg_sq(), reference_state->exp_avg_sq().detach().to(torch::kCPU), 2e-7, 2e-6, "foreach AdamW second moment");
+                const auto prefix = "step" + std::to_string(step);
+                close(foreach_parameters[index], python.at(prefix + ".parameter" + std::to_string(index)), 2e-7, 2e-6, "Python foreach AdamW parameter");
+                close(foreach_state->exp_avg(), python.at(prefix + ".exp_avg" + std::to_string(index)), 2e-7, 2e-6, "Python foreach AdamW first moment");
+                close(foreach_state->exp_avg_sq(), python.at(prefix + ".exp_avg_sq" + std::to_string(index)), 2e-7, 2e-6, "Python foreach AdamW second moment");
+                CHECK(foreach_state->step() == python.at(prefix + ".state_step" + std::to_string(index)).item<int64_t>());
+            }
+            torch::Tensor reference_loss = torch::zeros({}, torch::TensorOptions().device(device));
+            torch::Tensor foreach_loss = torch::zeros({}, torch::TensorOptions().device(device));
+            for (std::size_t index = 0; index < reference_parameters.size(); ++index) {
+                reference_loss += reference_parameters[index].square().sum();
+                foreach_loss += foreach_parameters[index].square().sum();
+            }
+            close(foreach_loss, reference_loss.detach().to(torch::kCPU), 2e-6, 2e-6, "foreach AdamW loss trajectory");
+            close(foreach_loss, python.at("step" + std::to_string(step) + ".loss"), 2e-6, 2e-6, "Python foreach AdamW loss trajectory");
+        }
+    }
+}
+
+void foreach_adamw_parity() {
+    foreach_adamw_parity_on(torch::kCPU);
+    if (torch::cuda::is_available()) foreach_adamw_parity_on(torch::Device(torch::kCUDA, 0));
+}
+
+void foreach_adamw_groups_and_missing_gradients() {
+    std::vector<torch::Tensor> reference_parameters{
+        torch::linspace(-0.4, 0.4, 11).set_requires_grad(true),
+        torch::linspace(-0.2, 0.6, 13).set_requires_grad(true),
+        torch::linspace(-0.7, 0.3, 15).set_requires_grad(true),
+    };
+    std::vector<torch::Tensor> foreach_parameters;
+    for (const auto& parameter : reference_parameters) {
+        foreach_parameters.push_back(parameter.detach().clone().set_requires_grad(true));
+    }
+    auto first_options = torch::optim::AdamWOptions(2e-3)
+        .betas({0.8, 0.95}).eps(1e-7).weight_decay(0.03);
+    auto second_options = torch::optim::AdamWOptions(7e-4)
+        .betas({0.9, 0.99}).eps(1e-8).weight_decay(0.01).amsgrad(true);
+    const auto groups = [&](const std::vector<torch::Tensor>& parameters) {
+        std::vector<torch::optim::OptimizerParamGroup> result;
+        result.emplace_back(
+            std::vector<torch::Tensor>{parameters[0], parameters[1]},
+            std::make_unique<torch::optim::AdamWOptions>(first_options));
+        result.emplace_back(
+            std::vector<torch::Tensor>{parameters[2]},
+            std::make_unique<torch::optim::AdamWOptions>(second_options));
+        return result;
+    };
+    torch::optim::AdamW reference(groups(reference_parameters), first_options);
+    emc::ForeachAdamW foreach(groups(foreach_parameters), first_options);
+
+    for (int step = 1; step <= 12; ++step) {
+        for (std::size_t index = 0; index < reference_parameters.size(); ++index) {
+            if (index == 1 && step % 2 != 0) {
+                reference_parameters[index].mutable_grad() = torch::Tensor();
+                foreach_parameters[index].mutable_grad() = torch::Tensor();
+                continue;
+            }
+            const auto gradient = torch::full_like(
+                reference_parameters[index], step * 2e-4 + static_cast<double>(index) * 1e-2);
+            reference_parameters[index].mutable_grad() = gradient;
+            foreach_parameters[index].mutable_grad() = gradient.clone();
+        }
+        reference.step();
+        foreach.step();
+        if (step == 1) {
+            CHECK(reference.state().find(reference_parameters[1].unsafeGetTensorImpl()) == reference.state().end());
+            CHECK(foreach.state().find(foreach_parameters[1].unsafeGetTensorImpl()) == foreach.state().end());
+        }
+    }
+
+    for (std::size_t index = 0; index < reference_parameters.size(); ++index) {
+        close(foreach_parameters[index], reference_parameters[index], 2e-7, 2e-6, "foreach AdamW parameter-group parity");
+        const auto* reference_state = dynamic_cast<const torch::optim::AdamWParamState*>(
+            reference.state().at(reference_parameters[index].unsafeGetTensorImpl()).get());
+        const auto* foreach_state = dynamic_cast<const torch::optim::AdamWParamState*>(
+            foreach.state().at(foreach_parameters[index].unsafeGetTensorImpl()).get());
+        CHECK(reference_state && foreach_state);
+        CHECK(reference_state->step() == foreach_state->step());
+        if (index == 1) CHECK(foreach_state->step() == 6);
+        close(foreach_state->exp_avg(), reference_state->exp_avg(), 2e-7, 2e-6, "foreach AdamW group first moment");
+        close(foreach_state->exp_avg_sq(), reference_state->exp_avg_sq(), 2e-7, 2e-6, "foreach AdamW group second moment");
+        if (index == 2) {
+            close(foreach_state->max_exp_avg_sq(), reference_state->max_exp_avg_sq(), 2e-7, 2e-6, "foreach AdamW AMSGrad maximum");
+        }
+    }
+}
+
 void no_delta_path() {
     bool rejected = false;
     try { (void)emc::n1_family_from_string("delta"); }
@@ -480,6 +615,8 @@ int main() {
         {"Python C++ forward parity", forward_parity},
         {"Python C++ gradient parity", gradient_parity},
         {"tiny multi-step training parity", training_parity},
+        {"foreach AdamW 1/10/100-step parity", foreach_adamw_parity},
+        {"foreach AdamW groups and missing gradients", foreach_adamw_groups_and_missing_gradients},
         {"native trainer resume and telemetry", trainer_resume_and_telemetry},
         {"Delta excluded", no_delta_path},
     };

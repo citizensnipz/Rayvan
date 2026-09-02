@@ -11,7 +11,7 @@ Native C++20 port of the request-routed N1/N2 EMC core. It uses LibTorch/ATen fo
 - chunk-local GPT causal attention, exact diagonal SSM scan, and LibTorch GRU;
 - proposal-attention Integrator and tied embedding/output weights;
 - FP32 and CUDA BF16 autocast;
-- native AdamW training, accumulation, clipping, evaluation, token budgets, and milestone retention;
+- native foreach AdamW training, accumulation, clipping, evaluation, token budgets, and milestone retention;
 - deterministic pretokenized streams with split identity and fingerprint;
 - native model/optimizer checkpoints with model-only evaluation loading;
 - routing, Integrator, norm, RSS, and CUDA allocator diagnostics;
@@ -30,15 +30,17 @@ No test framework, JSON library, tokenizer library, Python runtime, or custom CU
 
 ## Windows + CUDA build
 
-Download the LibTorch **C++ distribution** matching the installed CUDA toolchain and PyTorch version. Do not point a production CUDA build at a CPU-only Python wheel.
+Use either the LibTorch C++ distribution or the CUDA-enabled Python wheel's CMake package, but keep the exact Torch release and CUDA target identical to the Python reference. Never point a CUDA build at a CPU-only wheel. The validated environment is PyTorch/LibTorch 2.13.0+cu130 with the CUDA 13.0 toolkit.
 
-From an x64 Native Tools for Visual Studio PowerShell. Ninja avoids depending on Visual Studio's optional CUDA integration:
+From an x64 Native Tools for Visual Studio PowerShell, the following resolves Torch from the active Python environment without a user-specific path. Ninja avoids depending on Visual Studio's optional CUDA integration:
 
 ```powershell
+$TorchPrefix = python -c "import torch; print(torch.utils.cmake_prefix_path)"
+$Nvcc = (Get-Command nvcc).Source
 cmake -S cpp -B build/emc -G Ninja `
   -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_PREFIX_PATH="C:/libtorch/share/cmake/Torch" `
-  -DCMAKE_CUDA_COMPILER="C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/nvcc.exe"
+  -DCMAKE_PREFIX_PATH="$TorchPrefix" `
+  -DCMAKE_CUDA_COMPILER="$Nvcc"
 cmake --build build/emc --parallel
 ctest --test-dir build/emc --output-on-failure
 build/emc/rayvan-emc-smoke.exe --cuda
@@ -49,7 +51,8 @@ Adjust the CUDA toolkit path to the version matching LibTorch. A Visual Studio 2
 At runtime, place LibTorch DLLs on `PATH`:
 
 ```powershell
-$env:PATH = "C:/libtorch/lib;$env:PATH"
+$TorchLib = python -c "import pathlib,torch; print(pathlib.Path(torch.__file__).parent / 'lib')"
+$env:PATH = "$TorchLib;$env:PATH"
 ```
 
 CPU-only development can use the CMake package shipped with a Python Torch installation, but that is not the deliverable CUDA runtime:
@@ -70,7 +73,7 @@ python cpp/python/export_reference.py cpp/tests/fixtures/reference
 ctest --test-dir build/emc -C Release --output-on-failure
 ```
 
-The 23 native cases cover construction, every N1, independent weights, routing/top-K, sparse execution, dispatch restoration, Integrator gradients, tying, FP32/BF16, checkpoint/milestones, diagnostics, causal interventions, deterministic tokens, forward/gradient/training parity, trainer resume/telemetry, and explicit Delta rejection.
+The 25 native cases cover construction, every N1, independent weights, routing/top-K, sparse execution, dispatch restoration, Integrator gradients, tying, FP32/BF16, checkpoint/milestones, diagnostics, causal interventions, deterministic tokens, forward/gradient/training parity, Python AdamW state parity at 1/10/100 steps, optimizer groups/missing gradients/AMSGrad, trainer resume/telemetry, and explicit Delta rejection.
 
 Reference tolerances are FP32 `atol=2e-5, rtol=2e-4` for ordinary tensors, relaxed to at most `atol=8e-5, rtol=8e-4` for accumulated gradients. BF16 sanity uses `atol=3e-2, rtol=5e-2`. Top-K IDs are exact. A mismatch is an error; genuine cutoff score ties must be diagnosed from saved router scores rather than silently accepted.
 
@@ -109,3 +112,17 @@ Architecture and shapes: [`docs/architecture.md`](docs/architecture.md). Checkpo
 Use identical supported-family weights and token batches. Warm both runtimes, synchronize CUDA around timed regions, and report forward, forward/backward, optimizer, tokens/s, RSS, allocator allocated/reserved/peak, and checkpoint-load peak. Do not compare this three-family port to historical populations containing Delta.
 
 LibTorch and Python PyTorch use the same ATen/CUDA kernels and caching allocator. Native C++ can reduce interpreter/dispatch orchestration, make object lifetime explicit, and prevent optimizer loading during evaluation; it is not expected to make the underlying GPU kernels or allocator intrinsically smaller. Production adoption must be based on measured results from the CUDA build, not that expectation.
+
+Run the short non-Delta scale check with `--realistic --warmup 3 --iterations 10`. `rayvan-emc-optimizer-profile` uses CUPTI callbacks and CUDA events to measure one warmed stock or foreach optimizer step; add the toolkit CUPTI `lib64` directory to `PATH` before running it.
+
+## Environment report
+
+From the repository root:
+
+```powershell
+cpp/tools/report_environment.ps1 -Python (Get-Command python).Source `
+  -BuildDirectory build/emc
+build/emc/rayvan-emc-smoke.exe --cuda
+```
+
+This reports Python/PyTorch, its CUDA runtime and cuDNN, the resolved native `Torch_DIR`, local toolkit/compiler, NVIDIA driver/GPU, compile-time LibTorch version, CUDA availability, compute capability, and a BF16 matmul smoke result.

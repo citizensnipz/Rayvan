@@ -13,7 +13,32 @@ import torch
 from torch.nn import functional as F
 
 from export_reference import config
-from rayvan_emc.n2 import N2EMCModel
+from rayvan_emc.n2 import N2Config, N2EMCModel
+
+
+def realistic_config() -> N2Config:
+    """Current non-Delta quick configuration for short scale checks."""
+    return N2Config(
+        latent_dim=64,
+        vocab_size=8192,
+        max_sequence_length=128,
+        attention_heads=4,
+        integrator_heads=4,
+        module_hidden_dim=128,
+        state_space_dim=96,
+        state_space_kernel_size=3,
+        recurrent_dim=64,
+        chunk_size=16,
+        shared_state_slots=4,
+        num_modules=3,
+        modules_per_cycle=2,
+        active_top_k=2,
+        n1_depth=2,
+        module_families=("gpt", "ssm", "recurrent"),
+        n2_population="supported",
+        tie_embeddings=True,
+        recurrent_precision="model",
+    )
 
 
 def bundle(path: Path) -> dict[str, torch.Tensor]:
@@ -48,6 +73,9 @@ def main() -> None:
     parser.add_argument("fixture", type=Path)
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--bf16", action="store_true")
+    parser.add_argument("--realistic", action="store_true")
+    parser.add_argument("--warmup", type=int, default=10)
+    parser.add_argument("--iterations", type=int, default=100)
     args = parser.parse_args()
     device = torch.device("cpu" if args.cpu else "cuda:0")
     if device.type == "cuda" and not torch.cuda.is_available():
@@ -58,18 +86,24 @@ def main() -> None:
     torch.set_num_threads(1)
     torch.manual_seed(20260902)
     process = psutil.Process()
-    model = N2EMCModel(config())
-    model.load_state_dict(bundle(args.fixture / "weights.pt"), strict=True)
+    cfg = realistic_config() if args.realistic else config()
+    model = N2EMCModel(cfg)
+    if not args.realistic:
+        model.load_state_dict(bundle(args.fixture / "weights.pt"), strict=True)
     model_cpu_memory = sum(
         parameter.numel() * parameter.element_size()
         for parameter in {id(value): value for value in model.parameters()}.values()
     )
     model.to(device)
-    fixture = bundle(args.fixture / "forward.pt")
-    tokens = fixture["tokens"].to(device)
-    targets = fixture["targets"].to(device)
-    warmup = 10
-    iterations = 100
+    if args.realistic:
+        tokens = torch.randint(cfg.vocab_size, (4, 128), dtype=torch.long, device=device)
+        targets = torch.roll(tokens, shifts=-1, dims=1)
+    else:
+        fixture = bundle(args.fixture / "forward.pt")
+        tokens = fixture["tokens"].to(device)
+        targets = fixture["targets"].to(device)
+    warmup = args.warmup
+    iterations = args.iterations
     dtype = torch.bfloat16 if args.bf16 else None
 
     def autocast():

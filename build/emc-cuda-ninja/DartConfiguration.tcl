@@ -27,8 +27,8 @@ SubmitInactivityTimeout:
 NightlyStartTime: 00:00:00 EDT
 
 # Commands for the build/test/submit cycle
-ConfigureCommand: "C:/Users/jkros/miniconda3/envs/pytorch_env/Lib/site-packages/cmake/data/bin/cmake.exe" "D:/Personal/Projects/Rayvan/cpp"
-MakeCommand: C:\Users\jkros\miniconda3\envs\pytorch_env\Lib\site-packages\cmake\data\bin\cmake.exe --build . --config "${CTEST_CONFIGURATION_TYPE}"
+ConfigureCommand: "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe" "D:/Personal/Projects/Rayvan/cpp"
+MakeCommand: "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build . --config "${CTEST_CONFIGURATION_TYPE}"
 DefaultCTestConfigurationType: Release
 
 # version control
@@ -107,8 +107,3 @@ CurlOptions:
 # specify behavior for retrying the submission
 CTestSubmitRetryDelay: 5
 CTestSubmitRetryCount: 3
-
-# Invoke each test with environment variables configuring tool's collection.
-CTestTestCoverageTool: 
-CTestTestCoverageMergeExecutable: 
-CTestTestCoverageDataExecutable: 

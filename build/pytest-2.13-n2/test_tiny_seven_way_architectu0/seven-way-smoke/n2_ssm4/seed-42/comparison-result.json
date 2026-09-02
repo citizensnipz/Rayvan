@@ -1,0 +1,291 @@
+{
+  "accounting": {
+    "approximate_active_parameters": 407438,
+    "approximate_flops_per_token": 814876,
+    "approximate_parameter_uses_per_forward": 1629752,
+    "architecture": "n2_ssm4",
+    "blocks_per_n1": 3,
+    "embedding_parameters": 1856,
+    "integrator_parameters": 49793,
+    "limitations": [
+      "FLOPs are an explicit parameter-use proxy, not profiler measurements.",
+      "Embedding lookup table storage is excluded; tied output weights remain compute.",
+      "Backend scan, elementwise, normalization, indexing, and memory traffic are excluded.",
+      "Active N1 cost uses the population mean; realized routing can select a more or less expensive family."
+    ],
+    "method": "Each selected N1 uses a 2*parameter*token proxy; GPT N1s also include explicit chunked attention score/value products. Nexus, proposal-attention Integrator, and output projection are included.",
+    "module_computations_per_forward": 2.0,
+    "nexus_parameters": 388,
+    "node_flops_per_invocation": [
+      1422016,
+      1422016,
+      1422016,
+      1422016
+    ],
+    "node_parameters": [
+      177752,
+      177752,
+      177752,
+      177752
+    ],
+    "routable_parameters": 711008,
+    "selected_nodes_per_event": 2,
+    "sequence_length": 4,
+    "shared_parameters": 53790,
+    "theoretical_all_nodes_flops_per_token": 1525884,
+    "total_parameters": 764798
+  },
+  "active_compute_relative_to_all_n1s": 0.5340353526218244,
+  "approximate_training_flops": 3259504,
+  "architecture": "n2_ssm4",
+  "fairness_mode": "capacity",
+  "final_training_loss": 3.2451717853546143,
+  "final_training_token_accuracy": 0.0,
+  "final_validation_loss": 3.308279514312744,
+  "final_validation_perplexity": 27.338050263208657,
+  "final_validation_token_accuracy": 0.0,
+  "history": [
+    {
+      "approximate_cumulative_flops": 3259504,
+      "elapsed_seconds": 0.04833570006303489,
+      "gpu_memory_used_bytes": 0,
+      "gpu_peak_memory_bytes": 0,
+      "router_balance_loss": 0.0,
+      "step": 1,
+      "tokens_per_second": 116.39580362425824,
+      "tokens_processed": 4,
+      "training_loss": 3.2451717853546143,
+      "training_token_accuracy": 0.0,
+      "validation_loss": 3.308279514312744,
+      "validation_perplexity": 27.338050263208657,
+      "validation_token_accuracy": 0.0,
+      "weighted_balance_contribution": 0.0
+    }
+  ],
+  "inference_latency_seconds": 0.005033600144088268,
+  "manifest": {
+    "class": "N2EMCModel",
+    "config": {
+      "active_top_k": 2,
+      "architecture_stage": "n2",
+      "attention_heads": 4,
+      "balance_bias_limit": 0.25,
+      "balance_bias_lr": 0.01,
+      "balance_target_utilization": null,
+      "balance_warmup_chunks": 0,
+      "chunk_size": 16,
+      "delta_backend": "parallel_delta",
+      "delta_ffn_dim": 144,
+      "delta_heads": 4,
+      "delta_internal_dim": 48,
+      "delta_max_transition_bytes": 67108864,
+      "integrator_heads": 4,
+      "integrator_type": "proposal_attention",
+      "latent_dim": 64,
+      "loss_free_balance_enabled": false,
+      "max_sequence_length": 4,
+      "minimum_lease_chunks": 0,
+      "module_families": [
+        "ssm",
+        "ssm",
+        "ssm",
+        "ssm"
+      ],
+      "module_hidden_dim": 192,
+      "modules_per_cycle": 2,
+      "n1_depth": 3,
+      "n2_execution_mode": "sparse",
+      "n2_population": "ssm4",
+      "n2_use_cuda_streams": false,
+      "num_cycles": 1,
+      "num_modules": 4,
+      "persistence_bonus": 0.1,
+      "recurrent_backend": "gru",
+      "recurrent_dim": 66,
+      "recurrent_precision": "fp16",
+      "request_pool_size": 4,
+      "router_descriptor_dim": 64,
+      "router_type": "module_aware",
+      "shared_core_enabled": true,
+      "shared_core_hidden_dim": null,
+      "shared_state_slots": 4,
+      "ssm_backend": "parallel_scan",
+      "state_space_dim": 88,
+      "state_space_kernel_size": 4,
+      "switch_cost": 0.05,
+      "tie_embeddings": false,
+      "vocab_size": 25
+    },
+    "expert_names": [
+      "SSM-N1-A",
+      "SSM-N1-B",
+      "SSM-N1-C",
+      "SSM-N1-D"
+    ],
+    "module_order": [
+      "ssm",
+      "ssm",
+      "ssm",
+      "ssm"
+    ]
+  },
+  "milestone_checkpoints": [
+    "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_ssm4\\seed-42\\4.pt"
+  ],
+  "module_computation_count": 2.0,
+  "module_diagnostics": {
+    "modules": [
+      {
+        "family": "ssm",
+        "gradient_norm": null,
+        "module": 0,
+        "parameter_norm": 32.11279793521667,
+        "update_norm": 0.0
+      },
+      {
+        "family": "ssm",
+        "gradient_norm": 0.0736143055173372,
+        "module": 1,
+        "parameter_norm": 32.14913035662506,
+        "update_norm": 0.1209754897743473
+      },
+      {
+        "family": "ssm",
+        "gradient_norm": 0.09716810466459208,
+        "module": 2,
+        "parameter_norm": 32.03947283587179,
+        "update_norm": 0.12183926905277326
+      },
+      {
+        "family": "ssm",
+        "gradient_norm": null,
+        "module": 3,
+        "parameter_norm": 32.113761366037046,
+        "update_norm": 0.0
+      }
+    ],
+    "optimizer_state_available": true,
+    "sampling": "single unscaled gradient and optimizer update norm sampled at checkpoint/evaluation interval; no gradient history retained",
+    "source": "live_training",
+    "step": 1
+  },
+  "n1_nodes_actually_selected": 2,
+  "peak_ram_bytes": 0,
+  "peak_ram_measurement": "process-lifetime high-water mark; because jobs run sequentially in one process, later jobs can inherit an earlier job's peak",
+  "peak_vram_bytes": 0,
+  "routed_emc_path": true,
+  "routing": {
+    "all_modules_used": false,
+    "average_integrator_acceptance": [
+      0.0,
+      0.45228949189186096,
+      0.5477105379104614,
+      0.0
+    ],
+    "average_proposal_contribution": [
+      0.0,
+      1.9025390148162842,
+      2.7756834030151367,
+      0.0
+    ],
+    "average_proposal_norm": [
+      0.0,
+      0.6149784922599792,
+      0.5963493585586548,
+      0.0
+    ],
+    "average_routing_probability": [
+      0.15898767113685608,
+      0.32082217931747437,
+      0.3520261347293854,
+      0.16816401481628418
+    ],
+    "dominant_modules": [
+      1,
+      2
+    ],
+    "dominant_traffic_fraction": 1.0,
+    "effective_active_modules": 2.0,
+    "expert_names": [
+      "SSM-N1-A",
+      "SSM-N1-B",
+      "SSM-N1-C",
+      "SSM-N1-D"
+    ],
+    "family_integrator_acceptance": [
+      [
+        "ssm",
+        1.0
+      ]
+    ],
+    "family_traffic_fraction": [
+      [
+        "ssm",
+        1.0
+      ]
+    ],
+    "maximum_router_gradient_norm": 0.007569852750748396,
+    "mean_gate_magnitude": 0.5018571019172668,
+    "mean_integrated_update_norm": 2.448225736618042,
+    "mean_proposal_similarity": -0.22561250627040863,
+    "mean_router_entropy": [
+      1.3244377374649048
+    ],
+    "minimum_module_share": 0.0,
+    "module_gradient_norms": [
+      0.0,
+      0.07361429929733276,
+      0.09716811031103134,
+      0.0
+    ],
+    "module_parameter_counts": [
+      177752,
+      177752,
+      177752,
+      177752
+    ],
+    "module_update_norms": [
+      0.0,
+      0.009421874769032001,
+      0.009468489326536655,
+      0.0
+    ],
+    "module_updates_diverged": true,
+    "normalized_routing_entropy": 0.5,
+    "routing_collapsed": true,
+    "routing_differs_across_cycles": false,
+    "routing_differs_across_inputs": false,
+    "routing_distribution_per_cycle": [
+      [
+        0.0,
+        0.5,
+        0.5,
+        0.0
+      ]
+    ],
+    "selection_counts": [
+      [
+        0,
+        4,
+        4,
+        0
+      ]
+    ],
+    "severe_collapse": true,
+    "top_1_traffic_share": 0.5,
+    "top_2_traffic_share": 1.0,
+    "traffic_fraction": [
+      0.0,
+      0.5,
+      0.5,
+      0.0
+    ]
+  },
+  "seed": 42,
+  "serial_execution_order": [],
+  "stream_fingerprint": "94e1ffd92647dac50d5ac843971aad15920285f24febbc4282ac285aed9e1e44",
+  "telemetry_path": "D:\\Personal\\Projects\\Rayvan\\build\\pytest-2.13-n2\\test_tiny_seven_way_architectu0\\seven-way-smoke\\n2_ssm4\\seed-42\\telemetry.json",
+  "tokens_per_second": 116.39580362425824,
+  "tokens_processed": 4,
+  "wall_clock_seconds": 0.04833570006303489
+}

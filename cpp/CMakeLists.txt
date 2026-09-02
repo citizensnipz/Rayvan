@@ -5,6 +5,9 @@ option(RAYVAN_EMC_BUILD_TESTS "Build native EMC tests" ON)
 option(RAYVAN_EMC_BUILD_TOOLS "Build native EMC command-line tools" ON)
 
 find_package(Torch REQUIRED)
+if(RAYVAN_EMC_BUILD_TOOLS AND TARGET torch_cuda)
+    find_package(CUDAToolkit REQUIRED)
+endif()
 
 add_library(rayvan_emc
     src/config.cpp
@@ -14,6 +17,7 @@ add_library(rayvan_emc
     src/dataset.cpp
     src/checkpoint.cpp
     src/diagnostics.cpp
+    src/foreach_adamw.cpp
     src/trainer.cpp
 )
 add_library(rayvan::emc ALIAS rayvan_emc)
@@ -41,10 +45,17 @@ target_compile_options(rayvan_emc PUBLIC ${TORCH_CXX_FLAGS_LIST})
 if(RAYVAN_EMC_BUILD_TOOLS)
     add_executable(rayvan-emc-smoke tools/emc_smoke.cpp)
     target_link_libraries(rayvan-emc-smoke PRIVATE rayvan::emc)
+    if(TARGET torch_cuda)
+        target_compile_definitions(rayvan-emc-smoke PRIVATE RAYVAN_TORCH_CUDA=1)
+    endif()
     add_executable(rayvan-emc-benchmark tools/emc_benchmark.cpp)
     target_link_libraries(rayvan-emc-benchmark PRIVATE rayvan::emc)
     add_executable(rayvan-emc-checkpoint-probe tools/emc_checkpoint_probe.cpp)
     target_link_libraries(rayvan-emc-checkpoint-probe PRIVATE rayvan::emc)
+    if(TARGET torch_cuda)
+        add_executable(rayvan-emc-optimizer-profile tools/emc_optimizer_profile.cpp)
+        target_link_libraries(rayvan-emc-optimizer-profile PRIVATE rayvan::emc CUDA::cudart CUDA::cupti)
+    endif()
 endif()
 
 include(CTest)
