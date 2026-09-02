@@ -197,6 +197,7 @@ def create_n2_model(
             "num_cycles": 1,
             "modules_per_cycle": top_k,
             "active_top_k": top_k,
+            "num_modules": len(N2_POPULATIONS[population]),
             "module_families": N2_POPULATIONS[population],
             "n2_population": population,
             "n1_depth": n1_depth,

@@ -21,8 +21,9 @@ from .integrator import Integrator, IntegratorTrace
 from .model import EMCConfig, EMCCycleTrace, EMCModel, EMCOutput
 
 
-N2_POPULATIONS: Mapping[str, tuple[str, str, str, str]] = {
+N2_POPULATIONS: Mapping[str, tuple[str, ...]] = {
     "mixed": ("gpt", "ssm", "recurrent", "delta"),
+    "supported": ("gpt", "ssm", "recurrent"),
     "gpt4": ("gpt", "gpt", "gpt", "gpt"),
     "ssm4": ("ssm", "ssm", "ssm", "ssm"),
     "recurrent4": ("recurrent", "recurrent", "recurrent", "recurrent"),
@@ -55,8 +56,8 @@ class N2Config(EMCConfig):
                 "module_families must exactly match the selected N2 population preset"
             )
         super().__post_init__()
-        if self.num_modules != 4:
-            raise ValueError("initial N2 experiments require exactly four N1 nodes")
+        if self.num_modules != len(expected):
+            raise ValueError("num_modules must match the selected N2 population")
         if self.num_cycles != 1:
             raise ValueError("initial N2 experiments support exactly one N2 cycle")
         if self.n1_depth < 2:

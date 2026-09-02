@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="D:\Personal\Projects\Rayvan\build\emc-cpu\CMakeFiles\fe75fa7c0499f46952cce75bb1b05024\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{8A73D931-98C9-3A2A-8CB7-57E619BF1D18}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

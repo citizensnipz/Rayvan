@@ -1,0 +1,18 @@
+{
+  "seed": 20260902,
+  "fp32": {
+    "atol": 2e-05,
+    "rtol": 0.0002
+  },
+  "bf16": {
+    "atol": 0.03,
+    "rtol": 0.05
+  },
+  "top_k": "exact except diagnosed score ties",
+  "architecture": [
+    "gpt",
+    "ssm",
+    "recurrent"
+  ],
+  "delta": false
+}
