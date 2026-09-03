@@ -53,6 +53,12 @@ struct N1Output {
     N1Diagnostics diagnostics;
 };
 
+struct N1RoutingItemOutput {
+    Tensor token_proposal; // [A,C,D], where A is the active request count
+    Tensor local_shared;   // [A,M,D]
+    std::shared_ptr<N1PersistentState> full_state;
+};
+
 struct BlockOutput {
     Tensor token_proposal; // [B,C,D]
     Tensor state_proposal; // [B,M,D]
@@ -87,6 +93,11 @@ class N1Node final : public torch::nn::Module {
 public:
     N1Node(const ModelConfig& config, N1Family family, std::int64_t node_id, std::string node_name);
     N1Output forward(const N1Input& input);
+    std::shared_ptr<N1PersistentState> initialize_routing_state(const Tensor& shared_state);
+    N1RoutingItemOutput forward_routing_item(
+        const Tensor& chunk,
+        const Tensor& active_request_indices,
+        const std::shared_ptr<N1PersistentState>& full_state);
 
     [[nodiscard]] N1Family family() const noexcept { return family_; }
     [[nodiscard]] const std::string& node_name() const noexcept { return node_name_; }

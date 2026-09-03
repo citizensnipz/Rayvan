@@ -133,12 +133,15 @@ CheckpointProgress load_model_checkpoint(
     const torch::Device& device) {
     const auto fields = read_manifest(directory / "manifest.rayvan");
     const auto stored_config = load_model_config(directory / fields.at("config_file"));
-    if (stored_config.population != model.config().population || stored_config.latent_dim != model.config().latent_dim ||
+    if (stored_config.n1_mode != model.config().n1_mode ||
+        stored_config.population != model.config().population || stored_config.latent_dim != model.config().latent_dim ||
         stored_config.vocab_size != model.config().vocab_size || stored_config.n1_depth != model.config().n1_depth) {
         throw std::runtime_error("checkpoint architecture does not match model");
     }
     model.load_weights(directory / fields.at("model_file"), device);
-    model.set_active_top_k(number<std::int64_t>(fields, "active_top_k"));
+    if (model.config().n1_mode == N1Mode::legacy_nexus) {
+        model.set_active_top_k(number<std::int64_t>(fields, "active_top_k"));
+    }
     return progress_from(fields);
 }
 

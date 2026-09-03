@@ -44,14 +44,18 @@ def config() -> N2Config:
         state_space_dim=24,
         state_space_kernel_size=3,
         recurrent_dim=20,
-        chunk_size=4,
+        delta_internal_dim=16,
+        delta_heads=2,
+        delta_ffn_dim=32,
+        delta_max_transition_bytes=64 * 1024 * 1024,
+        chunk_size=16,
         shared_state_slots=2,
-        num_modules=3,
+        num_modules=4,
         modules_per_cycle=2,
         active_top_k=2,
         n1_depth=2,
-        module_families=("gpt", "ssm", "recurrent"),
-        n2_population="supported",
+        module_families=("gpt", "ssm", "recurrent", "delta"),
+        n2_population="mixed",
         tie_embeddings=True,
         recurrent_precision="model",
     )
@@ -60,7 +64,7 @@ def config() -> N2Config:
 def model_config_text(cfg: N2Config) -> str:
     return "\n".join(
         (
-            "format=rayvan-emc-config-v1",
+            "format=rayvan-emc-config-v2",
             f"latent_dim={cfg.latent_dim}",
             f"vocab_size={cfg.vocab_size}",
             f"max_sequence_length={cfg.max_sequence_length}",
@@ -70,12 +74,16 @@ def model_config_text(cfg: N2Config) -> str:
             f"state_space_dim={cfg.state_space_dim or 0}",
             f"state_space_kernel_size={cfg.state_space_kernel_size}",
             f"recurrent_dim={cfg.recurrent_dim or 0}",
+            f"delta_internal_dim={cfg.delta_internal_dim or 0}",
+            f"delta_heads={cfg.delta_heads}",
+            f"delta_ffn_dim={cfg.delta_ffn_dim or 0}",
+            f"delta_max_scratch_bytes={cfg.delta_max_transition_bytes}",
             f"chunk_size={cfg.chunk_size}",
             f"shared_state_slots={cfg.shared_state_slots}",
             f"n1_depth={cfg.n1_depth}",
             f"top_k={cfg.resolved_active_top_k}",
             f"tie_embeddings={int(cfg.tie_embeddings)}",
-            "population=gpt,ssm,recurrent",
+            "population=gpt,ssm,recurrent,delta",
             "",
         )
     )
@@ -138,7 +146,7 @@ def export(destination: Path) -> None:
     save_bundle(destination / "weights.pt", dict(model.state_dict()))
 
     tensors, _ = reference_forward(model, tokens)
-    forced_nodes = torch.tensor([[0, 1], [1, 2]], dtype=torch.long)
+    forced_nodes = torch.tensor([[0, 3], [1, 2]], dtype=torch.long)
     forced_output = model(
         tokens,
         return_trace=True,
@@ -156,6 +164,15 @@ def export(destination: Path) -> None:
         "n1_nodes.0.blocks.0.attention.in_proj_weight",
         "n1_nodes.1.blocks.0.log_decay",
         "n1_nodes.2.blocks.0.recurrent.weight_ih_l0",
+        "n1_nodes.3.blocks.0.query_projection.weight",
+        "n1_nodes.3.blocks.0.key_projection.weight",
+        "n1_nodes.3.blocks.0.value_projection.weight",
+        "n1_nodes.3.blocks.0.alpha_projection.weight",
+        "n1_nodes.3.blocks.0.beta_projection.weight",
+        "n1_nodes.3.blocks.0.output_gate.weight",
+        "n1_nodes.3.blocks.0.output_adapter.weight",
+        "n1_nodes.3.blocks.0.initial_key.weight",
+        "n1_nodes.3.blocks.0.initial_value.weight",
         "integrator.proposal_integrator.query_projection.weight",
         "output_norm.weight",
     )
@@ -207,8 +224,8 @@ def export(destination: Path) -> None:
                 "fp32": {"atol": 2e-5, "rtol": 2e-4},
                 "bf16": {"atol": 3e-2, "rtol": 5e-2},
                 "top_k": "exact except diagnosed score ties",
-                "architecture": ["gpt", "ssm", "recurrent"],
-                "delta": False,
+                "architecture": ["gpt", "ssm", "recurrent", "delta"],
+                "delta": True,
             },
             indent=2,
         ),

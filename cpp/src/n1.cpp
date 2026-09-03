@@ -1,4 +1,5 @@
 #include "rayvan_emc/n1/gpt_n1.hpp"
+#include "rayvan_emc/n1/delta_n1.hpp"
 #include "rayvan_emc/n1/recurrent_n1.hpp"
 #include "rayvan_emc/n1/ssm_n1.hpp"
 
@@ -186,6 +187,7 @@ std::shared_ptr<N1Block> create_n1_block(const ModelConfig& config, N1Family fam
     case N1Family::gpt: return std::make_shared<GPTN1Block>(config);
     case N1Family::ssm: return std::make_shared<SSMN1Block>(config);
     case N1Family::recurrent: return std::make_shared<RecurrentN1Block>(config);
+    case N1Family::delta: return std::make_shared<DeltaN1Block>(config);
     }
     throw std::invalid_argument("unsupported N1 family");
 }
@@ -301,6 +303,71 @@ N1Output N1Node::forward(const N1Input& input) {
         persistent = std::make_shared<N1PersistentState>(N1PersistentState{std::move(next_states), local_shared});
     }
     return {current - input.shared_latent, std::move(persistent), make_diagnostics(sequence, batch, state_change, reset)};
+}
+
+std::shared_ptr<N1PersistentState> N1Node::initialize_routing_state(const Tensor& shared_state) {
+    require_rank(shared_state, 3, "routing shared_state");
+    if (shared_state.size(1) != config_.shared_state_slots || shared_state.size(2) != config_.latent_dim) {
+        throw std::invalid_argument("routing shared_state shape mismatch");
+    }
+    std::vector<LeaseState> leases;
+    leases.reserve(config_.n1_depth);
+    for (const auto& module : *blocks) {
+        auto* block = dynamic_cast<N1Block*>(module.get());
+        if (!block) throw std::logic_error("invalid N1 block registration");
+        leases.push_back(block->begin_lease(shared_state));
+    }
+    return std::make_shared<N1PersistentState>(N1PersistentState{std::move(leases), shared_state});
+}
+
+N1RoutingItemOutput N1Node::forward_routing_item(
+    const Tensor& chunk,
+    const Tensor& active_request_indices,
+    const std::shared_ptr<N1PersistentState>& full_state) {
+    require_rank(chunk, 3, "routing item chunk");
+    require_rank(active_request_indices, 1, "active request indices");
+    if (!full_state || static_cast<std::int64_t>(full_state->block_states.size()) != config_.n1_depth) {
+        throw std::invalid_argument("routing item requires initialized full-batch expert state");
+    }
+    if (active_request_indices.scalar_type() != torch::kLong) {
+        throw std::invalid_argument("active request indices must be int64");
+    }
+    const auto active_chunk = chunk.index_select(0, active_request_indices);
+    if (active_request_indices.numel() == 0) {
+        return {active_chunk, full_state->shared_state.index_select(0, active_request_indices), full_state};
+    }
+
+    ++execution_count_;
+    const double residual_scale = 1.0 / std::sqrt(static_cast<double>(config_.n1_depth));
+    auto current = active_chunk;
+    auto local_shared = full_state->shared_state.index_select(0, active_request_indices);
+    std::vector<LeaseState> next_full_leases;
+    next_full_leases.reserve(config_.n1_depth);
+    for (std::int64_t block_index = 0; block_index < config_.n1_depth; ++block_index) {
+        auto* block = dynamic_cast<N1Block*>(blocks[static_cast<std::size_t>(block_index)].get());
+        if (!block) throw std::logic_error("invalid N1 block registration");
+        LeaseState packed;
+        for (const auto& [name, value] : full_state->block_states[static_cast<std::size_t>(block_index)].tensors) {
+            packed.tensors.emplace(name, value.index_select(0, active_request_indices));
+        }
+        auto output = block->forward_chunk(current, local_shared, packed);
+        current = current + residual_scale * output.token_proposal;
+        local_shared = local_shared + residual_scale * output.state_proposal;
+        LeaseState merged;
+        for (const auto& [name, old_value] : full_state->block_states[static_cast<std::size_t>(block_index)].tensors) {
+            const auto& next_value = output.new_lease_state.tensors.at(name);
+            merged.tensors.emplace(
+                name,
+                old_value.to(next_value.scalar_type()).index_copy(
+                    0, active_request_indices, next_value));
+        }
+        next_full_leases.push_back(std::move(merged));
+    }
+    auto next_shared = full_state->shared_state.to(local_shared.scalar_type()).index_copy(
+        0, active_request_indices, local_shared);
+    auto next_state = std::make_shared<N1PersistentState>(
+        N1PersistentState{std::move(next_full_leases), std::move(next_shared)});
+    return {current - active_chunk, std::move(local_shared), std::move(next_state)};
 }
 
 N1Diagnostics N1Node::make_diagnostics(

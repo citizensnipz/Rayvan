@@ -41,6 +41,20 @@ double update_norm(const std::vector<Tensor>& before, const std::vector<Tensor>&
     return std::sqrt(total.item<double>());
 }
 
+double parameter_norm(const std::vector<Tensor>& parameters) {
+    auto total = torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64));
+    for (const auto& parameter : parameters) total += parameter.detach().to(torch::kCPU, torch::kFloat64).pow(2).sum();
+    return std::sqrt(total.item<double>());
+}
+
+double parameter_gradient_norm(const std::vector<Tensor>& parameters) {
+    auto total = torch::zeros({}, torch::TensorOptions().dtype(torch::kFloat64));
+    for (const auto& parameter : parameters) {
+        if (parameter.grad().defined()) total += parameter.grad().detach().to(torch::kCPU, torch::kFloat64).pow(2).sum();
+    }
+    return std::sqrt(total.item<double>());
+}
+
 }  // namespace
 
 Trainer::Trainer(EMCModel& model, TrainingConfig config, torch::Device device)
@@ -137,7 +151,8 @@ TrainingResult Trainer::train(
             Tensor loss;
             {
                 AutocastScope autocast(device_, config_.precision);
-                loss = next_token_loss(model_.forward({input}).logits, targets);
+                const auto output = model_.forward({input});
+                loss = next_token_loss(output.logits, targets) + output.routing_aux_loss;
             }
             accumulated_loss += loss.detach().to(torch::kFloat32).item<double>();
             (loss / static_cast<double>(config_.gradient_accumulation_steps)).backward();
@@ -146,9 +161,17 @@ TrainingResult Trainer::train(
             model_.parameters(), config_.gradient_clip_norm);
         const bool evaluate_now = step == 1 || step == planned_steps || step % config_.evaluation_interval == 0;
         std::vector<Tensor> before;
+        std::vector<std::vector<Tensor>> expert_before;
         if (evaluate_now) {
             before.reserve(model_.parameters().size());
             for (const auto& parameter : model_.parameters()) before.push_back(parameter.detach().to(torch::kCPU).clone());
+            if (model_.config().n1_mode == N1Mode::routing_free_collective) {
+                for (const auto& expert : model_.module()->routing_free_collective()->experts()) {
+                    std::vector<Tensor> snapshot;
+                    for (const auto& parameter : expert->parameters()) snapshot.push_back(parameter.detach().to(torch::kCPU).clone());
+                    expert_before.push_back(std::move(snapshot));
+                }
+            }
         }
         optimizer_.step();
         tokens_processed += tokens_per_step;
@@ -204,9 +227,20 @@ TrainingResult Trainer::train(
                     global_parameter_norm(model_);
                 telemetry.gradient_norm = gradient_norm;
                 telemetry.update_norm = metrics.update_norm;
-                telemetry.routing = accumulator.routing_report();
-                telemetry.integrator =
-                    accumulator.integrator_report();
+                if (model_.config().n1_mode == N1Mode::routing_free_collective) {
+                    telemetry.routing_free = accumulator.routing_free_report();
+                    const auto& experts = model_.module()->routing_free_collective()->experts();
+                    for (std::size_t index = 0; index < experts.size(); ++index) {
+                        const auto parameters = experts[index]->parameters();
+                        telemetry.routing_free->parameter_norm.push_back(parameter_norm(parameters));
+                        telemetry.routing_free->gradient_norm.push_back(parameter_gradient_norm(parameters));
+                        telemetry.routing_free->update_norm.push_back(
+                            index < expert_before.size() ? update_norm(expert_before[index], parameters) : 0.0);
+                    }
+                } else {
+                    telemetry.routing = accumulator.routing_report();
+                    telemetry.integrator = accumulator.integrator_report();
+                }
                 telemetry.memory = metrics.memory;
                 append_telemetry(
                     checkpoint_directory / "telemetry.tsv",

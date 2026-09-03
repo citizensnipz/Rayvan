@@ -20,6 +20,7 @@ struct TelemetryRecord {
     double update_norm = 0.0;
     RoutingReport routing;
     IntegratorReport integrator;
+    std::optional<RoutingFreeReport> routing_free;
     MemoryReport memory;
 };
 

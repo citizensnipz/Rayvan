@@ -13,7 +13,24 @@ One N2 event performs:
 5. Proposal-attention integration with Nexus weights as a log prior.
 6. Final LayerNorm and vocabulary projection.
 
-The native population is a variable-length ordered list of GPT, SSM, and recurrent N1 nodes. Repeated families construct independent modules and parameters. Delta is rejected by configuration; there is no placeholder or fallback.
+The native population is a variable-length ordered list of GPT, SSM, recurrent, and Delta N1 nodes. Repeated families construct independent modules and parameters. Delta uses the custom CUDA path on CUDA tensors and a straightforward ATen recurrence as its CPU test/reference path; there is no silent CUDA fallback.
+
+## Routing-free experimental path
+
+`N1Mode::routing_free_collective` is a separate construction path and does not
+register the legacy position embedding, Nexus, Integrator, or legacy N1 module
+list. Token embeddings first pass through pre-norm causal grouped-query
+attention with RoPE (eight query heads and two KV heads by default). For every
+sequence chunk, each expert independently computes a rank-16 response and a
+thresholded activation. Active request rows alone execute that expert's two
+native blocks; persistent block state is gathered/scattered by row.
+
+Strength-weighted token proposals form a residual update. Expert-local compact
+latent proposals update four persistent shared slots through masked multi-head
+attention and a gated residual. No Top-K, Nexus score, cross-expert activation
+softmax, or CPU routing decision exists in this path. See
+[`routing-free-n1.md`](routing-free-n1.md) for equations, tensor behavior,
+telemetry, measurements, and the 50k stability decision.
 
 ## Frozen mathematical behavior
 
@@ -96,6 +113,10 @@ The recurrence is evaluated with the same lower-triangular parallel coefficient 
 
 The recurrent block applies input LayerNorm and projection, then one batch-first single-layer GRU initialized from the mean shared state. Lease hidden state is `[1,A,Hr]` at the LibTorch call boundary and stored as `[A,Hr]`. The whole chunk is passed to LibTorch GRU, allowing cuDNN execution on CUDA. Output projection returns the model dtype. Global BF16 autocast controls compatible CUDA operations while parameters and AdamW state remain FP32.
 
+### Delta N1
+
+The Delta block preserves the Python project-specific gated recurrence exactly. It projects normalized conditioned tokens to L2-normalized Q/K, tanh V, sigmoid alpha decay, sigmoid beta update, and a sigmoid output gate. Its learned initial associative memory is the outer product of projected shared-state value and key summaries divided by the square root of head width. The recurrent state and gate scalars are FP32; Q/K/V may be BF16. A custom CUDA autograd operation keeps one `[D_h,D_h]` state per batch/head in shared memory, emits token outputs, stores chunk-boundary states, and recomputes one bounded window in reverse during backward. See [`delta-native.md`](delta-native.md) for equations, memory formulas, and measured limitations.
+
 ### Integrator
 
 For normalized latent and proposals, the Integrator constructs query `[B,S,H,Dh]` and keys/values `[B,S,H,K,Dh]`. Attention logits are scaled dot products plus:
@@ -138,6 +159,9 @@ Symbols: `B` requests, `S` tokens, `D` latent width, `N` N1 nodes, `K` top-K, `A
 | SSM | scan coefficients | `[A_n,Hs,C,C]` |
 | recurrent | GRU input/output | `[A_n,C,Hr]` |
 | recurrent | GRU hidden at call | `[1,A_n,Hr]` |
+| Delta | Q/K/V | `[A_n,C,Hd,Dd]` |
+| Delta | alpha/beta | `[A_n,C,Hd]` FP32 |
+| Delta | recurrent memory | `[A_n,Hd,Dd,Dd]` FP32 |
 | N1 | grouped proposal | `[A,S,D]` |
 | N2 | restored proposal stack | `[B,S,K,D]` |
 | Integrator | Q | `[B,S,H,Dh]` |
@@ -158,5 +182,6 @@ Runtime checks cover public inputs, router masks, top-K, dispatch rank, N1 laten
 - Evaluation checkpoint loading opens only `model.pt`; `optimizer.pt` is a separate file.
 - Diagnostics accumulate reductions on-device and materialize reports only when requested.
 - Stateful tensors use RAII-owned `Tensor` handles. No unsafe in-place mutation is applied to autograd-visible model values.
+- Delta never materializes `[B,H,T,D_h,D_h]` transitions. Its backward scratch is computed with checked integer arithmetic and refused before launch when it exceeds `delta_max_scratch_bytes`.
 
 The exact diagonal SSM scan still constructs `[A_n,Hs,C,C]` coefficients because that is the Python reference mathematics. Replacing it is an architecture/algorithm change and is not part of this port.

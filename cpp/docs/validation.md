@@ -1,6 +1,10 @@
 # Validation and measured CUDA baseline
 
-Measurements were made on 2026-09-02. No Delta path or GPU stress workload was run.
+Measurements were made on 2026-09-02. This page records the pre-Delta native-runtime baseline. The subsequent Delta implementation, GPU stress measurements, and 1M-token experiment are reported in [`delta-native.md`](delta-native.md).
+
+The later routing-free heterogeneous N1 implementation, 37-case verification,
+50k stability gate, legacy control, causal ablations, and CUDA phase profile are
+reported separately in [`routing-free-n1.md`](routing-free-n1.md).
 
 ## Environment alignment
 
@@ -28,7 +32,7 @@ Package changes were limited to `torch` 2.8.0+cu129 to 2.13.0+cu130, `torchvisio
 
 ## Correctness
 
-The clean CUDA build passed 25/25 native cases. This includes model construction, GPT/SSM/recurrent N1s, Nexus routing and exact top-K, sparse dispatch, Integrator, logits/loss, selected gradients, CUDA BF16, checkpoints, diagnostics, trainer resume, and explicit Delta rejection. The Python N2 regression suite passed 19/19.
+The current clean CUDA build passes 31/31 native cases. In addition to the original model, routing, optimizer, checkpoint, and trainer coverage, these include the independent Delta recurrence, allocation refusal, FP32 and BF16 CUDA forward/backward parity, Delta checkpoint round-trip, causal interventions, and full mixed-population Python/C++ parity. The Python N2 regression suite remains 19/19.
 
 The Python-to-C++ fixture compares embeddings, shared state, router scores/probabilities, exact selected IDs and weights, dispatch ordering, every supported N1 proposal, Integrator state/acceptance, logits, loss, and representative gradients. A three-step real-model trajectory compares loss, routes, gradient norm, and final parameters.
 
@@ -60,7 +64,7 @@ Python values come from `torch.profiler`; C++ launch counts use CUPTI driver cal
 
 ## Exact tiny-fixture performance
 
-The deterministic fixture is batch 2, sequence 8, latent width 16, vocabulary 67, population `[GPT, SSM, recurrent]`, top-K 2. Both processes used identical weights and inputs, one CPU thread, 10 warmups, 100 timed iterations, and explicit CUDA synchronization at timing boundaries. It is deliberately host-overhead dominated.
+The timings below are the original three-family fixture: batch 2, sequence 8, latent width 16, vocabulary 67, population `[GPT, SSM, recurrent]`, top-K 2. The current correctness fixture is four-family and includes Delta; these historical timings were not silently relabeled. Both timed processes used identical weights and inputs, one CPU thread, 10 warmups, 100 timed iterations, and explicit CUDA synchronization at timing boundaries. It is deliberately host-overhead dominated.
 
 ### FP32
 
@@ -128,4 +132,4 @@ The optimizer change does not reduce persistent VRAM: Python and C++ use the sam
 
 Yes. With PyTorch/LibTorch 2.13 aligned on CUDA 13.0 and equivalent multi-tensor AdamW semantics, native C++ preserves its faster forward/backward path as an actual end-to-end training advantage: about 2.2 times the tiny-fixture throughput and 10.8–12.1% higher throughput in the short realistic configuration.
 
-Remaining cautions are the underscored ATen foreach API surface, Windows timing variability, and the fact that a larger production configuration may become entirely GPU-bound. CUDA graph capture, distributed execution, Delta, and custom CUDA remain out of scope.
+Remaining cautions are the underscored ATen foreach API surface, Windows timing variability, and the fact that a larger production configuration may become entirely GPU-bound. CUDA graph capture and distributed execution remain out of scope. Delta and its custom CUDA path are now implemented and audited separately in [`delta-native.md`](delta-native.md).

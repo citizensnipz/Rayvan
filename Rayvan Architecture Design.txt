@@ -1,0 +1,21 @@
+Rayvan Architecture Design:
+
+Projects
+Environments
+Integrations
+Configuration
+Deployments
+Findings
+Actions
+Agent / MCP
+Settings
+
+
+EMC:
+N0/1/2 structure
+performance/efficiency
+kernels
+16 experts expansion
+N3
+neural operators/distillation
+self-reorganization

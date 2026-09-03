@@ -12,7 +12,8 @@
   "architecture": [
     "gpt",
     "ssm",
-    "recurrent"
+    "recurrent",
+    "delta"
   ],
-  "delta": false
+  "delta": true
 }

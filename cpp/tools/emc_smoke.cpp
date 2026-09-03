@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
         rayvan::emc::ModelConfig config;
         config.vocab_size = 257;
         config.max_sequence_length = 16;
-        config.chunk_size = 8;
+        config.chunk_size = 16;
         config.n1_depth = 2;
         rayvan::emc::EMCModel model(config);
         const bool use_cuda = argc > 1 && std::string(argv[1]) == "--cuda";

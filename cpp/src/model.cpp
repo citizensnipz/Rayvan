@@ -47,10 +47,7 @@ Tensor OutputProjectionImpl::forward(const Tensor& input) const {
 EMCModelImpl::EMCModelImpl(ModelConfig config)
     : config_(std::move(config)), active_top_k_(config_.top_k),
       token_embedding(register_module("token_embedding", torch::nn::Embedding(config_.vocab_size, config_.latent_dim))),
-      position_embedding(register_module("position_embedding", torch::nn::Embedding(config_.max_sequence_length, config_.latent_dim))),
-      router(register_module("router", Nexus(config_))),
       n1_nodes(register_module("n1_nodes", torch::nn::ModuleList())),
-      integrator(register_module("integrator", N2Integrator(config_))),
       output_norm(register_module("output_norm", torch::nn::LayerNorm(torch::nn::LayerNormOptions({config_.latent_dim})))),
       output_projection(register_module(
           "output_projection",
@@ -59,12 +56,21 @@ EMCModelImpl::EMCModelImpl(ModelConfig config)
               config_.vocab_size,
               config_.tie_embeddings ? token_embedding->weight : Tensor()))) {
     config_.validate();
-    const auto names = n1_node_names(config_.population);
-    node_handles_.reserve(config_.population.size());
-    for (std::size_t index = 0; index < config_.population.size(); ++index) {
-        auto node = create_n1_node(config_, config_.population[index], static_cast<std::int64_t>(index), names[index]);
-        n1_nodes->push_back(node);
-        node_handles_.push_back(std::move(node));
+    if (config_.n1_mode == N1Mode::legacy_nexus) {
+        position_embedding = register_module(
+            "position_embedding",
+            torch::nn::Embedding(config_.max_sequence_length, config_.latent_dim));
+        router = register_module("router", Nexus(config_));
+        integrator = register_module("integrator", N2Integrator(config_));
+        const auto names = n1_node_names(config_.population);
+        node_handles_.reserve(config_.population.size());
+        for (std::size_t index = 0; index < config_.population.size(); ++index) {
+            auto node = create_n1_node(config_, config_.population[index], static_cast<std::int64_t>(index), names[index]);
+            n1_nodes->push_back(node);
+            node_handles_.push_back(std::move(node));
+        }
+    } else {
+        collective = register_module("routing_free_collective", RoutingFreeCollective(config_));
     }
     if (config_.tie_embeddings) {
         torch::NoGradGuard no_grad;
@@ -76,6 +82,9 @@ EMCModelImpl::EMCModelImpl(ModelConfig config)
 }
 
 void EMCModelImpl::set_active_top_k(std::int64_t value) {
+    if (config_.n1_mode != N1Mode::legacy_nexus) {
+        throw std::logic_error("top-K is unavailable in routing-free collective mode");
+    }
     if (value < 1 || value > static_cast<std::int64_t>(config_.population.size())) {
         throw std::invalid_argument("active top-K must be within the N1 population");
     }
@@ -157,8 +166,49 @@ EMCOutput EMCModelImpl::forward(const EMCInput& input) {
     const auto batch = input.token_ids.size(0);
     const auto sequence = input.token_ids.size(1);
     if (sequence > config_.max_sequence_length) throw std::invalid_argument("sequence exceeds configured maximum");
+    auto embeddings = token_embedding->forward(input.token_ids);
+    if (config_.n1_mode == N1Mode::routing_free_collective) {
+        std::shared_ptr<RoutingFreeCollectiveState> persistent;
+        if (input.state) persistent = input.state->collective;
+        std::optional<Tensor> availability;
+        std::optional<Tensor> forced;
+        std::optional<Tensor> zeroed;
+        if (input.intervention) {
+            availability = input.intervention->availability_mask;
+            forced = input.intervention->force_active_mask;
+            zeroed = input.intervention->zero_proposal_mask;
+            if (input.intervention->forced_nodes) {
+                throw std::invalid_argument("forced_nodes is a Top-K intervention and is unavailable in routing-free mode");
+            }
+        }
+        auto result = collective->forward(
+            embeddings, persistent, availability, forced, zeroed, input.return_trace);
+        auto next_state = std::make_shared<N2State>();
+        next_state->collective = result.state;
+        const auto logits = output_projection->forward(output_norm->forward(result.token_state));
+        const auto float_options = embeddings.options().dtype(torch::kFloat32);
+        const auto long_options = embeddings.options().dtype(torch::kLong);
+        RoutingDecision no_router{
+            torch::empty({batch, 0}, float_options),
+            torch::empty({batch, 0}, float_options),
+            torch::empty({batch, 0}, long_options),
+            torch::empty({batch, 0}, float_options),
+            torch::empty({batch, 0}, long_options)};
+        return {
+            logits,
+            embeddings,
+            result.contextual_state,
+            std::move(no_router),
+            torch::empty({batch, sequence, 0, config_.latent_dim}, embeddings.options()),
+            result.token_state,
+            std::nullopt,
+            std::nullopt,
+            std::move(next_state),
+            result.auxiliary_loss,
+            std::move(result.trace)};
+    }
     const auto positions = torch::arange(sequence, input.token_ids.options());
-    const auto embeddings = token_embedding->forward(input.token_ids) + position_embedding->forward(positions);
+    embeddings = embeddings + position_embedding->forward(positions);
     const auto shared_state = embeddings;
 
     std::optional<Tensor> availability;
@@ -207,7 +257,9 @@ EMCOutput EMCModelImpl::forward(const EMCInput& input) {
         integrated.latent,
         std::move(integrated.trace),
         std::move(execution_trace),
-        std::move(next_state)};
+        std::move(next_state),
+        torch::zeros({}, embeddings.options().dtype(torch::kFloat32)),
+        std::nullopt};
 }
 
 struct EMCModel::Storage {

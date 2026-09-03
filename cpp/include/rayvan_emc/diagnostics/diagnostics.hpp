@@ -3,6 +3,7 @@
 #include "rayvan_emc/model.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,38 @@ struct IntegratorReport {
     double mean_similarity = 0.0;
 };
 
+struct RoutingFreeReport {
+    std::vector<double> activation_rate;
+    std::vector<double> activation_strength_mean;
+    std::vector<double> activation_strength_std;
+    std::vector<double> expert_bias;
+    std::vector<double> compute_share;
+    std::vector<double> token_proposal_norm;
+    std::vector<double> raw_latent_proposal_norm;
+    std::vector<double> normalized_latent_proposal_norm;
+    std::vector<double> latent_attention;
+    std::vector<std::vector<double>> coactivation;
+    std::vector<std::vector<double>> activation_correlation;
+    std::vector<double> parameter_norm;
+    std::vector<double> gradient_norm;
+    std::vector<double> update_norm;
+    double activation_density = 0.0;
+    double target_density = 0.0;
+    double adaptive_lambda = 0.0;
+    double expert_balancing_loss = 0.0;
+    double routing_item_balancing_loss = 0.0;
+    double balancing_loss = 0.0;
+    double mean_active_experts = 0.0;
+    double effective_expert_count = 0.0;
+    double normalized_activation_entropy = 0.0;
+    double all_off_recovery_rate = 0.0;
+    bool starvation = false;
+    bool monopoly = false;
+    bool all_on = false;
+    bool all_off = false;
+    bool proposal_scale_instability = false;
+};
+
 struct MemoryReport {
     std::uint64_t process_rss_bytes = 0;
     std::uint64_t process_peak_rss_bytes = 0;
@@ -47,6 +80,7 @@ public:
     void update(const EMCOutput& output);
     [[nodiscard]] RoutingReport routing_report() const;
     [[nodiscard]] IntegratorReport integrator_report() const;
+    [[nodiscard]] RoutingFreeReport routing_free_report() const;
     void reset();
 
 private:
@@ -65,6 +99,7 @@ private:
     Tensor integrator_count_;
     Tensor similarity_sum_;
     Tensor similarity_count_;
+    std::optional<RoutingFreeTrace> routing_free_trace_;
 };
 
 MemoryReport collect_memory_report(
