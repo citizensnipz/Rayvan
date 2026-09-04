@@ -83,8 +83,9 @@ emc::ModelConfig routing_free_config() {
     config.n1_depth = 2;
     config.gqa_query_heads = 4;
     config.gqa_kv_heads = 2;
-    config.activation_rank = 8;
-    config.routing_theta = 0.05;
+    config.competence_embedding_dim = 8;
+    config.competence_basin_count = 3;
+    config.competence_novel_exploration_samples = 1;
     config.delta_internal_dim = 16;
     config.delta_heads = 2;
     config.delta_ffn_dim = 32;
@@ -409,7 +410,7 @@ void shared_gqa_cuda_backend_parity() {
     close(native_input.grad(), reference_input.grad(), 3e-2, 5e-2, "fused CUDA GQA gradient");
 }
 
-void routing_free_forward_balance_and_gradients() {
+void routing_free_competence_routing_and_gradients() {
     const auto config = routing_free_config();
     emc::EMCModel model(config);
     model.train();
@@ -419,18 +420,18 @@ void routing_free_forward_balance_and_gradients() {
     CHECK(output.routing_free_trace.has_value());
     const auto& trace = *output.routing_free_trace;
     CHECK(trace.activation_mask.sizes() == torch::IntArrayRef({2, 2, 4}));
-    CHECK(!trace.all_off_recovery.any().item<bool>());
+    CHECK(trace.need_embedding.sizes() == torch::IntArrayRef({2, 2, 8}));
+    close(trace.need_embedding.norm(2, -1), torch::ones({2, 2}), 1e-5, 1e-5, "normalized need embedding");
+    CHECK(trace.novelty_mask.all().item<bool>());
+    CHECK((trace.exploration_mask.sum(-1) == 1).all().item<bool>());
     CHECK(torch::isfinite(output.logits).all().item<bool>());
-    const auto binary = trace.activation_mask.to(torch::kFloat32);
-    const auto expected_eb = (binary.mean({0, 1}) * trace.activation_strength.mean({0, 1})).mean();
-    const auto expected_tb = (binary.mean(2) * trace.activation_strength.mean(2)).mean();
-    close(trace.expert_balancing_loss, expected_eb, 1e-6, 1e-6, "expert balancing equation");
-    close(trace.routing_item_balancing_loss, expected_tb, 1e-6, 1e-6, "routing-item balancing equation");
+    close(output.routing_aux_loss, torch::zeros({}), 0.0, 0.0, "no load-balancing loss");
     (loss_for(output.logits, torch::randint(config.vocab_size, {2, 32})) + output.routing_aux_loss).backward();
-    for (const auto& expert : model.module()->routing_free_collective()->experts()) {
-        CHECK(expert->activation_bias().grad().defined());
-        CHECK(torch::isfinite(expert->activation_bias().grad()).all().item<bool>());
-    }
+    model.module()->routing_free_collective()->update_competence_from_backward();
+    double observations = 0.0;
+    for (const auto& expert : model.module()->routing_free_collective()->experts())
+        observations += expert->utility_observations().item<double>();
+    CHECK(observations == 4.0);
     emc::DiagnosticAccumulator diagnostics(4);
     diagnostics.update(output);
     const auto report = diagnostics.routing_free_report();
@@ -439,18 +440,60 @@ void routing_free_forward_balance_and_gradients() {
     CHECK(report.mean_active_experts >= 1.0);
 }
 
-void routing_free_sparse_execution_and_recovery() {
+void competence_basin_equations_and_updates() {
     auto config = routing_free_config();
-    config.routing_target_density = 0.75;
-    emc::EMCModel sparse(config);
-    sparse.train();
+    config.competence_alpha_q = 0.20;
+    config.competence_lambda_q = 1.0;
+    config.competence_eta_mu = 0.10;
+    config.competence_eta_r = 0.10;
+    emc::EMCModel model(config);
+    const auto& expert = model.module()->routing_free_collective()->experts()[0];
+    const auto z = torch::tensor({{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F}});
     {
         torch::NoGradGuard no_grad;
-        for (const auto& expert : sparse.module()->routing_free_collective()->experts()) {
-            expert->activation_bias().fill_(100.0);
-        }
+        expert->basin_centers().zero_();
+        expert->basin_centers().select(0, 0).copy_(z.squeeze(0));
+        expert->basin_radii().fill_(0.5);
+        expert->basin_competence().zero_();
+        expert->basin_competence().select(0, 0).fill_(0.2);
+        expert->basin_evidence().zero_();
+        expert->basin_uncertainty().fill_(1.0);
+        expert->basin_initialized().zero_();
+        expert->basin_initialized().select(0, 0).fill_(true);
     }
-    const auto initial_lambda = sparse.module()->routing_free_collective()->adaptive_lambda().item<double>();
+    const auto match = expert->match_competence(z);
+    close(match.distance, torch::zeros({1}), 1e-6, 1e-6, "normalized basin distance");
+    close(match.resistance, torch::full({1}, -0.2), 1e-6, 1e-6, "competence resistance");
+
+    expert->update_competence(
+        z, torch::zeros({1}, torch::kLong), torch::full({1}, 0.5),
+        torch::ones({1}, torch::kBool), torch::zeros({1}, torch::kBool),
+        torch::zeros({1}, torch::kBool));
+    close(expert->basin_competence().select(0, 0), torch::tensor(0.26), 1e-6, 1e-6, "utility EMA");
+    close(expert->basin_evidence().select(0, 0), torch::tensor(1.0), 1e-6, 1e-6, "evidence increment");
+    close(expert->basin_radii().select(0, 0), torch::tensor(0.475), 1e-6, 1e-6, "successful radius update");
+    const auto center_before_failure = expert->basin_centers().clone();
+    expert->update_competence(
+        -z, torch::zeros({1}, torch::kLong), torch::full({1}, -0.5),
+        torch::ones({1}, torch::kBool), torch::zeros({1}, torch::kBool),
+        torch::zeros({1}, torch::kBool));
+    close(expert->basin_centers(), center_before_failure, 0.0, 0.0, "negative utility cannot move center");
+    CHECK(expert->basin_competence().select(0, 0).item<double>() < 0.26);
+
+    const auto& unexplored = model.module()->routing_free_collective()->experts()[1];
+    unexplored->update_competence(
+        z, torch::zeros({1}, torch::kLong), torch::full({1}, 0.4),
+        torch::ones({1}, torch::kBool), torch::ones({1}, torch::kBool),
+        torch::ones({1}, torch::kBool));
+    CHECK(unexplored->basin_initialized().sum().item<std::int64_t>() == 1);
+    close(unexplored->basin_centers().select(0, 0), z.squeeze(0), 0.0, 0.0, "novel basin center");
+    close(unexplored->basin_competence().select(0, 0), torch::tensor(0.4), 1e-6, 1e-6, "novel basin competence");
+}
+
+void routing_free_sparse_execution_and_empty_resonance() {
+    auto config = routing_free_config();
+    emc::EMCModel sparse(config);
+    sparse.eval();
     emc::CausalIntervention intervention;
     intervention.force_active_mask = torch::tensor({true, false, true, false}, torch::kBool);
     const auto output = sparse.forward({torch::randint(config.vocab_size, {2, 32}), true, intervention});
@@ -462,25 +505,13 @@ void routing_free_sparse_execution_and_recovery() {
     CHECK(experts[1]->body_module()->execution_count() == 0);
     CHECK(experts[2]->body_module()->execution_count() == 2);
     CHECK(experts[3]->body_module()->execution_count() == 0);
-    CHECK(sparse.module()->routing_free_collective()->adaptive_lambda().item<double>() < initial_lambda);
 
-    emc::EMCModel recovery(config);
-    recovery.train();
-    {
-        torch::NoGradGuard no_grad;
-        for (const auto& expert : recovery.module()->routing_free_collective()->experts()) {
-            expert->activation_bias().fill_(100.0);
-        }
-    }
-    const auto recovered = recovery.forward({torch::randint(config.vocab_size, {1, 16}), true});
-    CHECK(recovered.routing_free_trace->all_off_recovery.all().item<bool>());
-    CHECK(recovered.routing_free_trace->activation_mask.all().item<bool>());
-    CHECK(torch::isfinite(recovered.logits).all().item<bool>());
-    recovered.routing_aux_loss.backward();
-    for (const auto& expert : recovery.module()->routing_free_collective()->experts()) {
-        CHECK(expert->activation_bias().grad().defined());
-        CHECK(torch::isfinite(expert->activation_bias().grad()).all().item<bool>());
-    }
+    emc::EMCModel empty(config);
+    empty.eval();
+    const auto unclaimed = empty.forward({torch::randint(config.vocab_size, {1, 16}), true});
+    CHECK(!unclaimed.routing_free_trace->activation_mask.any().item<bool>());
+    CHECK(unclaimed.routing_free_trace->novelty_mask.all().item<bool>());
+    CHECK(torch::isfinite(unclaimed.logits).all().item<bool>());
 }
 
 void routing_free_independent_parameters_and_state() {
@@ -489,14 +520,11 @@ void routing_free_independent_parameters_and_state() {
     const auto named = model.module()->named_parameters(true);
     for (const auto& item : named) CHECK(item.key().find("router") == std::string::npos);
     const auto& experts = model.module()->routing_free_collective()->experts();
-    std::unordered_set<const void*> activation_parameters;
+    std::unordered_set<const void*> basin_memories;
     for (const auto& expert : experts) {
-        const auto parameters = expert->named_parameters(true);
-        const auto* projection = parameters.find("activation_projection.weight");
-        CHECK(projection != nullptr);
-        activation_parameters.insert(projection->unsafeGetTensorImpl());
+        basin_memories.insert(expert->basin_centers().unsafeGetTensorImpl());
     }
-    CHECK(activation_parameters.size() == experts.size());
+    CHECK(basin_memories.size() == experts.size());
     const auto first = model.forward({torch::randint(config.vocab_size, {2, 16})});
     const auto second = model.forward({torch::randint(config.vocab_size, {2, 16}), false, std::nullopt, first.state});
     CHECK(second.state && second.state->collective);
@@ -1046,8 +1074,9 @@ int main() {
         {"diagnostics", diagnostics},
         {"shared causal GQA and RoPE gradients", shared_gqa_causality_and_gradients},
         {"shared GQA fused CUDA backend parity", shared_gqa_cuda_backend_parity},
-        {"routing-free balance and gradients", routing_free_forward_balance_and_gradients},
-        {"routing-free sparse execution and recovery", routing_free_sparse_execution_and_recovery},
+        {"routing-free competence routing and gradients", routing_free_competence_routing_and_gradients},
+        {"competence basin equations and updates", competence_basin_equations_and_updates},
+        {"routing-free sparse execution and empty resonance", routing_free_sparse_execution_and_empty_resonance},
         {"routing-free independent parameters and state", routing_free_independent_parameters_and_state},
         {"routing-free CUDA BF16 forward/backward", routing_free_cuda_bf16},
         {"causal disable replace zero force", causal_interventions},

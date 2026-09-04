@@ -32,9 +32,9 @@ struct IntegratorReport {
 
 struct RoutingFreeReport {
     std::vector<double> activation_rate;
-    std::vector<double> activation_strength_mean;
-    std::vector<double> activation_strength_std;
-    std::vector<double> expert_bias;
+    std::vector<double> resonance_probability_mean;
+    std::vector<double> resonance_probability_std;
+    std::vector<double> resistance_mean;
     std::vector<double> compute_share;
     std::vector<double> token_proposal_norm;
     std::vector<double> raw_latent_proposal_norm;
@@ -45,16 +45,26 @@ struct RoutingFreeReport {
     std::vector<double> parameter_norm;
     std::vector<double> gradient_norm;
     std::vector<double> update_norm;
+    std::vector<double> basin_count;
+    std::vector<std::vector<double>> basin_centers;
+    std::vector<std::vector<double>> basin_radii;
+    std::vector<std::vector<double>> basin_competence;
+    std::vector<std::vector<double>> basin_evidence;
+    std::vector<std::vector<double>> basin_uncertainty;
+    std::vector<double> marginal_utility;
+    std::vector<double> utility_observations;
     double activation_density = 0.0;
-    double target_density = 0.0;
-    double adaptive_lambda = 0.0;
-    double expert_balancing_loss = 0.0;
-    double routing_item_balancing_loss = 0.0;
-    double balancing_loss = 0.0;
+    double resonance_entropy = 0.0;
+    double novelty_rate = 0.0;
+    double low_confidence_rate = 0.0;
+    double exploration_rate = 0.0;
+    double training_activation_density = 0.0;
+    double training_novelty_rate = 0.0;
+    double training_exploration_rate = 0.0;
+    double training_resonance_entropy = 0.0;
     double mean_active_experts = 0.0;
     double effective_expert_count = 0.0;
     double normalized_activation_entropy = 0.0;
-    double all_off_recovery_rate = 0.0;
     bool starvation = false;
     bool monopoly = false;
     bool all_on = false;

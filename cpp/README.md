@@ -5,7 +5,7 @@ Native C++20 implementation of the EMC core with both the original request-route
 ## Supported architecture
 
 - one configurable N2 request-routing event;
-- an isolated routing-free mode with shared causal GQA/RoPE, independent low-rank expert activations, sparse chunk execution, and persistent latent attention;
+- an isolated routing-free mode with shared causal GQA/RoPE, learned computational-need embeddings, success-shaped multi-basin competence memory, uncertainty-driven novelty exploration, sparse chunk execution, and persistent latent attention;
 - variable ordered populations of independent GPT, SSM, recurrent/GRU, and Delta N1 nodes;
 - configurable N1 depth and N2 top-K;
 - sparse GPU-resident assignment metadata and inverse dispatch;
@@ -75,7 +75,7 @@ python cpp/python/export_reference.py cpp/tests/fixtures/reference
 ctest --test-dir build/emc -C Release --output-on-failure
 ```
 
-The 38 native cases cover construction, every N1, independent Delta recurrence checks, FP32/BF16 CUDA forward and gradient parity, allocation refusal, mixed Python/C++ routing and training parity, legacy and routing-free checkpoints, causal interventions, sparse dispatch, shared GQA/RoPE causality and fused-backend parity, routing-free balancing/state behavior, Integrator gradients, tying, AdamW state parity, and trainer resume/telemetry.
+The 39 native cases cover construction, every N1, independent Delta recurrence checks, FP32/BF16 CUDA forward and gradient parity, allocation refusal, mixed Python/C++ routing and training parity, legacy and routing-free checkpoints, causal interventions, sparse dispatch, shared GQA/RoPE causality and fused-backend parity, competence-basin equations/updates, Integrator gradients, tying, AdamW state parity, and trainer resume/telemetry.
 
 Reference tolerances are FP32 `atol=2e-5, rtol=2e-4` for ordinary tensors, relaxed to at most `atol=8e-5, rtol=8e-4` for accumulated gradients. BF16 sanity uses `atol=3e-2, rtol=5e-2`. Top-K IDs are exact. A mismatch is an error; genuine cutoff score ties must be diagnosed from saved router scores rather than silently accepted.
 
@@ -108,7 +108,7 @@ rayvan::emc::InferenceScope inference;
 auto result = model.forward({token_ids, true});
 ```
 
-Architecture and shapes: [`docs/architecture.md`](docs/architecture.md). Routing-free design, telemetry, 50k gate, causal ablations, and decision: [`docs/routing-free-n1.md`](docs/routing-free-n1.md). Delta mathematics, CUDA design, safety, and measurements: [`docs/delta-native.md`](docs/delta-native.md). Checkpoint/token formats: [`docs/checkpoint-format.md`](docs/checkpoint-format.md). General measured parity/performance: [`docs/validation.md`](docs/validation.md). Future Rust boundary: [`docs/ffi-boundary.md`](docs/ffi-boundary.md).
+Architecture and shapes: [`docs/architecture.md`](docs/architecture.md). Current competence-basin algorithm and 1M-token CapabilityTaskSuite result: [`docs/competence-basin-routing.md`](docs/competence-basin-routing.md). The preceding norm-gate baseline is retained in [`docs/routing-free-n1.md`](docs/routing-free-n1.md). Delta mathematics, CUDA design, safety, and measurements: [`docs/delta-native.md`](docs/delta-native.md). Checkpoint/token formats: [`docs/checkpoint-format.md`](docs/checkpoint-format.md). General measured parity/performance: [`docs/validation.md`](docs/validation.md). Future Rust boundary: [`docs/ffi-boundary.md`](docs/ffi-boundary.md).
 
 The research trainer uses routing-free mode by default; pass `--mode legacy` for
 the original hard Top-K control:

@@ -193,12 +193,12 @@ RoutingFreeReport DiagnosticAccumulator::routing_free_report() const {
     if (!routing_free_trace_) throw std::logic_error("no routing-free diagnostics accumulated");
     const auto& trace = *routing_free_trace_;
     const auto binary = trace.activation_mask.to(torch::kFloat64);
-    const auto strengths = trace.activation_strength.to(torch::kFloat64);
+    const auto probabilities = trace.resonance_probability.to(torch::kFloat64);
     RoutingFreeReport report;
     report.activation_rate = doubles(binary.mean({0, 1}));
-    report.activation_strength_mean = doubles(strengths.mean({0, 1}));
-    report.activation_strength_std = doubles(strengths.std({0, 1}, false));
-    report.expert_bias = doubles(trace.expert_biases);
+    report.resonance_probability_mean = doubles(probabilities.mean({0, 1}));
+    report.resonance_probability_std = doubles(probabilities.std({0, 1}, false));
+    report.resistance_mean = doubles(trace.resistance.to(torch::kFloat64).mean({0, 1}));
     report.compute_share = doubles(trace.compute_share);
     report.token_proposal_norm = doubles(trace.raw_token_proposal_norm.to(torch::kFloat64).mean({0, 1}));
     report.raw_latent_proposal_norm = doubles(trace.raw_latent_proposal_norm.to(torch::kFloat64).mean({0, 1}));
@@ -207,13 +207,23 @@ RoutingFreeReport DiagnosticAccumulator::routing_free_report() const {
     report.coactivation = matrix_doubles(trace.coactivation_matrix);
     report.activation_correlation = matrix_doubles(trace.activation_correlation);
     report.activation_density = trace.activation_density.item<double>();
-    report.target_density = trace.target_density.item<double>();
-    report.adaptive_lambda = trace.adaptive_lambda.item<double>();
-    report.expert_balancing_loss = trace.expert_balancing_loss.item<double>();
-    report.routing_item_balancing_loss = trace.routing_item_balancing_loss.item<double>();
-    report.balancing_loss = trace.balancing_loss.item<double>();
+    report.resonance_entropy = trace.resonance_entropy.item<double>();
+    report.novelty_rate = trace.novelty_mask.to(torch::kFloat64).mean().item<double>();
+    report.low_confidence_rate = trace.low_confidence_mask.to(torch::kFloat64).mean().item<double>();
+    report.exploration_rate = trace.exploration_mask.to(torch::kFloat64).mean().item<double>();
+    report.training_activation_density = trace.training_activation_density.item<double>();
+    report.training_novelty_rate = trace.training_novelty_rate.item<double>();
+    report.training_exploration_rate = trace.training_exploration_rate.item<double>();
+    report.training_resonance_entropy = trace.training_resonance_entropy.item<double>();
+    report.basin_count = doubles(trace.basin_initialized.to(torch::kFloat64).sum(1));
+    report.basin_centers = matrix_doubles(trace.basin_centers.reshape({num_nodes_, -1}));
+    report.basin_radii = matrix_doubles(trace.basin_radii);
+    report.basin_competence = matrix_doubles(trace.basin_competence);
+    report.basin_evidence = matrix_doubles(trace.basin_evidence);
+    report.basin_uncertainty = matrix_doubles(trace.basin_uncertainty);
+    report.marginal_utility = doubles(trace.marginal_utility);
+    report.utility_observations = doubles(trace.utility_observations);
     report.mean_active_experts = binary.sum(-1).mean().item<double>();
-    report.all_off_recovery_rate = trace.all_off_recovery.to(torch::kFloat64).mean().item<double>();
     const auto shares = trace.compute_share.to(torch::kFloat64).clamp_min(1e-12);
     const auto activation_entropy = -(shares * shares.log()).sum();
     report.effective_expert_count = torch::exp(activation_entropy).item<double>();
@@ -223,7 +233,7 @@ RoutingFreeReport DiagnosticAccumulator::routing_free_report() const {
     report.starvation = std::any_of(report.activation_rate.begin(), report.activation_rate.end(), [](double value) { return value < 0.01; });
     report.monopoly = !report.compute_share.empty() && *std::max_element(report.compute_share.begin(), report.compute_share.end()) > 0.80;
     report.all_on = report.activation_density > 0.95;
-    report.all_off = report.activation_density < 0.01 || report.all_off_recovery_rate > 0.0;
+    report.all_off = report.activation_density < 0.01;
     for (std::size_t index = 0; index < report.raw_latent_proposal_norm.size(); ++index) {
         const auto raw = report.raw_latent_proposal_norm[index];
         const auto normalized = report.normalized_latent_proposal_norm[index];
@@ -309,10 +319,14 @@ void append_telemetry(const std::filesystem::path& path, const TelemetryRecord& 
         stream << "step\ttokens\tloss\tppl\ttokens_per_second\twall_seconds\tparameter_norm\tgradient_norm\tupdate_norm"
                   "\trouting_frequency\trouting_request_fraction\trouting_probability\trouting_weight\trouting_entropy"
                   "\teffective_n1\tslot_monopoly\tintegrator_acceptance\tproposal_norm\tcontribution\tproposal_similarity"
-                  "\trf_activation_rate\trf_strength_mean\trf_strength_std\trf_bias\trf_compute_share"
+                  "\trf_activation_rate\trf_resonance_mean\trf_resonance_std\trf_resistance\trf_compute_share"
                   "\trf_token_proposal_norm\trf_raw_latent_norm\trf_normalized_latent_norm\trf_latent_attention"
-                  "\trf_density\trf_target_density\trf_lambda\trf_eb\trf_tb\trf_lb\trf_mean_active\trf_effective_experts\trf_activation_entropy"
-                  "\trf_recovery_rate\trf_coactivation\trf_correlation\trf_starvation\trf_monopoly\trf_all_on\trf_all_off\trf_scale_warning"
+                  "\trf_density\trf_resonance_entropy\trf_novelty_rate\trf_low_confidence_rate\trf_exploration_rate"
+                  "\trf_train_density\trf_train_novelty_rate\trf_train_exploration_rate\trf_train_resonance_entropy"
+                  "\trf_mean_active\trf_effective_experts\trf_activation_entropy"
+                  "\trf_coactivation\trf_correlation\trf_starvation\trf_monopoly\trf_all_on\trf_all_off\trf_scale_warning"
+                  "\trf_basin_count\trf_basin_centers\trf_basin_radii\trf_basin_competence\trf_basin_evidence\trf_basin_uncertainty"
+                  "\trf_marginal_utility\trf_utility_observations"
                   "\trf_parameter_norm\trf_gradient_norm\trf_update_norm"
                   "\tprocess_rss\tparameter_bytes\toptimizer_bytes\tcuda_allocated\tcuda_reserved\tcuda_peak\n";
     }
@@ -333,27 +347,37 @@ void append_telemetry(const std::filesystem::path& path, const TelemetryRecord& 
     if (record.routing_free) {
         const auto& rf = *record.routing_free;
         write_vector(stream, rf.activation_rate); stream << '\t';
-        write_vector(stream, rf.activation_strength_mean); stream << '\t';
-        write_vector(stream, rf.activation_strength_std); stream << '\t';
-        write_vector(stream, rf.expert_bias); stream << '\t';
+        write_vector(stream, rf.resonance_probability_mean); stream << '\t';
+        write_vector(stream, rf.resonance_probability_std); stream << '\t';
+        write_vector(stream, rf.resistance_mean); stream << '\t';
         write_vector(stream, rf.compute_share); stream << '\t';
         write_vector(stream, rf.token_proposal_norm); stream << '\t';
         write_vector(stream, rf.raw_latent_proposal_norm); stream << '\t';
         write_vector(stream, rf.normalized_latent_proposal_norm); stream << '\t';
         write_vector(stream, rf.latent_attention); stream << '\t'
-            << rf.activation_density << '\t' << rf.target_density << '\t' << rf.adaptive_lambda << '\t'
-            << rf.expert_balancing_loss << '\t' << rf.routing_item_balancing_loss << '\t' << rf.balancing_loss << '\t'
+            << rf.activation_density << '\t' << rf.resonance_entropy << '\t'
+            << rf.novelty_rate << '\t' << rf.low_confidence_rate << '\t' << rf.exploration_rate << '\t'
+            << rf.training_activation_density << '\t' << rf.training_novelty_rate << '\t'
+            << rf.training_exploration_rate << '\t' << rf.training_resonance_entropy << '\t'
             << rf.mean_active_experts << '\t' << rf.effective_expert_count << '\t'
-            << rf.normalized_activation_entropy << '\t' << rf.all_off_recovery_rate << '\t';
+            << rf.normalized_activation_entropy << '\t';
         write_matrix(stream, rf.coactivation); stream << '\t';
         write_matrix(stream, rf.activation_correlation); stream << '\t'
             << rf.starvation << '\t' << rf.monopoly << '\t' << rf.all_on << '\t' << rf.all_off << '\t'
             << rf.proposal_scale_instability << '\t';
+        write_vector(stream, rf.basin_count); stream << '\t';
+        write_matrix(stream, rf.basin_centers); stream << '\t';
+        write_matrix(stream, rf.basin_radii); stream << '\t';
+        write_matrix(stream, rf.basin_competence); stream << '\t';
+        write_matrix(stream, rf.basin_evidence); stream << '\t';
+        write_matrix(stream, rf.basin_uncertainty); stream << '\t';
+        write_vector(stream, rf.marginal_utility); stream << '\t';
+        write_vector(stream, rf.utility_observations); stream << '\t';
         write_vector(stream, rf.parameter_norm); stream << '\t';
         write_vector(stream, rf.gradient_norm); stream << '\t';
         write_vector(stream, rf.update_norm); stream << '\t';
     } else {
-        for (int column = 0; column < 29; ++column) stream << '\t';
+        for (int column = 0; column < 41; ++column) stream << '\t';
     }
     stream << record.memory.process_rss_bytes << '\t'
            << record.memory.parameter_bytes << '\t' << record.memory.optimizer_bytes << '\t'

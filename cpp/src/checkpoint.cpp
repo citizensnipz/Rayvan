@@ -84,7 +84,8 @@ void save_checkpoint(
     const bool has_rng =
         progress.cpu_rng_state.has_value() ||
         progress.train_generator_state.has_value() ||
-        progress.evaluation_generator_state.has_value();
+        progress.evaluation_generator_state.has_value() ||
+        progress.cuda_rng_state.has_value();
     if (has_rng) {
         torch::serialize::OutputArchive archive;
         if (progress.cpu_rng_state) {
@@ -101,6 +102,9 @@ void save_checkpoint(
                 "evaluation_generator_state",
                 *progress.evaluation_generator_state,
                 true);
+        }
+        if (progress.cuda_rng_state) {
+            archive.write("cuda_rng_state", *progress.cuda_rng_state, true);
         }
         const auto temporary = directory / "rng.pt.tmp";
         archive.save_to(temporary.string());
@@ -174,6 +178,9 @@ CheckpointProgress load_training_checkpoint(
         if (rng_archive.try_read(
                 "evaluation_generator_state", state, true)) {
             progress.evaluation_generator_state = state;
+        }
+        if (rng_archive.try_read("cuda_rng_state", state, true)) {
+            progress.cuda_rng_state = state;
         }
     }
     return progress;

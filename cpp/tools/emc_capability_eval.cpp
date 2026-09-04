@@ -91,7 +91,7 @@ EvaluationSet load_evaluation(const std::filesystem::path& path) {
 
 struct Metrics {
     explicit Metrics(std::size_t experts = 0)
-        : activations(experts, 0.0), strength_sum(experts, 0.0), response_sum(experts, 0.0),
+        : activations(experts, 0.0), probability_sum(experts, 0.0), resistance_sum(experts, 0.0),
           token_norm_sum(experts, 0.0), latent_attention_sum(experts, 0.0),
           coactivation(experts, std::vector<double>(experts, 0.0)),
           ablation_loss_sum(experts, 0.0), ablation_correct(experts, 0),
@@ -105,11 +105,18 @@ struct Metrics {
     double loss_sum = 0.0;
     double routing_items = 0.0;
     double latent_attention_items = 0.0;
-    double recoveries = 0.0;
+    double novelty_items = 0.0;
+    double low_confidence_items = 0.0;
+    double exploration_activations = 0.0;
+    double resonance_entropy_sum = 0.0;
+    double training_activation_density = 0.0;
+    double training_novelty_rate = 0.0;
+    double training_exploration_rate = 0.0;
+    double training_resonance_entropy = 0.0;
     double elapsed_seconds = 0.0;
     std::vector<double> activations;
-    std::vector<double> strength_sum;
-    std::vector<double> response_sum;
+    std::vector<double> probability_sum;
+    std::vector<double> resistance_sum;
     std::vector<double> token_norm_sum;
     std::vector<double> latent_attention_sum;
     std::vector<std::vector<double>> coactivation;
@@ -169,10 +176,17 @@ ExampleResult evaluate_example(
         const auto items = static_cast<double>(binary.size(0) * binary.size(1));
         metrics->routing_items += items;
         metrics->latent_attention_items += items * trace.latent_attention_weights.size(2);
-        metrics->recoveries += trace.all_off_recovery.to(torch::kFloat64).sum().item<double>();
+        metrics->novelty_items += trace.novelty_mask.to(torch::kFloat64).sum().item<double>();
+        metrics->low_confidence_items += trace.low_confidence_mask.to(torch::kFloat64).sum().item<double>();
+        metrics->exploration_activations += trace.exploration_mask.to(torch::kFloat64).sum().item<double>();
+        metrics->resonance_entropy_sum += trace.resonance_entropy.item<double>() * items;
+        metrics->training_activation_density = trace.training_activation_density.item<double>();
+        metrics->training_novelty_rate = trace.training_novelty_rate.item<double>();
+        metrics->training_exploration_rate = trace.training_exploration_rate.item<double>();
+        metrics->training_resonance_entropy = trace.training_resonance_entropy.item<double>();
         add_tensor(metrics->activations, binary.sum({0, 1}));
-        add_tensor(metrics->strength_sum, trace.activation_strength.to(torch::kFloat64).sum({0, 1}));
-        add_tensor(metrics->response_sum, trace.activation_response.to(torch::kFloat64).sum({0, 1}));
+        add_tensor(metrics->probability_sum, trace.resonance_probability.to(torch::kFloat64).sum({0, 1}));
+        add_tensor(metrics->resistance_sum, trace.resistance.to(torch::kFloat64).sum({0, 1}));
         add_tensor(metrics->token_norm_sum, trace.raw_token_proposal_norm.to(torch::kFloat64).sum({0, 1}));
         add_tensor(metrics->latent_attention_sum, trace.latent_attention_weights.to(torch::kFloat64).sum({0, 1, 2}));
         const auto coactivation = binary.reshape({-1, binary.size(-1)}).transpose(0, 1).matmul(binary.reshape({-1, binary.size(-1)}));
@@ -216,6 +230,27 @@ void print_vector(const std::vector<double>& values) {
     std::cout << ']';
 }
 
+void print_tensor_vector(const torch::Tensor& tensor) {
+    const auto cpu = tensor.detach().to(torch::kCPU, torch::kFloat64).contiguous().reshape({-1});
+    std::cout << '[';
+    const auto* values = cpu.const_data_ptr<double>();
+    for (std::int64_t index = 0; index < cpu.numel(); ++index) {
+        if (index) std::cout << ',';
+        std::cout << values[index];
+    }
+    std::cout << ']';
+}
+
+void print_tensor_matrix(const torch::Tensor& tensor) {
+    const auto cpu = tensor.detach().to(torch::kCPU, torch::kFloat64).contiguous();
+    std::cout << '[';
+    for (std::int64_t row = 0; row < cpu.size(0); ++row) {
+        if (row) std::cout << ',';
+        print_tensor_vector(cpu.select(0, row));
+    }
+    std::cout << ']';
+}
+
 std::vector<double> divided(const std::vector<double>& values, double denominator) {
     auto result = values;
     for (auto& value : result) value = safe_divide(value, denominator);
@@ -253,15 +288,22 @@ void print_metrics(const Metrics& metrics, const std::vector<std::string>& exper
               << ",\"normalized_assignment_entropy\":" << safe_divide(assignment_entropy, std::log(static_cast<double>(experts.size())))
               << ",\"effective_experts\":" << std::exp(assignment_entropy)
               << ",\"normalized_binary_election_entropy\":" << safe_divide(election_entropy, std::log(2.0))
-              << ",\"recovery_rate\":" << safe_divide(metrics.recoveries, metrics.routing_items)
+              << ",\"resonance_entropy\":" << safe_divide(metrics.resonance_entropy_sum, metrics.routing_items)
+              << ",\"novelty_rate\":" << safe_divide(metrics.novelty_items, metrics.routing_items)
+              << ",\"low_confidence_rate\":" << safe_divide(metrics.low_confidence_items, metrics.routing_items)
+              << ",\"exploration_rate\":" << safe_divide(metrics.exploration_activations, metrics.routing_items * experts.size())
+              << ",\"training_activation_density\":" << metrics.training_activation_density
+              << ",\"training_novelty_rate\":" << metrics.training_novelty_rate
+              << ",\"training_exploration_rate\":" << metrics.training_exploration_rate
+              << ",\"training_resonance_entropy\":" << metrics.training_resonance_entropy
               << ",\"dominant_expert\":\"" << experts[dominant] << "\""
               << ",\"dominant_share\":" << shares[dominant]
               << ",\"starvation\":" << (std::any_of(rates.begin(), rates.end(), [](double value) { return value < 0.01; }) ? "true" : "false")
               << ",\"monopoly\":" << (shares[dominant] > 0.80 ? "true" : "false")
-              << ",\"strength_mean\":";
-    print_vector(divided(metrics.strength_sum, metrics.routing_items));
-    std::cout << ",\"response_mean\":";
-    print_vector(divided(metrics.response_sum, metrics.routing_items));
+              << ",\"resonance_probability_mean\":";
+    print_vector(divided(metrics.probability_sum, metrics.routing_items));
+    std::cout << ",\"resistance_mean\":";
+    print_vector(divided(metrics.resistance_sum, metrics.routing_items));
     std::cout << ",\"token_proposal_norm\":";
     print_vector(divided(metrics.token_norm_sum, metrics.routing_items));
     std::cout << ",\"latent_attention\":";
@@ -312,8 +354,14 @@ std::pair<double, double> mutual_information(const std::vector<Metrics>& lanes) 
 
 int main(int argc, char** argv) {
     try {
-        if (argc < 3) throw std::invalid_argument("usage: rayvan-emc-capability-eval <checkpoint> <evaluation.rvcap> [ablation-examples-per-capability]");
+        if (argc < 3) throw std::invalid_argument("usage: rayvan-emc-capability-eval <checkpoint> <evaluation.rvcap> [ablation-examples-per-capability] [output.json]");
         const auto ablation_limit = argc > 3 ? std::stoll(argv[3]) : 8;
+        std::ofstream output_file;
+        if (argc > 4) {
+            output_file.open(argv[4], std::ios::binary | std::ios::trunc);
+            if (!output_file) throw std::runtime_error("cannot open capability output file");
+            std::cout.rdbuf(output_file.rdbuf());
+        }
         if (ablation_limit < 0 || !torch::cuda::is_available()) throw std::runtime_error("nonnegative ablation count and CUDA are required");
         const std::filesystem::path checkpoint(argv[1]);
         const auto config = emc::load_model_config(checkpoint / "model.rvcfg");
@@ -389,12 +437,19 @@ int main(int argc, char** argv) {
             overall.loss_sum += lane.loss_sum;
             overall.routing_items += lane.routing_items;
             overall.latent_attention_items += lane.latent_attention_items;
-            overall.recoveries += lane.recoveries;
+            overall.novelty_items += lane.novelty_items;
+            overall.low_confidence_items += lane.low_confidence_items;
+            overall.exploration_activations += lane.exploration_activations;
+            overall.resonance_entropy_sum += lane.resonance_entropy_sum;
             overall.elapsed_seconds += lane.elapsed_seconds;
+            overall.training_activation_density = lane.training_activation_density;
+            overall.training_novelty_rate = lane.training_novelty_rate;
+            overall.training_exploration_rate = lane.training_exploration_rate;
+            overall.training_resonance_entropy = lane.training_resonance_entropy;
             for (std::size_t expert = 0; expert < experts.size(); ++expert) {
                 overall.activations[expert] += lane.activations[expert];
-                overall.strength_sum[expert] += lane.strength_sum[expert];
-                overall.response_sum[expert] += lane.response_sum[expert];
+                overall.probability_sum[expert] += lane.probability_sum[expert];
+                overall.resistance_sum[expert] += lane.resistance_sum[expert];
                 overall.token_norm_sum[expert] += lane.token_norm_sum[expert];
                 overall.latent_attention_sum[expert] += lane.latent_attention_sum[expert];
             overall.ablation_loss_sum[expert] += lane.ablation_loss_sum[expert];
@@ -408,12 +463,9 @@ int main(int argc, char** argv) {
         }
         const auto [information, normalized_information] = mutual_information(lanes);
         const auto& collective = *model.module()->routing_free_collective();
-        std::vector<double> biases;
         std::vector<double> parameter_norms;
-        biases.reserve(experts.size());
         parameter_norms.reserve(experts.size());
         for (const auto& expert : collective.experts()) {
-            biases.push_back(expert->activation_bias().item<double>());
             double squared = 0.0;
             for (const auto& parameter : expert->parameters()) squared += parameter.detach().to(torch::kCPU, torch::kFloat64).pow(2).sum().item<double>();
             parameter_norms.push_back(std::sqrt(squared));
@@ -423,12 +475,29 @@ int main(int argc, char** argv) {
                   << "{\n  \"checkpoint_tokens\":" << progress.tokens_processed
                   << ",\n  \"checkpoint_step\":" << progress.step
                   << ",\n  \"evaluation_wall_seconds\":" << total_elapsed
-                  << ",\n  \"adaptive_lambda\":" << collective.adaptive_lambda().item<double>()
-                  << ",\n  \"expert_bias\":";
-        print_vector(biases);
-        std::cout << ",\n  \"expert_parameter_norm\":";
+                  << ",\n  \"expert_parameter_norm\":";
         print_vector(parameter_norms);
-        std::cout << ",\n  \"capability_expert_mutual_information_nats\":" << information
+        std::cout << ",\n  \"competence_memory\":{\n";
+        for (std::size_t index = 0; index < experts.size(); ++index) {
+            const auto& expert = collective.experts()[index];
+            std::cout << "    \"" << experts[index] << "\":{\"basin_count\":"
+                      << expert->basin_initialized().sum().item<std::int64_t>()
+                      << ",\"centers\":";
+            print_tensor_matrix(expert->basin_centers());
+            std::cout << ",\"radii\":";
+            print_tensor_vector(expert->basin_radii());
+            std::cout << ",\"competence\":";
+            print_tensor_vector(expert->basin_competence());
+            std::cout << ",\"evidence\":";
+            print_tensor_vector(expert->basin_evidence());
+            std::cout << ",\"uncertainty\":";
+            print_tensor_vector(expert->basin_uncertainty());
+            std::cout << ",\"marginal_utility\":" << expert->marginal_utility().item<double>()
+                      << ",\"utility_observations\":" << expert->utility_observations().item<double>()
+                      << "}" << (index + 1 == experts.size() ? "\n" : ",\n");
+        }
+        std::cout << "  }"
+                  << ",\n  \"capability_expert_mutual_information_nats\":" << information
                   << ",\n  \"capability_expert_normalized_mutual_information\":" << normalized_information
                   << ",\n  \"overall\":";
         print_metrics(overall, experts);

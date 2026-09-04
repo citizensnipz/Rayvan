@@ -136,7 +136,8 @@ int main(int argc, char** argv) {
         auto latent = torch::randn({4, config.shared_state_slots, config.latent_dim}, float_options);
         auto proposals = torch::randn({4, 4, config.shared_state_slots, config.latent_dim}, float_options);
         auto active = torch::ones({4, 4}, bool_options);
-        auto representation = torch::randn({4, config.latent_dim}, float_options);
+        auto representation = torch::randn({4, config.competence_embedding_dim}, float_options);
+        representation = representation / representation.norm(2, -1, true).clamp_min(1e-8);
         auto indices = torch::arange(4, long_options);
         auto tokens = torch::randint(config.vocab_size, {4, 256}, long_options);
         auto targets = torch::roll(tokens, {-1}, {1});
@@ -149,13 +150,13 @@ int main(int argc, char** argv) {
         });
         const auto gate_ms = measure_ms(iterations, [&] {
             for (const auto& expert : collective.experts()) {
-                (void)expert->activation(representation, config.routing_theta);
+                (void)expert->match_competence(representation);
             }
         });
         std::vector<torch::Tensor> dispatch_masks;
         dispatch_masks.reserve(collective.experts().size());
         for (const auto& expert : collective.experts()) {
-            dispatch_masks.push_back(expert->activation(representation, config.routing_theta).active);
+            dispatch_masks.push_back(expert->match_competence(representation).resistance < config.competence_rho);
         }
         const auto sparse_dispatch_ms = measure_ms(iterations, [&] {
             for (const auto& mask : dispatch_masks) (void)torch::nonzero(mask).reshape({-1});

@@ -15,22 +15,32 @@ One N2 event performs:
 
 The native population is a variable-length ordered list of GPT, SSM, recurrent, and Delta N1 nodes. Repeated families construct independent modules and parameters. Delta uses the custom CUDA path on CUDA tensors and a straightforward ATen recurrence as its CPU test/reference path; there is no silent CUDA fallback.
 
-## Routing-free experimental path
+## Competence-basin routing-free path
 
 `N1Mode::routing_free_collective` is a separate construction path and does not
 register the legacy position embedding, Nexus, Integrator, or legacy N1 module
 list. Token embeddings first pass through pre-norm causal grouped-query
 attention with RoPE (eight query heads and two KV heads by default). For every
-sequence chunk, each expert independently computes a rank-16 response and a
-thresholded activation. Active request rows alone execute that expert's two
-native blocks; persistent block state is gathered/scattered by row.
+sequence chunk, a learned MLP projects the pooled shared latent to an L2-normalized
+computational-need embedding. Each expert independently matches that embedding
+against its nearest checkpointed competence basin and converts normalized
+distance minus demonstrated competence into a resonance probability. Training
+samples independent Bernoulli activations; deterministic evaluation applies a
+local resistance threshold. Novel or low-confidence inputs may add one expert
+sampled from matched-basin uncertainty divided by the square root of evidence.
+Active request rows alone execute that expert's unchanged two native blocks;
+persistent block state is gathered/scattered by row.
 
 Strength-weighted token proposals form a residual update. Expert-local compact
 latent proposals update four persistent shared slots through masked multi-head
 attention and a gated residual. No Top-K, Nexus score, cross-expert activation
-softmax, or CPU routing decision exists in this path. See
-[`routing-free-n1.md`](routing-free-n1.md) for equations, tensor behavior,
-telemetry, measurements, and the 50k stability decision.
+softmax, load-balancing objective, or CPU routing decision exists in this path.
+The normal backward pass supplies each active proposal's first-order marginal
+utility; positive utility shapes basin centers and radii, while all observations
+update competence, evidence, and uncertainty. See
+[`competence-basin-routing.md`](competence-basin-routing.md) for equations,
+telemetry, and the 1M-token capability result. The predecessor norm-gate study
+is retained in [`routing-free-n1.md`](routing-free-n1.md).
 
 ## Frozen mathematical behavior
 

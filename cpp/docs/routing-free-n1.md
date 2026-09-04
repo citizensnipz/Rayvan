@@ -1,5 +1,9 @@
 # Routing-free heterogeneous N1 experiment
 
+> Historical predecessor: this document describes the independent norm-gate
+> experiment. The current routing-free path uses competence basins; see
+> [`competence-basin-routing.md`](competence-basin-routing.md).
+
 ## Outcome
 
 The native runtime now contains a second, isolated N1 architecture:

@@ -22,6 +22,7 @@ struct CheckpointProgress {
     std::optional<Tensor> cpu_rng_state;
     std::optional<Tensor> train_generator_state;
     std::optional<Tensor> evaluation_generator_state;
+    std::optional<Tensor> cuda_rng_state;
 };
 
 // A checkpoint is a directory: manifest.rayvan, model.pt and optional

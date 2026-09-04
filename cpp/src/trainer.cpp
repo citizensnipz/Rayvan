@@ -2,6 +2,7 @@
 
 #include <ATen/CPUGeneratorImpl.h>
 #include <ATen/autocast_mode.h>
+#include <ATen/cuda/CUDAGeneratorImpl.h>
 #include <torch/nn/utils/clip_grad.h>
 
 #include <algorithm>
@@ -87,6 +88,11 @@ CheckpointProgress Trainer::resume(
         evaluation_generator_.set_state(
             *progress.evaluation_generator_state);
     }
+    if (progress.cuda_rng_state && device_.is_cuda()) {
+        auto cuda_generator =
+            at::cuda::detail::getDefaultCUDAGenerator(device_.index());
+        cuda_generator.set_state(*progress.cuda_rng_state);
+    }
     resumed_step_ = progress.step;
     resumed_tokens_ = progress.tokens_processed;
     resumed_best_validation_ = progress.best_validation_loss;
@@ -156,6 +162,9 @@ TrainingResult Trainer::train(
             }
             accumulated_loss += loss.detach().to(torch::kFloat32).item<double>();
             (loss / static_cast<double>(config_.gradient_accumulation_steps)).backward();
+            if (model_.config().n1_mode == N1Mode::routing_free_collective) {
+                model_.module()->routing_free_collective()->update_competence_from_backward();
+            }
         }
         const auto gradient_norm = torch::nn::utils::clip_grad_norm_(
             model_.parameters(), config_.gradient_clip_norm);
@@ -258,6 +267,10 @@ TrainingResult Trainer::train(
                     train_generator_.get_state();
                 progress.evaluation_generator_state =
                     evaluation_generator_.get_state();
+                if (device_.is_cuda()) {
+                    progress.cuda_rng_state =
+                        at::cuda::detail::getDefaultCUDAGenerator(device_.index()).get_state();
+                }
                 save_checkpoint(checkpoint_directory / "latest", model_, &optimizer_, progress);
                 if (validation_loss < best_validation) save_checkpoint(checkpoint_directory / "best", model_, &optimizer_, progress);
                 while (next_milestone < config_.milestones.size() && tokens_processed >= config_.milestones[next_milestone]) {

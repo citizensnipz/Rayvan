@@ -45,6 +45,37 @@ struct ModelConfig {
     std::int64_t gqa_kv_heads = 2;
     double rope_base = 10'000.0;
     RoutingGranularity routing_granularity = RoutingGranularity::chunk;
+    // Competence-basin routing. The older independent-norm gate fields remain
+    // below only so v3 checkpoints can still be described and loaded.
+    std::int64_t competence_embedding_dim = 16;
+    std::int64_t competence_basin_count = 4;
+    // Utilities are measured in mean-loss units (~1e-3 in the reference
+    // configuration); lambda_q converts them to normalized-distance units.
+    double competence_lambda_q = 64.0;
+    double competence_rho = 1.0;
+    double competence_tau = 0.25;
+    double competence_rho_novel = 2.0;
+    double competence_alpha_q = 0.05;
+    double competence_eta_mu = 1.0;
+    double competence_eta_r = 0.25;
+    double competence_radius_init = 0.50;
+    double competence_radius_min = 0.10;
+    double competence_radius_max = 2.00;
+    double competence_utility_clip = 1.0;
+    // Restores the magnitude removed by mean loss and proposal-dimensionality
+    // normalization while leaving the clipped utility dimensionless.
+    double competence_utility_scale = 8'192.0;
+    double competence_sigma_initial = 1.0;
+    double competence_sigma_floor = 0.05;
+    double competence_variance_alpha = 0.05;
+    std::int64_t competence_min_evidence = 32;
+    double competence_confidence_sigma = 0.35;
+    std::int64_t competence_replacement_max_evidence = 32;
+    double competence_replacement_max_q = 0.0;
+    std::int64_t competence_novel_exploration_samples = 1;
+    double competence_compute_cost_weight = 0.0;
+
+    // Deprecated v3 norm-gate configuration (unused by competence routing).
     std::int64_t activation_rank = 16;
     double routing_target_density = 0.50;
     double routing_mu = 0.50;

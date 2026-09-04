@@ -131,6 +131,11 @@ void ModelConfig::validate() const {
         {"n1_depth", n1_depth}, {"top_k", top_k},
         {"gqa_query_heads", gqa_query_heads}, {"gqa_kv_heads", gqa_kv_heads},
         {"activation_rank", activation_rank},
+        {"competence_embedding_dim", competence_embedding_dim},
+        {"competence_basin_count", competence_basin_count},
+        {"competence_min_evidence", competence_min_evidence},
+        {"competence_replacement_max_evidence", competence_replacement_max_evidence},
+        {"competence_novel_exploration_samples", competence_novel_exploration_samples},
         {"delta_heads", delta_heads}, {"delta_max_scratch_bytes", delta_max_scratch_bytes}};
     for (const auto& [name, value] : positive) {
         if (value <= 0) throw std::invalid_argument(std::string(name) + " must be positive");
@@ -153,6 +158,17 @@ void ModelConfig::validate() const {
     if (routing_mu < 0.0 || routing_mu > 1.0 || routing_lambda_initial <= 0.0 ||
         routing_adaptation_rate <= 0.0 || routing_lambda_max <= 0.0 || routing_theta < 0.0) {
         throw std::invalid_argument("invalid routing-free controller configuration");
+    }
+    if (competence_lambda_q < 0.0 || competence_tau <= 0.0 ||
+        competence_alpha_q <= 0.0 || competence_alpha_q > 1.0 ||
+        competence_eta_mu < 0.0 || competence_eta_r < 0.0 ||
+        competence_radius_min <= 0.0 || competence_radius_init < competence_radius_min ||
+        competence_radius_max < competence_radius_init || competence_utility_clip <= 0.0 ||
+        competence_utility_scale <= 0.0 || competence_sigma_initial <= 0.0 ||
+        competence_sigma_floor <= 0.0 || competence_sigma_floor > competence_sigma_initial ||
+        competence_variance_alpha <= 0.0 || competence_variance_alpha > 1.0 ||
+        competence_confidence_sigma <= 0.0 || competence_compute_cost_weight < 0.0) {
+        throw std::invalid_argument("invalid competence-basin routing configuration");
     }
     if (n1_mode == N1Mode::routing_free_collective && routing_granularity != RoutingGranularity::chunk) {
         throw std::invalid_argument("heterogeneous routing-free N1 currently requires chunk granularity");
@@ -198,7 +214,7 @@ void save_model_config(const ModelConfig& config, const std::filesystem::path& p
     config.validate();
     std::ofstream stream(path, std::ios::binary | std::ios::trunc);
     if (!stream) throw std::runtime_error("cannot write model config: " + path.string());
-    stream << "format=rayvan-emc-config-v3\n"
+    stream << "format=rayvan-emc-config-v4\n"
            << "n1_mode=" << to_string(config.n1_mode) << '\n'
            << "latent_dim=" << config.latent_dim << '\n'
            << "vocab_size=" << config.vocab_size << '\n'
@@ -228,6 +244,29 @@ void save_model_config(const ModelConfig& config, const std::filesystem::path& p
            << "routing_adaptation_rate=" << config.routing_adaptation_rate << '\n'
            << "routing_lambda_max=" << config.routing_lambda_max << '\n'
            << "routing_theta=" << config.routing_theta << '\n'
+           << "competence_embedding_dim=" << config.competence_embedding_dim << '\n'
+           << "competence_basin_count=" << config.competence_basin_count << '\n'
+           << "competence_lambda_q=" << config.competence_lambda_q << '\n'
+           << "competence_rho=" << config.competence_rho << '\n'
+           << "competence_tau=" << config.competence_tau << '\n'
+           << "competence_rho_novel=" << config.competence_rho_novel << '\n'
+           << "competence_alpha_q=" << config.competence_alpha_q << '\n'
+           << "competence_eta_mu=" << config.competence_eta_mu << '\n'
+           << "competence_eta_r=" << config.competence_eta_r << '\n'
+           << "competence_radius_init=" << config.competence_radius_init << '\n'
+           << "competence_radius_min=" << config.competence_radius_min << '\n'
+           << "competence_radius_max=" << config.competence_radius_max << '\n'
+           << "competence_utility_clip=" << config.competence_utility_clip << '\n'
+           << "competence_utility_scale=" << config.competence_utility_scale << '\n'
+           << "competence_sigma_initial=" << config.competence_sigma_initial << '\n'
+           << "competence_sigma_floor=" << config.competence_sigma_floor << '\n'
+           << "competence_variance_alpha=" << config.competence_variance_alpha << '\n'
+           << "competence_min_evidence=" << config.competence_min_evidence << '\n'
+           << "competence_confidence_sigma=" << config.competence_confidence_sigma << '\n'
+           << "competence_replacement_max_evidence=" << config.competence_replacement_max_evidence << '\n'
+           << "competence_replacement_max_q=" << config.competence_replacement_max_q << '\n'
+           << "competence_novel_exploration_samples=" << config.competence_novel_exploration_samples << '\n'
+           << "competence_compute_cost_weight=" << config.competence_compute_cost_weight << '\n'
            << "tie_embeddings=" << (config.tie_embeddings ? 1 : 0) << '\n'
            << "population=";
     for (std::size_t index = 0; index < config.population.size(); ++index) {
@@ -249,11 +288,13 @@ ModelConfig load_model_config(const std::filesystem::path& path) {
     }
     const auto format = fields["format"];
     if (format != "rayvan-emc-config-v1" && format != "rayvan-emc-config-v2" &&
-        format != "rayvan-emc-config-v3") {
+        format != "rayvan-emc-config-v3" && format != "rayvan-emc-config-v4") {
         throw std::runtime_error("unsupported model config format");
     }
     ModelConfig config;
-    if (format == "rayvan-emc-config-v3") config.n1_mode = n1_mode_from_string(fields.at("n1_mode"));
+    if (format == "rayvan-emc-config-v3" || format == "rayvan-emc-config-v4") {
+        config.n1_mode = n1_mode_from_string(fields.at("n1_mode"));
+    }
     config.latent_dim = parse_integer<std::int64_t>(fields, "latent_dim");
     config.vocab_size = parse_integer<std::int64_t>(fields, "vocab_size");
     config.max_sequence_length = parse_integer<std::int64_t>(fields, "max_sequence_length");
@@ -263,7 +304,8 @@ ModelConfig load_model_config(const std::filesystem::path& path) {
     config.state_space_dim = parse_integer<std::int64_t>(fields, "state_space_dim");
     config.state_space_kernel_size = parse_integer<std::int64_t>(fields, "state_space_kernel_size");
     config.recurrent_dim = parse_integer<std::int64_t>(fields, "recurrent_dim");
-    if (format == "rayvan-emc-config-v2" || format == "rayvan-emc-config-v3") {
+    if (format == "rayvan-emc-config-v2" || format == "rayvan-emc-config-v3" ||
+        format == "rayvan-emc-config-v4") {
         config.delta_internal_dim = parse_integer<std::int64_t>(fields, "delta_internal_dim");
         config.delta_heads = parse_integer<std::int64_t>(fields, "delta_heads");
         config.delta_ffn_dim = parse_integer<std::int64_t>(fields, "delta_ffn_dim");
@@ -273,7 +315,7 @@ ModelConfig load_model_config(const std::filesystem::path& path) {
     config.shared_state_slots = parse_integer<std::int64_t>(fields, "shared_state_slots");
     config.n1_depth = parse_integer<std::int64_t>(fields, "n1_depth");
     config.top_k = parse_integer<std::int64_t>(fields, "top_k");
-    if (format == "rayvan-emc-config-v3") {
+    if (format == "rayvan-emc-config-v3" || format == "rayvan-emc-config-v4") {
         config.gqa_query_heads = parse_integer<std::int64_t>(fields, "gqa_query_heads");
         config.gqa_kv_heads = parse_integer<std::int64_t>(fields, "gqa_kv_heads");
         config.rope_base = parse_double(fields, "rope_base");
@@ -285,6 +327,31 @@ ModelConfig load_model_config(const std::filesystem::path& path) {
         config.routing_adaptation_rate = parse_double(fields, "routing_adaptation_rate");
         config.routing_lambda_max = parse_double(fields, "routing_lambda_max");
         config.routing_theta = parse_double(fields, "routing_theta");
+    }
+    if (format == "rayvan-emc-config-v4") {
+        config.competence_embedding_dim = parse_integer<std::int64_t>(fields, "competence_embedding_dim");
+        config.competence_basin_count = parse_integer<std::int64_t>(fields, "competence_basin_count");
+        config.competence_lambda_q = parse_double(fields, "competence_lambda_q");
+        config.competence_rho = parse_double(fields, "competence_rho");
+        config.competence_tau = parse_double(fields, "competence_tau");
+        config.competence_rho_novel = parse_double(fields, "competence_rho_novel");
+        config.competence_alpha_q = parse_double(fields, "competence_alpha_q");
+        config.competence_eta_mu = parse_double(fields, "competence_eta_mu");
+        config.competence_eta_r = parse_double(fields, "competence_eta_r");
+        config.competence_radius_init = parse_double(fields, "competence_radius_init");
+        config.competence_radius_min = parse_double(fields, "competence_radius_min");
+        config.competence_radius_max = parse_double(fields, "competence_radius_max");
+        config.competence_utility_clip = parse_double(fields, "competence_utility_clip");
+        config.competence_utility_scale = parse_double(fields, "competence_utility_scale");
+        config.competence_sigma_initial = parse_double(fields, "competence_sigma_initial");
+        config.competence_sigma_floor = parse_double(fields, "competence_sigma_floor");
+        config.competence_variance_alpha = parse_double(fields, "competence_variance_alpha");
+        config.competence_min_evidence = parse_integer<std::int64_t>(fields, "competence_min_evidence");
+        config.competence_confidence_sigma = parse_double(fields, "competence_confidence_sigma");
+        config.competence_replacement_max_evidence = parse_integer<std::int64_t>(fields, "competence_replacement_max_evidence");
+        config.competence_replacement_max_q = parse_double(fields, "competence_replacement_max_q");
+        config.competence_novel_exploration_samples = parse_integer<std::int64_t>(fields, "competence_novel_exploration_samples");
+        config.competence_compute_cost_weight = parse_double(fields, "competence_compute_cost_weight");
     }
     config.tie_embeddings = parse_integer<int>(fields, "tie_embeddings") != 0;
     config.population.clear();

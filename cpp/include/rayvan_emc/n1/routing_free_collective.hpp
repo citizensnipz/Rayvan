@@ -20,11 +20,14 @@ struct RoutingItem {
     std::int64_t chunk_index = 0;
 };
 
-struct ExpertActivation {
-    Tensor internal_response; // [B,R]
-    Tensor response_norm;     // [B]
-    Tensor strength;          // [B]
-    Tensor active;            // [B], bool
+struct BasinMatch {
+    Tensor basin_index;       // [B], int64
+    Tensor distance;          // [B], normalized squared distance
+    Tensor competence;        // [B]
+    Tensor evidence;          // [B]
+    Tensor uncertainty;       // [B]
+    Tensor initialized;       // [B], bool
+    Tensor resistance;        // [B]
 };
 
 struct CollectiveExpertOutput {
@@ -41,14 +44,28 @@ public:
         std::int64_t expert_id,
         std::string name);
 
-    ExpertActivation activation(const Tensor& routing_representation, double theta);
+    BasinMatch match_competence(const Tensor& need_embedding) const;
+    void update_competence(
+        const Tensor& need_embedding,
+        const Tensor& matched_basin,
+        const Tensor& utility,
+        const Tensor& active,
+        const Tensor& exploratory,
+        const Tensor& novel);
     std::shared_ptr<N1PersistentState> initialize_state(const Tensor& shared_latent);
     CollectiveExpertOutput forward_routing_item(
         const RoutingItem& item,
         const Tensor& active_request_indices,
         const std::shared_ptr<N1PersistentState>& state);
 
-    [[nodiscard]] const Tensor& activation_bias() const noexcept { return activation_bias_; }
+    [[nodiscard]] const Tensor& basin_centers() const noexcept { return basin_centers_; }
+    [[nodiscard]] const Tensor& basin_radii() const noexcept { return basin_radii_; }
+    [[nodiscard]] const Tensor& basin_competence() const noexcept { return basin_competence_; }
+    [[nodiscard]] const Tensor& basin_evidence() const noexcept { return basin_evidence_; }
+    [[nodiscard]] const Tensor& basin_uncertainty() const noexcept { return basin_uncertainty_; }
+    [[nodiscard]] const Tensor& basin_initialized() const noexcept { return basin_initialized_; }
+    [[nodiscard]] const Tensor& marginal_utility() const noexcept { return marginal_utility_; }
+    [[nodiscard]] const Tensor& utility_observations() const noexcept { return utility_observations_; }
     [[nodiscard]] const std::shared_ptr<N1Node>& body_module() const noexcept { return body_; }
     [[nodiscard]] N1Family family() const noexcept { return family_; }
     [[nodiscard]] std::int64_t parameter_count() const;
@@ -57,9 +74,17 @@ private:
     ModelConfig config_;
     N1Family family_;
     std::shared_ptr<N1Node> body_;
-    torch::nn::Linear activation_projection{nullptr};
-    Tensor activation_bias_;
     torch::nn::Linear latent_proposal_projection{nullptr};
+    Tensor basin_centers_;
+    Tensor basin_radii_;
+    Tensor basin_competence_;
+    Tensor basin_evidence_;
+    Tensor basin_utility_variance_;
+    Tensor basin_uncertainty_;
+    Tensor basin_initialized_;
+    Tensor marginal_utility_;
+    Tensor utility_observations_;
+    Tensor compute_cost_;
 };
 
 struct RoutingFreeCollectiveState {
@@ -68,25 +93,37 @@ struct RoutingFreeCollectiveState {
 };
 
 struct RoutingFreeTrace {
-    Tensor activation_response;              // [B,Q,N]
-    Tensor activation_strength;              // [B,Q,N]
+    Tensor need_embedding;                   // [B,Q,Z]
+    Tensor matched_basin;                    // [B,Q,N]
+    Tensor basin_distance;                   // [B,Q,N]
+    Tensor resistance;                       // [B,Q,N]
+    Tensor resonance_probability;            // [B,Q,N]
     Tensor activation_mask;                  // [B,Q,N]
-    Tensor all_off_recovery;                  // [B,Q]
+    Tensor novelty_mask;                     // [B,Q]
+    Tensor low_confidence_mask;               // [B,Q]
+    Tensor exploration_mask;                 // [B,Q,N]
     Tensor raw_token_proposal_norm;           // [B,Q,N]
     Tensor raw_latent_proposal_norm;          // [B,Q,N]
     Tensor normalized_latent_proposal_norm;   // [B,Q,N]
     Tensor latent_attention_weights;          // [B,Q,M,N]
     Tensor latent_norm;                       // [B,Q]
-    Tensor expert_biases;                     // [N]
     Tensor activation_density;                // scalar
-    Tensor target_density;                    // scalar
-    Tensor adaptive_lambda;                   // scalar used for this forward
-    Tensor expert_balancing_loss;             // scalar, unweighted
-    Tensor routing_item_balancing_loss;       // scalar, unweighted
-    Tensor balancing_loss;                    // scalar, unweighted
+    Tensor resonance_entropy;                 // scalar mean Bernoulli entropy
     Tensor coactivation_matrix;               // [N,N]
     Tensor activation_correlation;            // [N,N]
     Tensor compute_share;                     // [N]
+    Tensor basin_centers;                     // [N,K,Z]
+    Tensor basin_radii;                       // [N,K]
+    Tensor basin_competence;                  // [N,K]
+    Tensor basin_evidence;                    // [N,K]
+    Tensor basin_uncertainty;                 // [N,K]
+    Tensor basin_initialized;                 // [N,K]
+    Tensor marginal_utility;                  // [N]
+    Tensor utility_observations;              // [N]
+    Tensor training_activation_density;       // scalar, cumulative
+    Tensor training_novelty_rate;             // scalar, cumulative
+    Tensor training_exploration_rate;         // scalar, cumulative
+    Tensor training_resonance_entropy;        // scalar, cumulative
 };
 
 struct RoutingFreeCollectiveOutput {
@@ -113,7 +150,9 @@ public:
     }
     [[nodiscard]] SharedCausalGQA& shared_attention() noexcept { return shared_attention_; }
     [[nodiscard]] const SharedCausalGQA& shared_attention() const noexcept { return shared_attention_; }
-    [[nodiscard]] const Tensor& adaptive_lambda() const noexcept { return adaptive_lambda_; }
+    // Consumes gradients retained from the ordinary language-model backward
+    // pass and updates non-gradient competence memory.
+    void update_competence_from_backward();
     // Profiling-only entry point used by the native CUDA benchmark.
     Tensor diagnostic_integrate_latent(
         const Tensor& latent,
@@ -127,7 +166,18 @@ private:
         Tensor normalized_proposal_norm;
     };
 
-    Tensor routing_representation(const RoutingItem& item);
+    struct PendingCompetenceObservation {
+        Tensor need_embedding;
+        Tensor matched_basin;
+        Tensor resonance_probability;
+        Tensor activation_mask;
+        Tensor exploration_mask;
+        Tensor novelty_mask;
+        Tensor token_proposals;
+        Tensor output_state;
+    };
+
+    Tensor computational_need(const RoutingItem& item);
     LatentIntegration integrate_latent(
         const Tensor& latent,
         const Tensor& proposals,
@@ -135,8 +185,9 @@ private:
 
     ModelConfig config_;
     SharedCausalGQA shared_attention_{nullptr};
-    RMSNorm routing_context_norm{nullptr};
     RMSNorm routing_latent_norm{nullptr};
+    torch::nn::Linear need_projection_in{nullptr};
+    torch::nn::Linear need_projection_out{nullptr};
     torch::nn::Linear latent_initializer{nullptr};
     torch::nn::ModuleList experts_;
     std::vector<std::shared_ptr<CollectiveExpertImpl>> expert_handles_;
@@ -147,7 +198,12 @@ private:
     torch::nn::Linear latent_value_projection{nullptr};
     torch::nn::Linear latent_output_projection{nullptr};
     torch::nn::Linear latent_gate_projection{nullptr};
-    Tensor adaptive_lambda_;
+    std::vector<PendingCompetenceObservation> pending_competence_;
+    Tensor training_routing_items_;
+    Tensor training_activation_count_;
+    Tensor training_novelty_count_;
+    Tensor training_exploration_count_;
+    Tensor training_entropy_sum_;
 };
 TORCH_MODULE(RoutingFreeCollective);
 
