@@ -25,7 +25,8 @@ def test_research_schema_uses_the_real_capability_registry() -> None:
     ]
     assert {row["id"] for row in schema["expert_families"]} == {"gpt", "ssm", "recurrent", "delta"}
     labels = {row["id"]: row["label"] for row in schema["architectures"]}
-    assert labels["emc"] == "Sequential EMC"
+    assert labels["emc"] == "Sequential EMC — Geometric"
+    assert labels["sequential_module_aware_emc"] == "Sequential EMC — Legacy Module-Aware"
     assert labels["legacy_parallel_emc"] == "Legacy Parallel Top-K EMC"
 
 
@@ -69,7 +70,11 @@ def test_tiny_cpu_run_streams_and_persists_full_run(tmp_path) -> None:
         suite="capability_10",
         architecture="emc",
         experts={"gpt": 1, "ssm": 0, "recurrent": 0, "delta": 0},
-        routing=RoutingConfig(trajectory_steps=1),
+        routing=RoutingConfig(
+            trajectory_steps=1,
+            counterfactual_probe_preset="fixed",
+            counterfactual_probe_fixed_rate=1.0,
+        ),
         model=ModelConfig(
             preset="custom",
             fairness_mode="custom",
@@ -103,12 +108,16 @@ def test_tiny_cpu_run_streams_and_persists_full_run(tmp_path) -> None:
     assert {event["type"] for event in events} >= {"run_started", "training_step", "validation", "diagnostic_result", "run_completed"}
     assert (run / "config.json").is_file()
     assert (run / "summary.json").is_file()
+    assert (run / "geometric-routing.json").is_file()
     assert (run / "diagnostics" / "report.json").is_file()
     report = json.loads((run / "diagnostics" / "report.json").read_text())
     consistency = report["module_diagnostics"][
         "training_evaluation_routing_consistency"
     ]
     assert consistency["module_id_family_mapping_consistent"] is True
+    geometry = summary["geometric_routing"]
+    assert geometry["total_probes"] == 1
+    assert "diagnostic_views" in geometry
 
 
 def test_console_exposes_architecture_specific_routing_controls() -> None:
@@ -119,7 +128,7 @@ def test_console_exposes_architecture_specific_routing_controls() -> None:
     assert "Experts per step" in source
     assert 'config.architecture === "legacy_parallel_emc"' in source
     assert 'label="Top-K"' in source
-    assert 'if (architecture === "emc") delete routing.top_k' in source
+    assert 'architecture === "emc" || architecture === "sequential_module_aware_emc"' in source
 
 
 def test_console_renders_sequential_trajectory_telemetry() -> None:

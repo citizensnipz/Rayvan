@@ -16,7 +16,7 @@ from .checkpoint import load_training_checkpoint, save_training_checkpoint
 from .chunked import ChunkedEMCModel
 from .data import LanguageCorpus
 from .diagnostics import EMCDiagnostics, RoutingReport
-from .model import EMCModel, EMCOutput
+from .model import EMCModel, EMCOutput, SequentialEMCModel
 from .telemetry import (
     ModuleTelemetry,
     attach_causal_report,
@@ -485,13 +485,16 @@ def train_model(
                 )
                 with _autocast_context(device, precision):
                     if isinstance(model, (EMCModel, ChunkedEMCModel)):
-                        output = model(
-                            inputs,
-                            return_trace=True,
-                            balance_entropy_floor=(
-                                config.router_balance_entropy_floor
-                            ),
-                        )
+                        forward_options: dict[str, object] = {
+                            "return_trace": True,
+                            "balance_entropy_floor": config.router_balance_entropy_floor,
+                        }
+                        if isinstance(model, SequentialEMCModel):
+                            forward_options.update(
+                                counterfactual_targets=targets,
+                                training_step=step,
+                            )
+                        output = model(inputs, **forward_options)
                         if not isinstance(output, EMCOutput):
                             raise RuntimeError(
                                 "trace-enabled EMC forward did not return EMCOutput"
@@ -514,8 +517,16 @@ def train_model(
                     weighted_balance = (
                         config.router_balance_coefficient * balance_loss
                     )
+                    geometry_calibration = (
+                        output.geometry_calibration_loss
+                        * model.config.geometry_calibration_weight
+                        if isinstance(model, EMCModel)
+                        and isinstance(output, EMCOutput)
+                        and output.geometry_calibration_loss is not None
+                        else logits.new_zeros(())
+                    )
                     total_loss = (
-                        language_model_loss + weighted_balance
+                        language_model_loss + weighted_balance + geometry_calibration
                     ) / config.gradient_accumulation_steps
 
                 if not bool(torch.isfinite(total_loss.detach()).item()):
@@ -789,6 +800,7 @@ def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] |
     transitions = [[0 for _ in range(num_modules)] for _ in range(num_modules)]
     gate_values: list[float] = []
     update_values: list[float] = []
+    proposal_norm_values: list[float] = []
     contribution_sums = [0.0 for _ in range(num_modules)]
     contribution_counts = [0 for _ in range(num_modules)]
     raw_winner_counts = [0 for _ in range(num_modules)]
@@ -799,7 +811,7 @@ def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] |
     trajectory_gate_magnitudes: list[float | None] = []
     trajectory_update_magnitudes: list[float | None] = []
 
-    if output.chunk_trace is not None:
+    if output.chunk_trace is not None and hasattr(output.chunk_trace, "chunks"):
         previous: torch.Tensor | None = None
         for chunk in output.chunk_trace.chunks:
             selected = chunk.active_modules.reshape(-1, chunk.active_modules.size(-1))
@@ -826,6 +838,9 @@ def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] |
             gate_values.extend(float(v) for v in trace.gate_magnitude.reshape(-1).tolist())
             update_values.extend(
                 float(v) for v in trace.integrated_update_norm.reshape(-1).tolist()
+            )
+            proposal_norm_values.extend(
+                float(v) for v in trace.proposal_norms.reshape(-1).tolist()
             )
             contributions = trace.proposal_contributions.reshape(-1, selected.size(-1))
             for row_indices, row_values in zip(selected.tolist(), contributions.tolist()):
@@ -879,6 +894,7 @@ def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] |
             if trace is not None:
                 gate_values.extend(float(v) for v in trace.gate_magnitude.detach().cpu().reshape(-1).tolist())
                 update_values.extend(float(v) for v in trace.integrated_update_norm.detach().cpu().reshape(-1).tolist())
+                proposal_norm_values.extend(float(v) for v in trace.proposal_norms.detach().cpu().reshape(-1).tolist())
                 trajectory_gate_magnitudes.append(float(trace.gate_magnitude.float().mean().item()))
                 trajectory_update_magnitudes.append(float(trace.integrated_update_norm.float().mean().item()))
             else:
@@ -886,7 +902,7 @@ def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] |
                 trajectory_update_magnitudes.append(None)
 
     total = sum(counts)
-    return {
+    result = {
         "expert_names": names,
         "families": families,
         "selection_counts": counts,
@@ -929,11 +945,40 @@ def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] |
         "mean_update_norm": (
             sum(update_values) / len(update_values) if update_values else None
         ),
+        "mean_proposal_norm": (
+            sum(proposal_norm_values) / len(proposal_norm_values)
+            if proposal_norm_values else None
+        ),
         "mean_contribution": [
             total_value / max(count, 1)
             for total_value, count in zip(contribution_sums, contribution_counts)
         ],
     }
+    geometric_reporter = getattr(model, "geometric_routing_report", None)
+    if callable(geometric_reporter):
+        geometric = geometric_reporter()
+        if geometric is not None:
+            result["geometric_routing"] = geometric
+            for key in (
+                "total_probes",
+                "counterfactual_top1_accuracy",
+                "counterfactual_top2_accuracy",
+                "mean_routing_regret",
+                "median_routing_regret",
+                "p90_routing_regret",
+                "effectively_tied_fraction",
+                "average_best_second_loss_margin",
+                "counterfactual_win_rates",
+                "actual_routing_rates",
+                "basin_occupancy",
+                "effective_active_basins",
+                "geometry_entropy",
+                "counterfactual_matrix",
+                "per_step",
+                "prototype_drift",
+            ):
+                result[key] = geometric.get(key)
+    return result
 
 
 

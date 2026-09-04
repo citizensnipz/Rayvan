@@ -31,7 +31,7 @@ from .serial import HeterogeneousSerialModel
 from .training import TrainingCancelledError, TrainingConfig, TrainingMetrics, train_model
 
 
-EVENT_SCHEMA_VERSION = 2
+EVENT_SCHEMA_VERSION = 3
 
 
 class EventWriter:
@@ -257,7 +257,25 @@ def run_experiment(
                 warnings=diagnostics.get("diagnostic_integrity_warnings", []),
             )
 
+        geometric_reporter = getattr(model, "geometric_routing_report", None)
+        geometric_routing = (
+            geometric_reporter() if callable(geometric_reporter) else None
+        )
+        if geometric_routing is not None and diagnostics is not None:
+            diagnostic_geometry = diagnostics.get("geometric_routing", {})
+            geometric_routing["diagnostic_views"] = diagnostic_geometry
+            geometric_routing["per_capability"] = diagnostic_geometry.get(
+                "by_capability", {}
+            )
+        if geometric_routing is not None:
+            _write_json(run_directory / "geometric-routing.json", geometric_routing)
+        final_latest = dict(latest)
+        if geometric_routing is not None:
+            final_routing = dict(latest.get("routing") or {})
+            final_routing["geometric_routing"] = geometric_routing
+            final_latest["routing"] = final_routing
         summary = {
+            "schema_version": 3,
             "run_id": resolved_id,
             "status": "completed",
             "name": config.name or resolved_id,
@@ -270,7 +288,8 @@ def run_experiment(
             "model": model_info,
             "training_result": _json_safe(asdict(result)),
             "headline": _headline(asdict(result), diagnostics),
-            "warnings": _final_warnings(result, latest),
+            "warnings": _final_warnings(result, final_latest),
+            "geometric_routing": geometric_routing,
             "git": metadata["git"],
         }
         _write_json(run_directory / "summary.json", summary)
@@ -381,8 +400,22 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
             "attention_heads": config.model.attention_heads,
             "tie_embeddings": config.model.tie_embeddings,
             "module_families": families,
-            "router_type": config.routing.router_type,
-            "integrator_type": config.routing.integrator_type,
+            "router_type": (
+                "geometric"
+                if config.architecture == "emc"
+                else "module_aware"
+                if config.architecture == "sequential_module_aware_emc"
+                else config.routing.router_type
+            ),
+            "integrator_type": (
+                "acceptance_gate"
+                if config.architecture == "emc"
+                else "proposal_attention"
+                if config.architecture == "sequential_module_aware_emc"
+                else config.routing.integrator_type
+            ),
+            "routing_geometry_dim": config.routing.routing_geometry_dim,
+            "competence_prototypes_per_expert": config.routing.competence_prototypes_per_expert,
             "integrator_heads": config.model.integrator_heads,
             "architecture_stage": (
                 "n1_chunked" if stage == "n1_chunked"
@@ -403,6 +436,25 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
             "refractory_enabled": config.routing.refractory_enabled,
             "refractory_strength": config.routing.refractory_strength,
             "refractory_decay": config.routing.refractory_decay,
+            "counterfactual_calibration_enabled": (
+                config.routing.counterfactual_calibration_enabled
+                if config.architecture == "emc" else False
+            ),
+            "counterfactual_probe_fixed_rate": (
+                config.routing.counterfactual_probe_fixed_rate
+                if config.routing.counterfactual_probe_preset == "fixed"
+                else None
+            ),
+            "counterfactual_probe_early_rate": config.routing.counterfactual_probe_early_rate,
+            "counterfactual_probe_stable_rate": config.routing.counterfactual_probe_stable_rate,
+            "counterfactual_probe_mature_rate": config.routing.counterfactual_probe_mature_rate,
+            "counterfactual_uncertainty_enabled": config.routing.counterfactual_uncertainty_enabled,
+            "counterfactual_uncertainty_margin": config.routing.counterfactual_uncertainty_margin,
+            "counterfactual_max_probes_per_forward": config.routing.counterfactual_max_probes_per_forward,
+            "counterfactual_probe_seed": config.training.seed,
+            "counterfactual_probe_temperature": config.routing.counterfactual_probe_temperature,
+            "geometry_temperature": config.routing.geometry_temperature,
+            "geometry_calibration_weight": config.routing.geometry_calibration_weight,
         }
     )
     if config.model.preset == "custom":
@@ -495,6 +547,41 @@ def _routing_warnings(routing: Mapping[str, Any]) -> list[dict[str, str]]:
         warnings.append({"code": "rare_experts", "severity": "warning", "message": f"Experts below the backend 1% near-dead threshold: {', '.join(rare)}"})
     if utilization and max(utilization) >= 0.95:
         warnings.append({"code": "collapsed_routing", "severity": "critical", "message": "One expert received at least 95% of sampled routes."})
+    geometric = routing.get("geometric_routing")
+    if isinstance(geometric, Mapping):
+        probes = int(geometric.get("total_probes") or 0)
+        if probes < 10:
+            warnings.append({"code": "counterfactual_probe_count_too_low", "severity": "info", "message": "Fewer than 10 counterfactual probes have been collected; routing-quality estimates are preliminary."})
+        separation = geometric.get("minimum_basin_separation")
+        if isinstance(separation, (int, float)) and separation < 0.05:
+            warnings.append({"code": "basins_collapsed", "severity": "warning", "message": "Minimum normalized basin-center separation is below 0.05."})
+        margin = geometric.get("mean_geometric_margin")
+        if isinstance(margin, (int, float)) and margin < 0.01:
+            warnings.append({"code": "geometry_margin_near_zero", "severity": "warning", "message": "Mean best-vs-second geometric action margin is below 0.01."})
+        regret = geometric.get("mean_routing_regret")
+        if probes >= 10 and isinstance(regret, (int, float)) and regret > 0.25:
+            warnings.append({"code": "routing_regret_high", "severity": "warning", "message": "Mean counterfactual routing regret exceeds 0.25 nats per token."})
+        top1 = geometric.get("counterfactual_top1_accuracy")
+        expert_count = max(len(utilization), 1)
+        if probes >= 50 and isinstance(top1, (int, float)) and top1 <= 1 / expert_count:
+            warnings.append({"code": "routing_accuracy_not_improving", "severity": "warning", "message": "After at least 50 probes, geometric top-1 accuracy is no better than uniform chance."})
+        drift = geometric.get("prototype_drift")
+        routes = int(geometric.get("total_routing_events") or 0)
+        if routes >= 100 and isinstance(drift, Mapping) and float(drift.get("mean") or 0) < 1e-5:
+            warnings.append({"code": "geometry_not_learning", "severity": "warning", "message": "After at least 100 sampled routes, mean prototype drift remains below 1e-5."})
+        actual_rates = [float(value) for value in geometric.get("actual_routing_rates", [])]
+        if actual_rates and max(actual_rates) >= 0.98:
+            warnings.append({"code": "basin_monopoly", "severity": "warning", "message": "One competence basin receives at least 98% of routes; unequal traffic alone is not considered failure."})
+        win_rates = [float(value) for value in geometric.get("counterfactual_win_rates", [])]
+        for index, rate in enumerate(win_rates):
+            if probes >= 20 and rate == 0:
+                warnings.append({"code": "expert_never_counterfactual_best", "severity": "info", "message": f"Expert {index} has not been counterfactually best in at least 20 probes."})
+        for index, rate in enumerate(actual_rates):
+            if routes >= 100 and rate == 0:
+                warnings.append({"code": "expert_never_selected", "severity": "warning", "message": f"Expert {index} has not been selected in at least 100 observed routes."})
+        consistency = geometric.get("training_evaluation_routing_consistency")
+        if isinstance(consistency, Mapping) and consistency.get("mismatch") is True:
+            warnings.append({"code": "training_evaluation_routing_mismatch", "severity": "warning", "message": "Training/evaluation expert-frequency L1 distance exceeds the documented 0.25 threshold."})
     return warnings
 
 

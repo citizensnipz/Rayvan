@@ -14,7 +14,9 @@ from rayvan_emc.architecture_compare import TOKEN_PRESETS, main as compare_main
 from rayvan_emc.baseline import TransformerConfig, TransformerLanguageModel
 from rayvan_emc.checkpoint import load_model_checkpoint
 from rayvan_emc.chunked import ChunkedEMCModel
-from rayvan_emc.model import EMCConfig
+from rayvan_emc.model import EMCConfig, SequentialEMCModel
+from rayvan_emc.nexus import GeometricNexusRouter
+from rayvan_emc.integrator import SequentialAcceptanceIntegrator
 from rayvan_emc.serial import HeterogeneousSerialModel
 from rayvan_emc.training import (
     TrainingConfig,
@@ -309,9 +311,9 @@ def test_architecture_builder_uses_real_emc_and_reports_fairness() -> None:
         fairness_mode="capacity",
         tie_embeddings=False,
     )
-    assert isinstance(build.models["emc"], ChunkedEMCModel)
-    assert type(build.models["emc"].router).__name__ == "ChunkNexus"
-    assert type(build.models["emc"].integrator).__name__ == "ChunkIntegrator"
+    assert isinstance(build.models["emc"], SequentialEMCModel)
+    assert isinstance(build.models["emc"].router, GeometricNexusRouter)
+    assert isinstance(build.models["emc"].integrator, SequentialAcceptanceIntegrator)
     assert isinstance(build.models["heterogeneous_serial"], HeterogeneousSerialModel)
     for model in build.models.values():
         accounting = architecture_accounting(model, sequence_length=8)

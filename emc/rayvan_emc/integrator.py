@@ -18,6 +18,69 @@ class IntegratorTrace:
     gate_magnitude: Tensor
 
 
+class SequentialAcceptanceIntegrator(nn.Module):
+    """Accepts one selected expert's raw residual proposal with a bounded gate."""
+
+    def __init__(self, config: Any) -> None:
+        super().__init__()
+        self.latent_dim = config.latent_dim
+        self.identity_dim = min(16, config.latent_dim)
+        self.expert_identity = nn.Embedding(config.num_modules, self.identity_dim)
+        integration_dim = config.latent_dim * 2 + self.identity_dim + 1
+        hidden = max(config.latent_dim, self.identity_dim * 2)
+        self.latent_norm = nn.LayerNorm(config.latent_dim)
+        self.gate = nn.Sequential(
+            nn.Linear(integration_dim, hidden),
+            nn.GELU(),
+            nn.Linear(hidden, 1),
+        )
+
+    def forward(
+        self,
+        latent: Tensor,
+        module_updates: Tensor,
+        routing_weights: Tensor,
+        *,
+        selected_indices: Tensor | None = None,
+        return_diagnostics: bool = False,
+    ) -> Tensor | tuple[Tensor, IntegratorTrace]:
+        del routing_weights
+        if module_updates.size(2) != 1:
+            raise ValueError(
+                "sequential acceptance Integrator requires exactly one proposal"
+            )
+        if selected_indices is None:
+            raise ValueError("selected_indices are required for expert identity")
+        proposal = module_updates.squeeze(2)
+        expert_ids = selected_indices.reshape(latent.size(0))
+        identity = self.expert_identity(expert_ids).unsqueeze(1).expand(
+            -1, latent.size(1), -1
+        )
+        proposal_norm = proposal.norm(dim=-1, keepdim=True)
+        magnitude_feature = torch.log1p(proposal_norm)
+        features = torch.cat(
+            (self.latent_norm(latent), proposal, identity, magnitude_feature), dim=-1
+        )
+        acceptance = torch.sigmoid(self.gate(features))
+        accepted_update = acceptance * proposal
+        next_latent = latent + accepted_update
+        if not return_diagnostics:
+            return next_latent
+        routing_acceptance = acceptance
+        return next_latent, IntegratorTrace(
+            proposal_acceptance=routing_acceptance.detach(),
+            proposal_norms=proposal_norm.detach(),
+            proposal_similarity=torch.ones(
+                *proposal_norm.shape[:-1], 1, 1,
+                device=proposal.device,
+                dtype=proposal.dtype,
+            ).detach(),
+            proposal_contributions=(acceptance * proposal_norm).detach(),
+            integrated_update_norm=accepted_update.norm(dim=-1).detach(),
+            gate_magnitude=acceptance.squeeze(-1).detach(),
+        )
+
+
 class WeightedAverageIntegrator(nn.Module):
     """Reproducible pre-N1 Integrator baseline."""
 

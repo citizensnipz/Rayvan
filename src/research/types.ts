@@ -9,7 +9,7 @@ export interface ExperimentConfig {
   suite: string;
   architecture: string;
   experts: Record<string, number>;
-  routing: Record<string, number | string | boolean>;
+  routing: Record<string, number | string | boolean | null>;
   model: Record<string, number | string | boolean>;
   training: Record<string, number | string>;
 }
@@ -45,6 +45,7 @@ export interface RunSummary {
   tags?: string[];
   headline?: Record<string, unknown>;
   training_result?: Record<string, unknown>;
+  geometric_routing?: Record<string, unknown> | null;
   git?: { commit?: string; dirty?: boolean };
   runDirectory?: string;
 }

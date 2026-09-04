@@ -16,7 +16,7 @@ from rayvan_emc.chunked import ChunkedEMCModel
 from rayvan_emc.data import tiny_overfit_corpus
 from rayvan_emc.diagnostics import EMCDiagnostics
 from rayvan_emc.experiments.common import create_n2_model
-from rayvan_emc.model import EMCOutput
+from rayvan_emc.model import EMCModel, EMCOutput
 from rayvan_emc.n2 import (
     DeltaN1Node,
     GPTN1Node,
@@ -318,8 +318,8 @@ def test_old_granular_n1_emc_remains_runnable_and_unmodified() -> None:
         seed=42,
     )
     model = build.models["old_emc"]
-    assert isinstance(model, ChunkedEMCModel)
-    assert model.config.architecture_stage == "n1_chunked"
+    assert isinstance(model, EMCModel)
+    assert model.config.architecture_stage == "token"
     assert model.module_families == ("gpt", "ssm", "recurrent", "delta")
     output = model(torch.randint(0, 64, (1, 8)))
     assert output.shape == (1, 8, 64)

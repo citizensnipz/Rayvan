@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ExpertHeatmap } from "./charts/ExpertHeatmap";
 import { MetricChart, type MetricSeries } from "./charts/MetricChart";
-import { RefractoryEffect, RoutingOverview, TrajectoryByStep, TransitionMatrix } from "./charts/RoutingOverview";
+import { CounterfactualAccuracy, CounterfactualMatrix, ExpertWinRate, GeometricMargin, GeometryByStep, RefractoryEffect, RoutingOverview, RoutingRegret, TrajectoryByStep, TransitionMatrix } from "./charts/RoutingOverview";
 import { TaskChart } from "./charts/TaskChart";
 import type { ResearchEvent, RunDetail, RunState } from "./types";
 
@@ -34,6 +34,7 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
   const utilization = (latestRoute?.utilization as number[] | undefined) ?? [];
   const expertNames = (latestRoute?.expert_names as string[] | undefined) ?? [];
   const starvation = utilization.map((value, index) => ({ value, name: expertNames[index] ?? `m${index}` })).filter((row) => row.value < 0.01);
+  const geometric = latestRoute?.geometric_routing as Record<string, unknown> | undefined;
 
   const lossSeries: MetricSeries[] = [
     { name: "Train (measured)", color: "#d8ff75", data: training.map((event) => [Number(event.tokens_processed), number(event.training_loss)]) },
@@ -59,6 +60,9 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
       <Metric label="VRAM" value={formatBytes(latest?.gpu_memory_used_bytes ?? (latest?.system && (latest.system as Record<string, unknown>).vram_used_bytes))} />
       <Metric label="Same-expert continuation" value={formatPercent(latestRoute?.same_expert_continuation_rate)} />
       <Metric label="Winner changed by inhibition" value={formatPercent(latestRoute?.refractory_changed_winner_rate)} />
+      {geometric && <Metric label="Routing regret" value={compact(latestRoute?.mean_routing_regret, 4)} />}
+      {geometric && <Metric label="Counterfactual top-1" value={formatPercent(latestRoute?.counterfactual_top1_accuracy)} />}
+      {geometric && <Metric label="Counterfactual probes" value={compact(latestRoute?.total_probes, 0)} />}
     </section>
 
     {warnings.length > 0 && <section className="warning-list panel"><p className="eyebrow">Diagnostic warnings</p>{warnings.slice(-6).map((warning, index) => <div key={`${warning.code}-${index}`}><b>{warning.code?.replaceAll("_", " ")}</b><span>{warning.message ?? String(warning)}</span></div>)}</section>}
@@ -76,6 +80,12 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
       <ExpertHeatmap events={events} />
       <TransitionMatrix events={events} />
       <RefractoryEffect events={events} />
+      {geometric && <RoutingRegret events={events} />}
+      {geometric && <CounterfactualAccuracy events={events} />}
+      {geometric && <GeometricMargin events={events} />}
+      {geometric && <CounterfactualMatrix events={events} />}
+      {geometric && <ExpertWinRate events={events} />}
+      {geometric && <GeometryByStep events={events} />}
     </section>
 
     {projectionFits.length > 0 && <section className="panel projection-quality"><div><p className="eyebrow">Exploratory projection · not measured truth</p><h3>Fit quality and runtime estimates</h3></div><div className="table-wrap"><table><thead><tr><th>Target</th><th>Model</th><th>Predicted loss</th><th>R²</th><th>Points</th><th>Confidence</th><th>Warning</th></tr></thead><tbody>{projectionFits.map((fit, index) => <tr key={index}><td>{Number(fit.prediction_target).toLocaleString()} tokens</td><td>{String(fit.model_type).replaceAll("_", " ")}</td><td>{Number(fit.predicted_value).toFixed(4)}</td><td>{Number(fit.r_squared).toFixed(3)}</td><td>{String(fit.measured_points)}</td><td><span className={`confidence ${fit.confidence}`}>{String(fit.confidence)}</span></td><td>{fit.warning ? String(fit.warning) : "—"}</td></tr>)}</tbody></table></div>{runtimeEstimates.length > 0 && <div className="runtime-projections">{runtimeEstimates.map((item, index) => <span key={index}><b>{Number(item.target_tokens).toLocaleString()} tokens</b>{duration(item.estimated_total_seconds)} total · {String(item.confidence)}</span>)}</div>}</section>}

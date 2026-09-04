@@ -23,6 +23,7 @@ ArchitectureName = Literal[
     "homogeneous_serial",
     "heterogeneous_serial",
     "emc",
+    "sequential_module_aware_emc",
     "legacy_parallel_emc",
     "old_emc",
     "n2_mixed",
@@ -92,6 +93,7 @@ def build_architectures(
         "homogeneous_serial",
         "heterogeneous_serial",
         "emc",
+        "sequential_module_aware_emc",
         "legacy_parallel_emc",
         "old_emc",
         *N2_ARCHITECTURES,
@@ -127,6 +129,9 @@ def build_architectures(
         num_cycles=3,
         trajectory_steps=3,
         architecture_stage="n1_sequential",
+        router_type="geometric",
+        integrator_type="acceptance_gate",
+        loss_free_balance_enabled=False,
     )
     torch.manual_seed(seed)
     emc = SequentialEMCModel(emc_config)
@@ -161,6 +166,14 @@ def build_architectures(
             all_models[name] = HeterogeneousSerialModel(legacy_config)
         elif name == "emc":
             all_models[name] = emc
+        elif name == "sequential_module_aware_emc":
+            all_models[name] = SequentialEMCModel(
+                replace(
+                    emc_config,
+                    router_type="module_aware",
+                    integrator_type="proposal_attention",
+                )
+            )
         elif name == "legacy_parallel_emc":
             all_models[name] = ChunkedEMCModel(legacy_config)
         elif name == "old_emc":
@@ -313,7 +326,13 @@ def architecture_accounting(
         flops = 2 * parameter_uses
         routable = sum(module_counts)
         sequential = model.config.architecture_stage == "n1_sequential"
-        architecture = "emc" if sequential else "old_emc"
+        architecture = (
+            "emc"
+            if sequential and model.config.router_type == "geometric"
+            else "sequential_module_aware_emc"
+            if sequential
+            else "old_emc"
+        )
         method = (
             "Sequential EMC estimate includes one selected expert, Nexus, the "
             "single-proposal Integrator gate, and output projection for every "

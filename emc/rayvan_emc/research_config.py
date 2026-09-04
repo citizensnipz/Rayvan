@@ -8,10 +8,11 @@ from .capability_tasks import CAPABILITIES
 from .experiments.common import MODEL_PRESET_DIMENSIONS, N1_STAGES
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 EXPERT_FAMILIES = ("gpt", "ssm", "recurrent", "delta")
 ARCHITECTURES = (
     "emc",
+    "sequential_module_aware_emc",
     "legacy_parallel_emc",
     "heterogeneous_serial",
     "homogeneous_serial",
@@ -26,20 +27,34 @@ class RoutingConfig:
     top_k: int | None = None
     cycles: int = 2
     trajectory_steps: int = 3
-    router_type: str = "module_aware"
-    integrator_type: str = "proposal_attention"
+    router_type: str = "geometric"
+    integrator_type: str = "acceptance_gate"
+    routing_geometry_dim: int = 32
+    competence_prototypes_per_expert: int = 1
     balance_coefficient: float = 0.0
     balance_entropy_floor: float = 0.75
     switch_cost: float = 0.05
     persistence_bonus: float = 0.1
     minimum_lease_chunks: int = 0
-    loss_free_balance_enabled: bool = True
+    loss_free_balance_enabled: bool = False
     balance_bias_lr: float = 0.01
     balance_bias_limit: float = 0.25
     balance_warmup_chunks: int = 0
     refractory_enabled: bool = True
     refractory_strength: float = 0.15
     refractory_decay: float = 0.35
+    counterfactual_calibration_enabled: bool = True
+    counterfactual_probe_preset: str = "decaying"
+    counterfactual_probe_fixed_rate: float | None = None
+    counterfactual_probe_early_rate: float = 0.08
+    counterfactual_probe_stable_rate: float = 0.02
+    counterfactual_probe_mature_rate: float = 0.01
+    counterfactual_uncertainty_enabled: bool = False
+    counterfactual_uncertainty_margin: float = 0.05
+    counterfactual_max_probes_per_forward: int = 1
+    counterfactual_probe_temperature: float = 0.25
+    geometry_temperature: float = 0.25
+    geometry_calibration_weight: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -104,7 +119,7 @@ class ExperimentConfig:
         if any(not isinstance(count, int) or count < 0 for count in self.experts.values()):
             raise ValueError("expert counts must be non-negative integers")
         total = sum(self.experts.values())
-        if self.architecture in {"emc", "legacy_parallel_emc", "heterogeneous_serial", "old_emc"} and total == 0:
+        if self.architecture in {"emc", "sequential_module_aware_emc", "legacy_parallel_emc", "heterogeneous_serial", "old_emc"} and total == 0:
             raise ValueError("the selected architecture requires at least one expert")
         if self.architecture in {"legacy_parallel_emc", "old_emc", *N2_ARCHITECTURES}:
             if self.routing.top_k is None:
@@ -113,7 +128,7 @@ class ExperimentConfig:
                 )
             if self.routing.top_k <= 0 or self.routing.top_k > max(total, 1):
                 raise ValueError("top_k must be between one and the configured expert count")
-        if self.architecture == "emc" and self.routing.top_k is not None:
+        if self.architecture in {"emc", "sequential_module_aware_emc"} and self.routing.top_k is not None:
             raise ValueError(
                 "sequential EMC does not accept top_k; use trajectory_steps or "
                 "select legacy_parallel_emc"
@@ -126,10 +141,28 @@ class ExperimentConfig:
             raise ValueError("refractory_strength cannot be negative")
         if not 0 <= self.routing.refractory_decay <= 1:
             raise ValueError("refractory_decay must be between zero and one")
-        if self.routing.router_type not in {"fixed_index", "module_aware"}:
+        if self.routing.router_type not in {"fixed_index", "module_aware", "geometric"}:
             raise ValueError("unsupported router_type")
-        if self.routing.integrator_type not in {"weighted_average", "proposal_attention"}:
+        if self.routing.integrator_type not in {"weighted_average", "proposal_attention", "acceptance_gate"}:
             raise ValueError("unsupported integrator_type")
+        if self.routing.routing_geometry_dim <= 0 or self.routing.competence_prototypes_per_expert <= 0:
+            raise ValueError("routing geometry dimensions and prototype counts must be positive")
+        if self.routing.counterfactual_probe_preset not in {"decaying", "fixed"}:
+            raise ValueError("unsupported counterfactual probe preset")
+        rates = (
+            self.routing.counterfactual_probe_early_rate,
+            self.routing.counterfactual_probe_stable_rate,
+            self.routing.counterfactual_probe_mature_rate,
+        )
+        if any(rate < 0 or rate > 1 for rate in rates):
+            raise ValueError("counterfactual probe rates must be between zero and one")
+        fixed_rate = self.routing.counterfactual_probe_fixed_rate
+        if fixed_rate is not None and not 0 <= fixed_rate <= 1:
+            raise ValueError("fixed counterfactual probe rate must be between zero and one")
+        if self.routing.counterfactual_max_probes_per_forward < 0:
+            raise ValueError("counterfactual probe budget cannot be negative")
+        if self.routing.counterfactual_probe_temperature <= 0 or self.routing.geometry_temperature <= 0:
+            raise ValueError("routing calibration temperatures must be positive")
         if self.model.preset not in {"quick", "research", "custom"}:
             raise ValueError("preset must be quick, research, or custom")
         if self.model.fairness_mode not in {"custom", "capacity", "compute"}:
@@ -160,11 +193,16 @@ class ExperimentConfig:
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "ExperimentConfig":
         incoming_version = int(value.get("schema_version", 1))
+        if incoming_version == 2:
+            value = dict(value)
+            if value.get("architecture") == "emc":
+                value["architecture"] = "sequential_module_aware_emc"
+            value["schema_version"] = SCHEMA_VERSION
+            incoming_version = SCHEMA_VERSION
         if incoming_version != SCHEMA_VERSION:
             raise ValueError(
                 "experiment schema v1 is not auto-migrated because v1 'emc' "
-                "means parallel Top-K. Set schema_version=2 and explicitly choose "
-                "'emc' (sequential) or 'legacy_parallel_emc'."
+                "means parallel Top-K. Choose an explicit current architecture."
             )
         return cls(
             schema_version=incoming_version,
@@ -183,7 +221,7 @@ class ExperimentConfig:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         routing = payload["routing"]
-        if self.architecture == "emc":
+        if self.architecture in {"emc", "sequential_module_aware_emc"}:
             for key in (
                 "top_k",
                 "cycles",
@@ -193,6 +231,27 @@ class ExperimentConfig:
                 "balance_warmup_chunks",
             ):
                 routing.pop(key, None)
+            if self.architecture == "emc":
+                routing.pop("switch_cost", None)
+                routing.pop("persistence_bonus", None)
+            if self.architecture == "sequential_module_aware_emc":
+                for key in (
+                    "routing_geometry_dim",
+                    "competence_prototypes_per_expert",
+                    "counterfactual_calibration_enabled",
+                    "counterfactual_probe_preset",
+                    "counterfactual_probe_fixed_rate",
+                    "counterfactual_probe_early_rate",
+                    "counterfactual_probe_stable_rate",
+                    "counterfactual_probe_mature_rate",
+                    "counterfactual_uncertainty_enabled",
+                    "counterfactual_uncertainty_margin",
+                    "counterfactual_max_probes_per_forward",
+                    "counterfactual_probe_temperature",
+                    "geometry_temperature",
+                    "geometry_calibration_weight",
+                ):
+                    routing.pop(key, None)
         elif self.architecture in {"legacy_parallel_emc", "old_emc", *N2_ARCHITECTURES}:
             for key in (
                 "trajectory_steps",
@@ -224,7 +283,8 @@ def research_schema() -> dict[str, Any]:
             },
         ],
         "architectures": [
-            {"id": "emc", "label": "Sequential EMC"},
+            {"id": "emc", "label": "Sequential EMC — Geometric"},
+            {"id": "sequential_module_aware_emc", "label": "Sequential EMC — Legacy Module-Aware"},
             {"id": "legacy_parallel_emc", "label": "Legacy Parallel Top-K EMC"},
             {"id": "heterogeneous_serial", "label": "Heterogeneous Serial"},
             {"id": "homogeneous_serial", "label": "Homogeneous Transformer"},

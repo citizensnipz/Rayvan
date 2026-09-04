@@ -128,12 +128,15 @@ def create_emc_model(
     if not (chunked or sequential) and "delta" in families:
         raise ValueError("DeltaNet populations require n1_stage='n1_sequential' or 'n1_chunked'")
     integrator_type = (
-        "proposal_attention"
-        if n1_stage in {"integrator", "heterogeneous", "n1", "n1_sequential", "n1_chunked"}
+        "acceptance_gate" if sequential
+        else "proposal_attention"
+        if n1_stage in {"integrator", "heterogeneous", "n1", "n1_chunked"}
         else "weighted_average"
     )
     router_type = (
-        "module_aware" if n1_stage in {"n1", "n1_sequential", "n1_chunked"} else "fixed_index"
+        "geometric" if sequential
+        else "module_aware" if n1_stage in {"n1", "n1_chunked"}
+        else "fixed_index"
     )
     if preset not in MODEL_PRESET_DIMENSIONS:
         raise ValueError(f"unknown preset: {preset}")
@@ -158,6 +161,7 @@ def create_emc_model(
         shared_state_slots=4,
         request_pool_size=4,
         recurrent_precision="fp16",
+        loss_free_balance_enabled=(False if sequential else True),
     )
     if chunked:
         return ChunkedEMCModel(config)

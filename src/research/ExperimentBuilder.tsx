@@ -16,7 +16,7 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
   const suite = schema.suites.find((item) => item.id === config.suite)!;
   const expertCount = Object.values(config.experts).reduce((sum, value) => sum + value, 0);
   const gpuHeavy = Number(config.training.tokens) >= 500_000;
-  const usesExperts = ["emc", "legacy_parallel_emc", "heterogeneous_serial", "old_emc"].includes(config.architecture);
+  const usesExperts = ["emc", "sequential_module_aware_emc", "legacy_parallel_emc", "heterogeneous_serial", "old_emc"].includes(config.architecture);
   const setRoot = (field: keyof ExperimentConfig, value: unknown) => setConfig({ ...config, [field]: value });
   const setNested = (group: "routing" | "model" | "training", field: string, value: unknown) => setConfig({ ...config, [group]: { ...config[group], [field]: value } });
   const tags = config.tags.join(", ");
@@ -34,12 +34,27 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
     setConfig({ ...config, model: { ...config.model, ...schema.model_presets[preset], preset } });
   };
   const changeArchitecture = (architecture: string) => {
-    const routing = { ...config.routing };
-    if (architecture === "emc") delete routing.top_k;
+    const routing = { ...schema.defaults.routing, ...config.routing };
+    if (architecture === "emc" || architecture === "sequential_module_aware_emc") delete routing.top_k;
+    if (architecture === "emc") {
+      delete routing.top_k;
+      routing.router_type = "geometric";
+      routing.integrator_type = "acceptance_gate";
+      routing.loss_free_balance_enabled = false;
+    }
+    if (architecture === "sequential_module_aware_emc") { routing.router_type = "module_aware"; routing.integrator_type = "proposal_attention"; }
     if ((architecture === "legacy_parallel_emc" || architecture === "old_emc" || architecture.startsWith("n2_")) && routing.top_k == null) routing.top_k = 2;
     if (architecture === "old_emc" && routing.cycles == null) routing.cycles = 2;
     setConfig({ ...config, architecture, routing });
   };
+  const changeProbePreset = (preset: string) => setConfig({
+    ...config,
+    routing: {
+      ...config.routing,
+      counterfactual_probe_preset: preset,
+      counterfactual_probe_fixed_rate: preset === "fixed" ? Number(config.routing.counterfactual_probe_fixed_rate ?? 0.02) : null,
+    },
+  });
 
   return <div className="builder-layout">
     <section className="builder-form">
@@ -66,18 +81,33 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
       <div className="field-grid three">
         {(config.architecture === "legacy_parallel_emc" || config.architecture === "old_emc" || config.architecture.startsWith("n2_")) && <NumberField label="Top-K" value={Number(config.routing.top_k ?? 2)} min={1} max={Math.max(expertCount, 1)} onChange={(value) => setNested("routing", "top_k", value)} />}
         {config.architecture === "old_emc" && <NumberField label="EMC cycles" value={Number(config.routing.cycles)} min={1} onChange={(value) => setNested("routing", "cycles", value)} />}
-        {["emc", "legacy_parallel_emc", "old_emc"].includes(config.architecture) && <label><span>Router</span><select value={String(config.routing.router_type)} onChange={(event) => setNested("routing", "router_type", event.target.value)}><option value="module_aware">Module-aware Nexus</option><option value="fixed_index">Fixed-index baseline</option></select></label>}
-        {["emc", "legacy_parallel_emc", "old_emc"].includes(config.architecture) && <label><span>Integrator</span><select value={String(config.routing.integrator_type)} onChange={(event) => setNested("routing", "integrator_type", event.target.value)}><option value="proposal_attention">Proposal gate</option><option value="weighted_average">Weighted gate</option></select></label>}
+        {config.architecture === "emc" && <label><span>Nexus type</span><strong>Geometric competence basin</strong></label>}
+        {config.architecture === "emc" && <label><span>Integrator</span><strong>Learned acceptance gate</strong></label>}
+        {config.architecture === "sequential_module_aware_emc" && <label><span>Nexus type</span><strong>Legacy module-aware scorer</strong></label>}
+        {["legacy_parallel_emc", "old_emc"].includes(config.architecture) && <label><span>Router</span><select value={String(config.routing.router_type)} onChange={(event) => setNested("routing", "router_type", event.target.value)}><option value="module_aware">Module-aware Nexus</option><option value="fixed_index">Fixed-index baseline</option></select></label>}
+        {["legacy_parallel_emc", "old_emc"].includes(config.architecture) && <label><span>Integrator</span><select value={String(config.routing.integrator_type)} onChange={(event) => setNested("routing", "integrator_type", event.target.value)}><option value="proposal_attention">Proposal attention</option><option value="weighted_average">Weighted gate</option></select></label>}
         {["legacy_parallel_emc", "old_emc"].includes(config.architecture) && <NumberField label="Balance loss weight" value={Number(config.routing.balance_coefficient)} step={0.001} min={0} onChange={(value) => setNested("routing", "balance_coefficient", value)} />}
         {["legacy_parallel_emc", "old_emc"].includes(config.architecture) && <NumberField label="Entropy floor" value={Number(config.routing.balance_entropy_floor)} step={0.05} min={0} max={1} onChange={(value) => setNested("routing", "balance_entropy_floor", value)} />}
-        {config.architecture === "emc" && <>
+        {["emc", "sequential_module_aware_emc"].includes(config.architecture) && <>
           <NumberField label="Trajectory steps" value={Number(config.routing.trajectory_steps)} min={1} onChange={(value) => setNested("routing", "trajectory_steps", value)} />
           <label><span>Experts per step</span><strong>1 (fixed)</strong></label>
-          <NumberField label="Switch cost" value={Number(config.routing.switch_cost)} step={0.01} min={0} onChange={(value) => setNested("routing", "switch_cost", value)} />
-          <NumberField label="Persistence bonus" value={Number(config.routing.persistence_bonus)} step={0.01} min={0} onChange={(value) => setNested("routing", "persistence_bonus", value)} />
           <label className="toggle"><input type="checkbox" checked={Boolean(config.routing.refractory_enabled)} onChange={(event) => setNested("routing", "refractory_enabled", event.target.checked)} /><span>Refractory routing</span></label>
           <NumberField label="Inhibition strength" value={Number(config.routing.refractory_strength)} step={0.01} min={0} onChange={(value) => setNested("routing", "refractory_strength", value)} />
           <NumberField label="Inhibition decay" value={Number(config.routing.refractory_decay)} step={0.05} min={0} max={1} onChange={(value) => setNested("routing", "refractory_decay", value)} />
+        </>}
+        {config.architecture === "sequential_module_aware_emc" && <>
+          <NumberField label="Switch cost" value={Number(config.routing.switch_cost)} step={0.01} min={0} onChange={(value) => setNested("routing", "switch_cost", value)} />
+          <NumberField label="Persistence bonus" value={Number(config.routing.persistence_bonus)} step={0.01} min={0} onChange={(value) => setNested("routing", "persistence_bonus", value)} />
+        </>}
+        {config.architecture === "emc" && <>
+          <NumberField label="Geometry dimension" value={Number(config.routing.routing_geometry_dim)} min={2} onChange={(value) => setNested("routing", "routing_geometry_dim", value)} />
+          <NumberField label="Basins per expert" value={Number(config.routing.competence_prototypes_per_expert)} min={1} onChange={(value) => setNested("routing", "competence_prototypes_per_expert", value)} />
+          <label className="toggle"><input type="checkbox" checked={Boolean(config.routing.counterfactual_calibration_enabled)} onChange={(event) => setNested("routing", "counterfactual_calibration_enabled", event.target.checked)} /><span>Counterfactual calibration</span></label>
+          <label><span>Probe schedule</span><select value={String(config.routing.counterfactual_probe_preset)} onChange={(event) => changeProbePreset(event.target.value)}><option value="decaying">8% → 2% → 1%</option><option value="fixed">Fixed rate</option></select></label>
+          {config.routing.counterfactual_probe_preset === "fixed" && <NumberField label="Fixed probe rate" value={Number(config.routing.counterfactual_probe_fixed_rate ?? 0.02)} step={0.01} min={0} max={1} onChange={(value) => setNested("routing", "counterfactual_probe_fixed_rate", value)} />}
+          <label className="toggle"><input type="checkbox" checked={Boolean(config.routing.counterfactual_uncertainty_enabled)} onChange={(event) => setNested("routing", "counterfactual_uncertainty_enabled", event.target.checked)} /><span>Uncertainty-triggered probes</span></label>
+          <NumberField label="Uncertainty margin" value={Number(config.routing.counterfactual_uncertainty_margin)} step={0.01} min={0} onChange={(value) => setNested("routing", "counterfactual_uncertainty_margin", value)} />
+          <NumberField label="Maximum probe budget" value={Number(config.routing.counterfactual_max_probes_per_forward)} min={0} onChange={(value) => setNested("routing", "counterfactual_max_probes_per_forward", value)} />
           <label className="toggle"><input type="checkbox" checked={Boolean(config.routing.loss_free_balance_enabled)} onChange={(event) => setNested("routing", "loss_free_balance_enabled", event.target.checked)} /><span>Loss-free balancing</span></label>
           <NumberField label="Balance bias LR" value={Number(config.routing.balance_bias_lr)} step={0.001} min={0} onChange={(value) => setNested("routing", "balance_bias_lr", value)} />
           <NumberField label="Balance bias limit" value={Number(config.routing.balance_bias_limit)} step={0.05} min={0} onChange={(value) => setNested("routing", "balance_bias_limit", value)} />
@@ -114,7 +144,7 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
 
     <aside className="launch-card">
       <p className="eyebrow">Preflight</p><h2>{config.name || "Untitled experiment"}</h2>
-      <dl><div><dt>Suite</dt><dd>{suite.label}</dd></div><div><dt>Architecture</dt><dd>{architectureLabel}</dd></div><div><dt>Token budget</dt><dd>{Number(config.training.tokens).toLocaleString()}</dd></div><div><dt>Experts</dt><dd>{expertCount}</dd></div><div><dt>{config.architecture === "emc" ? "Trajectory" : "Active Top-K"}</dt><dd>{config.architecture === "emc" ? `${String(config.routing.trajectory_steps)} sequential steps` : String(config.routing.top_k ?? "—")}</dd></div><div><dt>Total params</dt><dd>{estimating ? "Calculating…" : formatNumber(estimate?.total_parameters)}</dd></div><div><dt>Active params</dt><dd>{formatNumber(estimate?.approximate_active_parameters)}</dd></div><div><dt>FLOPs / token</dt><dd>{formatNumber(estimate?.approximate_flops_per_token)}</dd></div></dl>
+      <dl><div><dt>Suite</dt><dd>{suite.label}</dd></div><div><dt>Architecture</dt><dd>{architectureLabel}</dd></div><div><dt>Token budget</dt><dd>{Number(config.training.tokens).toLocaleString()}</dd></div><div><dt>Experts</dt><dd>{expertCount}</dd></div><div><dt>{["emc", "sequential_module_aware_emc"].includes(config.architecture) ? "Trajectory" : "Active Top-K"}</dt><dd>{["emc", "sequential_module_aware_emc"].includes(config.architecture) ? `${String(config.routing.trajectory_steps)} sequential steps` : String(config.routing.top_k ?? "—")}</dd></div><div><dt>Total params</dt><dd>{estimating ? "Calculating…" : formatNumber(estimate?.total_parameters)}</dd></div><div><dt>Active params</dt><dd>{formatNumber(estimate?.approximate_active_parameters)}</dd></div><div><dt>FLOPs / token</dt><dd>{formatNumber(estimate?.approximate_flops_per_token)}</dd></div></dl>
       {reviewing && <div className="run-warning"><b>Large-run review</b><p>This will execute {Number(config.training.tokens).toLocaleString()} tokens on {String(config.training.device).toUpperCase()}. Verify the configuration above, then confirm.</p></div>}
       <button className="primary launch" disabled={!canRun} onClick={requestRun}>{active ? "GPU run active" : reviewing ? "Confirm & launch" : "Run experiment"}</button>
       {reviewing && <button className="text-button" onClick={() => setReviewing(false)}>Back to editing</button>}

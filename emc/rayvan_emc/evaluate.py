@@ -35,7 +35,7 @@ from .model import EMCCycleTrace, EMCModel, EMCOutput
 from .n2 import N2ExecutionTrace
 from .tokenization import TextTokenizer
 
-REPORT_SCHEMA_VERSION = 4
+REPORT_SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True)
@@ -201,7 +201,7 @@ def evaluate_suite(
     for index, example in enumerate(examples):
         example_started = time.perf_counter()
         record, _, token_count = _evaluate_example(
-            model, tokenizer, example, resolved, return_trace=True
+            model, tokenizer, example, resolved, return_trace=True, probe_index=index
         )
         record["elapsed_seconds"] = time.perf_counter() - example_started
         record["evaluated_tokens"] = token_count
@@ -237,6 +237,7 @@ def evaluate_suite(
     )
     stratified = _stratified_results(baseline_records)
     difficulty_curves = _difficulty_curves(baseline_records, model)
+    geometric_routing = _aggregate_geometric_counterfactuals(baseline_records)
     notable = _notable_examples(
         examples,
         baseline_records,
@@ -321,6 +322,7 @@ def evaluate_suite(
         "stratified_results": stratified,
         "difficulty_curves": difficulty_curves,
         "nexus_analysis": routing,
+        "geometric_routing": geometric_routing,
         "integrator_analysis": integrator,
         "causal_ablations": causal,
         "surface_vs_computation": surface_analysis,
@@ -417,6 +419,68 @@ def _replace_non_finite(value: Any) -> Any:
     return value
 
 
+def _counterfactual_trace_rows(output: EMCOutput | None) -> list[dict[str, Any]]:
+    if output is None:
+        return []
+    rows: list[dict[str, Any]] = []
+    for trace in output.trace:
+        probe = trace.counterfactual
+        if probe is None:
+            continue
+        for index in range(probe.routing_regret.numel()):
+            rows.append(
+                {
+                    "trajectory_step": trace.cycle,
+                    "routing_regret": float(probe.routing_regret[index].item()),
+                    "top1_correct": bool(probe.top1_correct[index].item()),
+                    "top2_correct": bool(probe.top2_correct[index].item()),
+                    "chosen_expert": int(probe.chosen_expert[index].item()),
+                    "counterfactual_best": int(
+                        probe.counterfactual_best[index].item()
+                    ),
+                    "candidate_losses": probe.candidate_losses[index].tolist(),
+                }
+            )
+    return rows
+
+
+def _aggregate_geometric_counterfactuals(
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    dimensions = {
+        "capability": "by_capability",
+        "operation": "by_operation",
+        "surface_format": "by_surface_format",
+        "difficulty": "by_difficulty",
+    }
+    output: dict[str, Any] = {"schema_version": 1, "probe_count": 0}
+    all_rows: list[dict[str, Any]] = []
+    for record in records:
+        metadata = record.get("metadata", {})
+        for row in record.get("geometric_counterfactual", []):
+            all_rows.append({**row, "metadata": metadata})
+    output["probe_count"] = len(all_rows)
+    for metadata_key, output_key in dimensions.items():
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for row in all_rows:
+            label = str(row["metadata"].get(metadata_key, "unknown"))
+            grouped.setdefault(label, []).append(row)
+        output[output_key] = {
+            label: {
+                "probe_count": len(rows),
+                "mean_routing_regret": sum(
+                    float(row["routing_regret"]) for row in rows
+                ) / len(rows),
+                "top1_accuracy": sum(bool(row["top1_correct"]) for row in rows)
+                / len(rows),
+                "top2_accuracy": sum(bool(row["top2_correct"]) for row in rows)
+                / len(rows),
+            }
+            for label, rows in grouped.items()
+        }
+    return output
+
+
 def _evaluate_example(
     model: nn.Module,
     tokenizer: TextTokenizer,
@@ -428,6 +492,7 @@ def _evaluate_example(
     zero_mask: Tensor | None = None,
     forced_modules: Tensor | None = None,
     cycle_limit: int | None = None,
+    probe_index: int = 0,
 ) -> tuple[dict[str, Any], EMCOutput | None, int]:
     prompt_ids = tokenizer.encode(example.prompt)
     target_ids = tokenizer.encode(example.target)
@@ -460,6 +525,19 @@ def _evaluate_example(
     }
     if cycle_limit is not None and isinstance(model, EMCModel):
         kwargs["evaluation_cycle_limit"] = cycle_limit
+    if (
+        isinstance(model, EMCModel)
+        and getattr(model.config, "router_type", None) == "geometric"
+        and return_trace
+        and availability_mask is None
+        and zero_mask is None
+        and forced_modules is None
+    ):
+        kwargs.update(
+            counterfactual_targets=targets.unsqueeze(0),
+            training_step=probe_index,
+            force_counterfactual_probe=True,
+        )
     with torch.inference_mode(), _autocast(config.precision, device):
         raw_output = model(inputs, **kwargs)
     output = raw_output if isinstance(raw_output, EMCOutput) else None
@@ -482,6 +560,7 @@ def _evaluate_example(
         "prediction": prediction,
         "target": example.target,
         "trace": _trace_to_dict(trace) if trace is not None else None,
+        "geometric_counterfactual": _counterfactual_trace_rows(output),
     }
     return record, output, len(all_ids) - 1
 
