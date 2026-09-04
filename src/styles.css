@@ -9,7 +9,7 @@ button { color: inherit; cursor: pointer; }
 .app { display: grid; grid-template-columns: 224px minmax(0, 1fr); height: 100%; background: radial-gradient(circle at 83% -10%, rgba(69, 108, 122, .13), transparent 35%), var(--bg); }
 .sidebar { display: flex; flex-direction: column; border-right: 1px solid var(--line); background: #0e1218; padding: 22px 14px; }
 .brand { display: flex; align-items: center; gap: 11px; padding: 0 9px 26px; }
-.brand img { width: 30px; height: 30px; filter: brightness(1.6); }
+.brand img { width: 38px; height: 30px; border-radius: 5px; object-fit: cover; box-shadow: 0 5px 16px rgba(57, 25, 94, .35); }
 .brand div { display: flex; flex-direction: column; line-height: 1.1; }
 .brand b { font-size: 15px; letter-spacing: -.02em; }
 .brand span { color: var(--muted); font-size: 10px; margin-top: 4px; text-transform: uppercase; letter-spacing: .12em; }

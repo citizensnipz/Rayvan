@@ -74,7 +74,7 @@ npm run tauri build
 
 ## Replacing the icon
 
-The logo shown inside the window is the documented placeholder at [`src/assets/rayvan-mark.svg`](src/assets/rayvan-mark.svg). Replace that file while keeping its name and `76 × 76` view box, or update the image path in [`index.html`](index.html).
+The logo shown inside the window is stored at [`src/assets/rayvan-logo.png`](src/assets/rayvan-logo.png).
 
 The platform installer and executable icons in `src-tauri/icons/` are generated from the same placeholder. After replacing the SVG, regenerate them with:
 

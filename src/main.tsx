@@ -9,7 +9,7 @@ import { LiveExperiment } from "./research/LiveExperiment";
 import { RunComparison } from "./research/RunComparison";
 import { cancelExperiment, estimateExperiment, getActiveExperiment, getExperiment, getSchema, listExperiments, startExperiment } from "./research/api";
 import type { Estimate, ExperimentConfig, ResearchEvent, ResearchSchema, RunDetail, RunState, RunSummary } from "./research/types";
-import mark from "./assets/rayvan-mark.svg";
+import mark from "./assets/rayvan-logo.png";
 
 type View = "build" | "live" | "history" | "report" | "compare";
 
@@ -95,7 +95,7 @@ function App() {
 
   return <div className="app">
     <aside className="sidebar">
-      <div className="brand"><img src={mark} /><div><b>Rayvan</b><span>EMC Research</span></div></div>
+      <div className="brand"><img src={mark} alt="Rayvan raven logo" /><div><b>Rayvan</b><span>EMC Research</span></div></div>
       <nav>{navItems.map(([id, label, icon]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><i>{icon}</i><span>{label}</span>{id === "live" && active && <em />}</button>)}</nav>
       <div className="sidebar-foot"><span className={`connection ${network === "Node connected" ? "online" : ""}`} />{network}<small>Research Console · Schema v{schema?.schema_version ?? "—"}</small></div>
     </aside>
