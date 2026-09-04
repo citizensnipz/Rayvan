@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from rayvan_emc.projections import fit_projection
 from rayvan_emc.research_config import ExperimentConfig, ModelConfig, ResearchTrainingConfig, RoutingConfig, research_schema
@@ -23,6 +24,9 @@ def test_research_schema_uses_the_real_capability_registry() -> None:
         "stateful_action",
     ]
     assert {row["id"] for row in schema["expert_families"]} == {"gpt", "ssm", "recurrent", "delta"}
+    labels = {row["id"]: row["label"] for row in schema["architectures"]}
+    assert labels["emc"] == "Sequential EMC"
+    assert labels["legacy_parallel_emc"] == "Legacy Parallel Top-K EMC"
 
 
 def test_experiment_config_round_trips_and_validates() -> None:
@@ -65,7 +69,7 @@ def test_tiny_cpu_run_streams_and_persists_full_run(tmp_path) -> None:
         suite="capability_10",
         architecture="emc",
         experts={"gpt": 1, "ssm": 0, "recurrent": 0, "delta": 0},
-        routing=RoutingConfig(top_k=1, cycles=1),
+        routing=RoutingConfig(trajectory_steps=1),
         model=ModelConfig(
             preset="custom",
             fairness_mode="custom",
@@ -100,3 +104,82 @@ def test_tiny_cpu_run_streams_and_persists_full_run(tmp_path) -> None:
     assert (run / "config.json").is_file()
     assert (run / "summary.json").is_file()
     assert (run / "diagnostics" / "report.json").is_file()
+    report = json.loads((run / "diagnostics" / "report.json").read_text())
+    consistency = report["module_diagnostics"][
+        "training_evaluation_routing_consistency"
+    ]
+    assert consistency["module_id_family_mapping_consistent"] is True
+
+
+def test_console_exposes_architecture_specific_routing_controls() -> None:
+    source = (
+        Path(__file__).parents[2] / "src" / "research" / "ExperimentBuilder.tsx"
+    ).read_text(encoding="utf-8")
+    assert 'label="Trajectory steps"' in source
+    assert "Experts per step" in source
+    assert 'config.architecture === "legacy_parallel_emc"' in source
+    assert 'label="Top-K"' in source
+    assert 'if (architecture === "emc") delete routing.top_k' in source
+
+
+def test_console_renders_sequential_trajectory_telemetry() -> None:
+    source = (
+        Path(__file__).parents[2]
+        / "src"
+        / "research"
+        / "charts"
+        / "RoutingOverview.tsx"
+    ).read_text(encoding="utf-8")
+    assert "Expert selection by trajectory step" in source
+    assert "Expert transition matrix" in source
+    assert "Refractory effect: raw vs inhibited winner" in source
+
+
+def test_tiny_sequential_run_records_real_trajectory_events(tmp_path) -> None:
+    config = ExperimentConfig(
+        name="sequential-trajectory-smoke",
+        suite="capability_10",
+        architecture="emc",
+        routing=RoutingConfig(
+            trajectory_steps=3,
+            refractory_strength=2.0,
+            refractory_decay=0.25,
+        ),
+        model=ModelConfig(
+            preset="custom",
+            fairness_mode="custom",
+            latent_dim=8,
+            context_length=4,
+            attention_heads=2,
+            module_hidden_dim=16,
+            integrator_heads=2,
+            chunk_size=4,
+            shared_state_slots=2,
+            tie_embeddings=False,
+        ),
+        training=ResearchTrainingConfig(
+            tokens=4,
+            batch_size=1,
+            learning_rate=1e-3,
+            seed=9,
+            gradient_accumulation=1,
+            precision="fp32",
+            device="cpu",
+            evaluation_interval=1,
+            evaluation_batches=1,
+            telemetry_interval=1,
+            diagnostic_examples_per_capability=1,
+        ),
+    )
+    run_experiment(config, runs_directory=tmp_path, run_id="trajectory-e2e")
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "trajectory-e2e" / "routing.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    routing = next(event for event in events if event["type"] == "routing_metrics")
+    assert len(routing["trajectory_selection_counts"]) == 3
+    assert sum(routing["selection_counts"]) == 3
+    assert routing["refractory_observations"] == 3
+    assert sum(sum(row) for row in routing["transitions"]) == 2

@@ -35,7 +35,7 @@ from .model import EMCCycleTrace, EMCModel, EMCOutput
 from .n2 import N2ExecutionTrace
 from .tokenization import TextTokenizer
 
-REPORT_SCHEMA_VERSION = 3
+REPORT_SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -133,6 +133,14 @@ class _TraceSummary:
     actual_unique_executed_per_chunk: list[int]
     executed_module_sets: list[tuple[int, ...]]
     population_fraction_touched: float
+    trajectory_step_counts: dict[int, Counter[int]]
+    transition_counts: Counter[tuple[int, int]]
+    raw_winner_counts: Counter[int]
+    effective_winner_counts: Counter[int]
+    refractory_changed_winner_count: int
+    refractory_observations: int
+    refractory_penalties: list[float]
+    trajectory_samples: list[list[dict[str, Any]]]
 
 
 def evaluate_checkpoint(
@@ -881,6 +889,7 @@ def _cycle_trace_telemetry(outputs: Iterable[EMCOutput]) -> dict[str, Any]:
 def _summarize_trace(output: EMCOutput, model: nn.Module) -> _TraceSummary:
     summary = _empty_trace()
     if output.trace:
+        previous_selected: Tensor | None = None
         for cycle in output.trace:
             if cycle.selected_indices is None:
                 continue
@@ -897,6 +906,93 @@ def _summarize_trace(output: EMCOutput, model: nn.Module) -> _TraceSummary:
                     summary, selected, cycle.integrator_trace, "token"
                 )
             summary.executed_module_sets.append(cycle.selected_modules)
+            flattened = selected.reshape(-1)
+            summary.trajectory_step_counts[cycle.cycle].update(flattened.tolist())
+            if previous_selected is not None:
+                summary.transition_counts.update(
+                    zip(previous_selected.reshape(-1).tolist(), flattened.tolist())
+                )
+            previous_selected = selected
+            if cycle.pre_inhibition_router_scores is not None:
+                raw_winners = cycle.pre_inhibition_router_scores.argmax(dim=-1).reshape(-1)
+                effective_winners = cycle.router_scores.argmax(dim=-1).reshape(-1)
+                summary.raw_winner_counts.update(raw_winners.tolist())
+                summary.effective_winner_counts.update(effective_winners.tolist())
+                summary.refractory_changed_winner_count += int(
+                    (raw_winners != effective_winners).sum().item()
+                )
+                summary.refractory_observations += raw_winners.numel()
+            if cycle.refractory_penalty is not None:
+                summary.refractory_penalties.extend(
+                    cycle.refractory_penalty.float().reshape(-1).tolist()
+                )
+            sample_count = min(8, selected.reshape(-1).numel())
+            while len(summary.trajectory_samples) < sample_count:
+                summary.trajectory_samples.append([])
+            selected_flat = selected.reshape(-1)
+            raw_flat = (
+                cycle.raw_router_scores.reshape(-1, model.config.num_modules)
+                if cycle.raw_router_scores is not None else None
+            )
+            pre_inhibition_flat = (
+                cycle.pre_inhibition_router_scores.reshape(-1, model.config.num_modules)
+                if cycle.pre_inhibition_router_scores is not None else raw_flat
+            )
+            effective_flat = cycle.router_scores.reshape(
+                -1, model.config.num_modules
+            )
+            penalty_flat = (
+                cycle.refractory_penalty.reshape(-1, model.config.num_modules)
+                if cycle.refractory_penalty is not None else None
+            )
+            previous_flat = (
+                cycle.previous_indices.reshape(-1)
+                if cycle.previous_indices is not None else None
+            )
+            gate_flat = (
+                cycle.integrator_trace.gate_magnitude.reshape(-1)
+                if cycle.integrator_trace is not None else None
+            )
+            update_flat = (
+                cycle.integrator_trace.integrated_update_norm.reshape(-1)
+                if cycle.integrator_trace is not None else None
+            )
+            for sample in range(sample_count):
+                module = int(selected_flat[sample])
+                summary.trajectory_samples[sample].append({
+                    "step": cycle.cycle,
+                    "selected_module": module,
+                    "selected_family": model.module_families[module],
+                    "raw_winner": (
+                        int(pre_inhibition_flat[sample].argmax()) if pre_inhibition_flat is not None else None
+                    ),
+                    "base_router_score": (
+                        float(raw_flat[sample, module]) if raw_flat is not None else None
+                    ),
+                    "pre_inhibition_selected_score": (
+                        float(pre_inhibition_flat[sample, module]) if pre_inhibition_flat is not None else None
+                    ),
+                    "pre_inhibition_selected_probability": (
+                        float(torch.softmax(pre_inhibition_flat[sample].float(), dim=-1)[module])
+                        if pre_inhibition_flat is not None else None
+                    ),
+                    "effective_selected_score": float(effective_flat[sample, module]),
+                    "effective_selected_probability": float(
+                        torch.softmax(effective_flat[sample].float(), dim=-1)[module]
+                    ),
+                    "previous_module": (
+                        int(previous_flat[sample]) if previous_flat is not None else None
+                    ),
+                    "refractory_penalty": (
+                        float(penalty_flat[sample, module]) if penalty_flat is not None else 0.0
+                    ),
+                    "integrator_gate": (
+                        float(gate_flat[sample]) if gate_flat is not None else None
+                    ),
+                    "latent_change_magnitude": (
+                        float(update_flat[sample]) if update_flat is not None else None
+                    ),
+                })
         summary.requested_pairs = sum(summary.module_counts.values())
         summary.executed_pairs = sum(
             len(cycle.selected_modules) for cycle in output.trace
@@ -1023,6 +1119,14 @@ def _empty_trace() -> _TraceSummary:
         actual_unique_executed_per_chunk=[],
         executed_module_sets=[],
         population_fraction_touched=0.0,
+        trajectory_step_counts=defaultdict(Counter),
+        transition_counts=Counter(),
+        raw_winner_counts=Counter(),
+        effective_winner_counts=Counter(),
+        refractory_changed_winner_count=0,
+        refractory_observations=0,
+        refractory_penalties=[],
+        trajectory_samples=[],
     )
 
 
@@ -1094,6 +1198,13 @@ def _observe_integrator(summary: _TraceSummary, selected: Tensor, trace: Any, ki
         expanded = selected
         if expanded.ndim == 2 and values.ndim == 3:
             expanded = expanded.unsqueeze(1).expand(-1, values.size(1), -1)
+        elif (
+            expanded.ndim == 3
+            and values.ndim == 3
+            and expanded.size(1) == 1
+            and values.size(1) > 1
+        ):
+            expanded = expanded.expand(-1, values.size(1), -1)
         for module_index, value in zip(expanded.reshape(-1).tolist(), values.float().reshape(-1).tolist(), strict=True):
             summary.integrator[metric_name][module_index].append(value)
     similarity = trace.proposal_similarity.float()
@@ -1176,6 +1287,35 @@ def _trace_to_dict(summary: _TraceSummary) -> dict[str, Any]:
             list(indices) for indices in summary.executed_module_sets
         ],
         "population_fraction_touched": summary.population_fraction_touched,
+        "trajectory_step_counts": {
+            str(step): {str(module): count for module, count in counts.items()}
+            for step, counts in summary.trajectory_step_counts.items()
+        },
+        "transition_counts": {
+            f"{source}->{target}": count
+            for (source, target), count in summary.transition_counts.items()
+        },
+        "same_expert_continuation_rate": (
+            sum(
+                count for (source, target), count in summary.transition_counts.items()
+                if source == target
+            ) / max(sum(summary.transition_counts.values()), 1)
+        ),
+        "raw_winner_counts": {
+            str(key): value for key, value in summary.raw_winner_counts.items()
+        },
+        "effective_winner_counts": {
+            str(key): value for key, value in summary.effective_winner_counts.items()
+        },
+        "refractory_changed_winner_count": summary.refractory_changed_winner_count,
+        "refractory_observations": summary.refractory_observations,
+        "refractory_changed_winner_rate": (
+            summary.refractory_changed_winner_count
+            / summary.refractory_observations
+            if summary.refractory_observations else 0.0
+        ),
+        "mean_refractory_penalty": _mean(summary.refractory_penalties),
+        "trajectory_samples": summary.trajectory_samples,
     }
 
 
@@ -1279,11 +1419,15 @@ def _aggregate_routing(
     by_capability = _routing_matrix(records, "capability", families)
     by_surface = _routing_matrix(records, "surface_format", families)
     family_metrics = _family_routing_metrics(records, model, by_capability)
+    trajectory = _aggregate_trajectory_routing(records, model.config.num_modules)
+    sequential = getattr(model.config, "architecture_stage", "") == "n1_sequential"
     return {
         "routing_variable": (
-            "selected family per top-k slot; request and routing-unit presence "
-            "are reported separately"
+            "one selected module after each latent update"
+            if sequential else
+            "selected family per top-k slot; request and routing-unit presence are reported separately"
         ),
+        "trajectory": trajectory,
         "routing_frequency_by_capability": by_capability,
         "routing_frequency_by_surface": by_surface,
         "module_frequency_by_capability": _module_routing_matrix(
@@ -1333,6 +1477,51 @@ def _aggregate_routing(
         "balancing_bias_by_capability": _vector_by(
             records, "capability", "mean_balance_bias"
         ),
+    }
+
+
+def _aggregate_trajectory_routing(
+    records: list[dict[str, Any]], num_modules: int
+) -> dict[str, Any]:
+    steps: dict[str, Counter[str]] = defaultdict(Counter)
+    transitions: Counter[str] = Counter()
+    raw: Counter[str] = Counter()
+    effective: Counter[str] = Counter()
+    changed = 0
+    observations = 0
+    continuation_weighted = 0.0
+    continuation_observations = 0
+    for record in records:
+        trace = record.get("trace") or {}
+        for step, counts in trace.get("trajectory_step_counts", {}).items():
+            steps[str(step)].update({str(key): int(value) for key, value in counts.items()})
+        transitions.update(trace.get("transition_counts", {}))
+        raw.update(trace.get("raw_winner_counts", {}))
+        effective.update(trace.get("effective_winner_counts", {}))
+        changed += int(trace.get("refractory_changed_winner_count", 0))
+        sample_count = int(trace.get("refractory_observations", 0))
+        observations += sample_count
+        continuation_weighted += float(trace.get("same_expert_continuation_rate", 0.0)) * max(sum(trace.get("transition_counts", {}).values()), 0)
+        continuation_observations += sum(trace.get("transition_counts", {}).values())
+    step_frequencies = {}
+    for step, counts in steps.items():
+        total = sum(counts.values())
+        step_frequencies[step] = {
+            str(index): counts[str(index)] / max(total, 1)
+            for index in range(num_modules)
+        }
+    return {
+        "selection_frequency_by_step": step_frequencies,
+        "transition_counts": dict(transitions),
+        "same_expert_continuation_rate": (
+            continuation_weighted / continuation_observations
+            if continuation_observations else 0.0
+        ),
+        "raw_winner_counts": dict(raw),
+        "post_inhibition_winner_counts": dict(effective),
+        "refractory_changed_winner_count": changed,
+        "refractory_observations": observations,
+        "refractory_changed_winner_rate": changed / observations if observations else 0.0,
     }
 
 
@@ -2353,6 +2542,47 @@ def _module_diagnostics(
     updates_available = any(
         row.get("update_norm") is not None for row in modules
     )
+    evaluation_counts = Counter()
+    for record in records:
+        evaluation_counts.update(
+            {int(key): int(value) for key, value in (record.get("trace") or {}).get("module_counts", {}).items()}
+        )
+    training_counts = {
+        index: int(saved_modules.get(index, {}).get("execution_count") or 0)
+        for index in range(model.config.num_modules)
+    }
+    training_active = {index for index, count in training_counts.items() if count > 0}
+    evaluation_active = {index for index, count in evaluation_counts.items() if count > 0}
+    mapping_consistent = all(
+        row["family"] == model.module_families[row["module"]]
+        for row in modules
+    )
+    comparison_available = bool(training_active and evaluation_active)
+    routing_sets_match = (
+        training_active == evaluation_active if comparison_available else None
+    )
+    consistency = {
+        "module_id_family_mapping_consistent": mapping_consistent,
+        "training_execution_counts": {str(k): v for k, v in training_counts.items()},
+        "evaluation_execution_counts": {
+            str(index): evaluation_counts[index]
+            for index in range(model.config.num_modules)
+        },
+        "training_active_modules": sorted(training_active),
+        "evaluation_active_modules": sorted(evaluation_active),
+        "active_module_sets_match": routing_sets_match,
+        "comparison_available": comparison_available,
+        "status": (
+            "insufficient_observations"
+            if not comparison_available
+            else "consistent"
+            if mapping_consistent and routing_sets_match
+            else "training_evaluation_routing_mismatch"
+        ),
+        "note": (
+            "Different sampled inputs may legitimately change utilization; a warning identifies disjoint active sets for review."
+        ),
+    }
     return {
         "modules": modules,
         "availability": {
@@ -2384,6 +2614,7 @@ def _module_diagnostics(
             "training instrumentation samples module gradient/update norms at "
             "checkpoint intervals."
         ),
+        "training_evaluation_routing_consistency": consistency,
     }
 
 
@@ -2926,6 +3157,14 @@ def _diagnostic_integrity_warnings(
             ),
         )
     availability = module_diagnostics.get("availability", {})
+    consistency = module_diagnostics.get(
+        "training_evaluation_routing_consistency", {}
+    )
+    if consistency.get("status") == "training_evaluation_routing_mismatch":
+        add(
+            "training_evaluation_routing_mismatch",
+            "Training and evaluation sampled different active module sets; inspect the saved execution counts and persistent balance bias.",
+        )
     if not availability.get("gradients_captured"):
         add(
             "gradients_unavailable",

@@ -13,7 +13,7 @@ from .chunked import ChunkedEMCModel
 from .data import LanguageCorpus
 from .diagnostics import count_parameters
 from .experiments.common import create_emc_model, create_n2_model
-from .model import EMCConfig, EMCModel
+from .model import EMCConfig, EMCModel, SequentialEMCModel
 from .n2 import N2EMCModel
 from .serial import HeterogeneousSerialModel
 from .training import TrainingConfig
@@ -23,6 +23,7 @@ ArchitectureName = Literal[
     "homogeneous_serial",
     "heterogeneous_serial",
     "emc",
+    "legacy_parallel_emc",
     "old_emc",
     "n2_mixed",
     "n2_gpt4",
@@ -91,6 +92,7 @@ def build_architectures(
         "homogeneous_serial",
         "heterogeneous_serial",
         "emc",
+        "legacy_parallel_emc",
         "old_emc",
         *N2_ARCHITECTURES,
     }
@@ -110,7 +112,7 @@ def build_architectures(
     )
     if not isinstance(template, ChunkedEMCModel):
         raise RuntimeError("n1_chunked factory did not create the real ChunkedEMCModel")
-    emc_config = replace(
+    legacy_config = replace(
         template.config,
         module_families=heterogeneous_order,
         num_modules=len(heterogeneous_order),
@@ -118,8 +120,16 @@ def build_architectures(
         modules_per_cycle=top_k,
         active_top_k=top_k,
     )
+    emc_config = replace(
+        legacy_config,
+        modules_per_cycle=1,
+        active_top_k=None,
+        num_cycles=3,
+        trajectory_steps=3,
+        architecture_stage="n1_sequential",
+    )
     torch.manual_seed(seed)
-    emc = ChunkedEMCModel(emc_config)
+    emc = SequentialEMCModel(emc_config)
     emc_accounting = architecture_accounting(
         emc, sequence_length=maximum_sequence_length
     )
@@ -148,11 +158,15 @@ def build_architectures(
         if name == "homogeneous_serial":
             all_models[name] = TransformerLanguageModel(transformer_config)
         elif name == "heterogeneous_serial":
-            all_models[name] = HeterogeneousSerialModel(emc_config)
+            all_models[name] = HeterogeneousSerialModel(legacy_config)
         elif name == "emc":
             all_models[name] = emc
+        elif name == "legacy_parallel_emc":
+            all_models[name] = ChunkedEMCModel(legacy_config)
         elif name == "old_emc":
-            all_models[name] = ChunkedEMCModel(emc_config)
+            all_models[name] = EMCModel(
+                replace(legacy_config, architecture_stage="token")
+            )
         else:
             all_models[name] = create_n2_model(
                 vocab_size,
@@ -276,7 +290,7 @@ def architecture_accounting(
         )
         flops = 2 * parameter_uses + attention_extra
         routable = sum(module_counts)
-        architecture = "emc"
+        architecture = "legacy_parallel_emc"
         method = (
             "router, both Integrators, SharedCore, and output projection are "
             "included in a once-per-token parameter-use proxy. Attention "
@@ -298,13 +312,17 @@ def architecture_accounting(
         ) * sequence_length
         flops = 2 * parameter_uses
         routable = sum(module_counts)
-        architecture = "old_emc"
+        sequential = model.config.architecture_stage == "n1_sequential"
+        architecture = "emc" if sequential else "old_emc"
         method = (
-            "Legacy token-routed EMC estimate includes selected modules, router, "
-            "Integrator, and output projection for every configured cycle."
+            "Sequential EMC estimate includes one selected expert, Nexus, the "
+            "single-proposal Integrator gate, and output projection for every "
+            "trajectory step."
+            if sequential else
+            "Legacy token-routed EMC estimate includes selected modules, router, Integrator, and output projection for every configured cycle."
         )
         limitations.append(
-            "Legacy token routing uses a parameter-use proxy without attention-score products."
+            "Parameter-use accounting is a proxy without attention-score products."
         )
     elif isinstance(model, HeterogeneousSerialModel):
         module_counts = [count_parameters(module) for module in model.emc_modules]

@@ -79,6 +79,7 @@ from .integrator import (
     WeightedAverageIntegrator,
 )
 from .modules import (
+    DeltaEMCModule,
     EMCModule,
     EMCModuleBase,
     RecurrentEMCModule,
@@ -90,6 +91,7 @@ from .model import (
     EMCCycleTrace,
     EMCModel,
     EMCOutput,
+    SequentialEMCModel,
 )
 from .n2 import (
     N2_POPULATIONS,
@@ -153,6 +155,7 @@ __all__ = [
     "ChunkedEMCModel",
     "ChunkedExecutionTrace",
     "DeltaN1Node",
+    "DeltaEMCModule",
     "CheckpointProgress",
     "DEFAULT_HELD_OUT_COMBINATIONS",
     "DEFAULT_MIXTURE_WEIGHTS",
@@ -168,6 +171,7 @@ __all__ = [
     "EMCModule",
     "EMCModuleBase",
     "EMCOutput",
+    "SequentialEMCModel",
     "GPTN1Node",
     "HomogeneousN1Node",
     "HuggingFaceTokenizer",

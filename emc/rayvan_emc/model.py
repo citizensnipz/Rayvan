@@ -23,6 +23,10 @@ class EMCConfig:
     num_modules: int = 6
     modules_per_cycle: int = 2
     num_cycles: int = 3
+    trajectory_steps: int | None = None
+    refractory_enabled: bool = True
+    refractory_strength: float = 0.15
+    refractory_decay: float = 0.35
     vocab_size: int = 256
     max_sequence_length: int = 128
     module_hidden_dim: int | None = None
@@ -101,8 +105,14 @@ class EMCConfig:
             raise ValueError("active_top_k must be positive when provided")
         if self.resolved_active_top_k > self.num_modules:
             raise ValueError("active_top_k cannot exceed num_modules")
-        if self.architecture_stage not in {"token", "n1_chunked", "n2"}:
-            raise ValueError("architecture_stage must be token, n1_chunked, or n2")
+        if self.architecture_stage not in {"token", "n1_sequential", "n1_chunked", "n2"}:
+            raise ValueError("architecture_stage must be token, n1_sequential, n1_chunked, or n2")
+        if self.trajectory_steps is not None and self.trajectory_steps <= 0:
+            raise ValueError("trajectory_steps must be positive when provided")
+        if self.refractory_strength < 0:
+            raise ValueError("refractory_strength cannot be negative")
+        if not 0 <= self.refractory_decay <= 1:
+            raise ValueError("refractory_decay must be between zero and one")
         if not 0 <= self.minimum_lease_chunks:
             raise ValueError("minimum_lease_chunks cannot be negative")
         if not 0 <= self.balance_warmup_chunks:
@@ -185,6 +195,10 @@ class EMCConfig:
         return self.active_top_k or self.modules_per_cycle
 
     @property
+    def resolved_trajectory_steps(self) -> int:
+        return self.trajectory_steps or self.num_cycles
+
+    @property
     def resolved_shared_core_hidden_dim(self) -> int:
         return self.shared_core_hidden_dim or self.latent_dim
 
@@ -219,6 +233,11 @@ class EMCCycleTrace:
     module_families: tuple[str, ...] = ()
     expert_names: tuple[str, ...] = ()
     local_diagnostics: tuple[object, ...] = ()
+    raw_router_scores: Tensor | None = None
+    pre_inhibition_router_scores: Tensor | None = None
+    effective_router_scores: Tensor | None = None
+    refractory_penalty: Tensor | None = None
+    previous_indices: Tensor | None = None
 
 
 @dataclass(frozen=True)
@@ -268,6 +287,15 @@ class EMCModel(nn.Module):
         return tuple(module.family for module in self.emc_modules)
 
     @property
+    def expert_names(self) -> tuple[str, ...]:
+        counts: dict[str, int] = {}
+        names = []
+        for family in self.module_families:
+            counts[family] = counts.get(family, 0) + 1
+            names.append(f"{family}-{counts[family]}")
+        return tuple(names)
+
+    @property
     def active_top_k(self) -> int:
         return self._active_top_k
 
@@ -302,6 +330,23 @@ class EMCModel(nn.Module):
             *update_locations.shape, latent.size(-1)
         )
         return torch.gather(computed_updates, dim=2, index=gather_indices)
+
+    def execute_selected_requests(
+        self, latent: Tensor, selected_indices: Tensor
+    ) -> Tensor:
+        """Execute each expert only for requests assigned at this trajectory step."""
+        selected = selected_indices.reshape(latent.size(0))
+        updates = latent.new_zeros(*latent.shape, 1)
+        updates = updates.permute(0, 1, 3, 2)
+        for module_index in torch.unique(selected, sorted=True).tolist():
+            request_indices = (selected == module_index).nonzero(
+                as_tuple=False
+            ).reshape(-1)
+            proposal = self.emc_modules[module_index](
+                latent.index_select(0, request_indices)
+            ).to(dtype=updates.dtype).unsqueeze(2)
+            updates = updates.index_copy(0, request_indices, proposal)
+        return updates
 
     def forward(
         self,
@@ -338,26 +383,58 @@ class EMCModel(nn.Module):
                 raise ValueError(
                     "evaluation_cycle_limit must be within configured EMC cycles"
                 )
-        cycles_to_run = evaluation_cycle_limit or self.config.num_cycles
+        sequential = self.config.architecture_stage == "n1_sequential"
+        maximum_steps = (
+            self.config.resolved_trajectory_steps
+            if sequential
+            else self.config.num_cycles
+        )
+        cycles_to_run = evaluation_cycle_limit or maximum_steps
         positions = torch.arange(sequence_length, device=token_ids.device)
         latent = self.token_embedding(token_ids) + self.position_embedding(positions)
         cycle_traces: list[EMCCycleTrace] = []
         cycle_balance_losses: list[Tensor] = []
         per_cycle_logits: list[Tensor] = []
+        refractory = latent.new_zeros(
+            token_ids.size(0), 1, self.config.num_modules
+        )
+        previous_indices: Tensor | None = None
+        trajectory_selections: list[Tensor] = []
 
         for cycle in range(cycles_to_run):
-            routing = self.router(
-                latent,
-                availability_mask=availability_mask,
-                module_descriptors=module_descriptors,
-                top_k=self.active_top_k,
-            )
+            if sequential:
+                adjustment = latent.new_zeros(refractory.shape)
+                if previous_indices is not None:
+                    previous_mask = torch.zeros_like(adjustment, dtype=torch.bool)
+                    previous_mask.scatter_(-1, previous_indices, True)
+                    adjustment = adjustment - self.config.switch_cost
+                    adjustment = torch.where(
+                        previous_mask,
+                        adjustment + self.config.switch_cost + self.config.persistence_bonus,
+                        adjustment,
+                    )
+                routing = self.router.route_one(
+                    latent.mean(dim=1, keepdim=True),
+                    availability_mask=availability_mask,
+                    module_descriptors=module_descriptors,
+                    score_adjustment=adjustment,
+                    refractory_penalty=(
+                        refractory if self.config.refractory_enabled else None
+                    ),
+                )
+            else:
+                routing = self.router(
+                    latent,
+                    availability_mask=availability_mask,
+                    module_descriptors=module_descriptors,
+                    top_k=self.active_top_k,
+                )
             if diagnostic_forced_modules is not None:
                 routing = _force_token_routing(
                     routing,
                     diagnostic_forced_modules,
                     batch=token_ids.size(0),
-                    sequence=sequence_length,
+                    sequence=(1 if sequential else sequence_length),
                     modules_per_cycle=self.active_top_k,
                     num_modules=self.config.num_modules,
                 )
@@ -369,8 +446,10 @@ class EMCModel(nn.Module):
                         entropy_floor=balance_entropy_floor,
                     )
                 )
-            module_updates = self.execute_selected_modules(
-                latent, routing.selected_indices
+            module_updates = (
+                self.execute_selected_requests(latent, routing.selected_indices)
+                if sequential
+                else self.execute_selected_modules(latent, routing.selected_indices)
             )
             if diagnostic_zero_proposal_mask is not None:
                 zero_mask = diagnostic_zero_proposal_mask.to(
@@ -384,10 +463,15 @@ class EMCModel(nn.Module):
                 module_updates = module_updates.masked_fill(
                     selected_to_zero.unsqueeze(-1), 0
                 )
+            integration_weights = routing.selected_weights
+            if sequential:
+                integration_weights = integration_weights.expand(
+                    -1, sequence_length, -1
+                )
             integrated = self.integrator(
                 latent,
                 module_updates,
-                routing.selected_weights,
+                integration_weights,
                 return_diagnostics=return_trace,
             )
             if return_trace:
@@ -420,8 +504,44 @@ class EMCModel(nn.Module):
                         selected_indices=routing.selected_indices.detach().cpu(),
                         integrator_trace=integrator_trace,
                         module_families=self.module_families,
+                        raw_router_scores=(
+                            routing.raw_scores.detach().cpu()
+                            if routing.raw_scores is not None else None
+                        ),
+                        pre_inhibition_router_scores=(
+                            routing.pre_inhibition_scores.detach().cpu()
+                            if routing.pre_inhibition_scores is not None else None
+                        ),
+                        effective_router_scores=routing.scores.detach().cpu(),
+                        refractory_penalty=(
+                            routing.refractory_penalty.detach().cpu()
+                            if routing.refractory_penalty is not None else None
+                        ),
+                        previous_indices=(
+                            previous_indices.detach().cpu()
+                            if previous_indices is not None else None
+                        ),
                     )
                 )
+
+            if sequential:
+                trajectory_selections.append(routing.selected_indices.detach())
+                refractory = refractory * self.config.refractory_decay
+                refractory.scatter_add_(
+                    -1,
+                    routing.selected_indices,
+                    torch.full_like(
+                        routing.selected_indices,
+                        self.config.refractory_strength,
+                        dtype=refractory.dtype,
+                    ),
+                )
+                previous_indices = routing.selected_indices
+
+        if sequential and self.training and trajectory_selections:
+            updater = getattr(self.router, "update_balance_bias", None)
+            if updater is not None:
+                updater(torch.cat(trajectory_selections, dim=0))
 
         logits = self.output_projection(self.output_norm(latent))
         if return_trace or return_cycle_logits:
@@ -438,6 +558,17 @@ class EMCModel(nn.Module):
                 ),
             )
         return logits
+
+
+class SequentialEMCModel(EMCModel):
+    """Primary EMC: one route, one expert transform, one gated integration."""
+
+    def __init__(self, config: EMCConfig) -> None:
+        if config.architecture_stage != "n1_sequential":
+            raise ValueError("SequentialEMCModel requires architecture_stage=n1_sequential")
+        if config.modules_per_cycle != 1 or config.active_top_k not in {None, 1}:
+            raise ValueError("sequential EMC executes exactly one expert per routing step")
+        super().__init__(config)
 
 
 def _force_token_routing(
@@ -468,4 +599,7 @@ def _force_token_routing(
         scores=routing.scores,
         selected_indices=forced,
         selected_weights=torch.softmax(forced_scores, dim=-1),
+        raw_scores=routing.raw_scores,
+        pre_inhibition_scores=routing.pre_inhibition_scores,
+        refractory_penalty=routing.refractory_penalty,
     )

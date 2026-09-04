@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "tinystories-emc-smoke",
   "notes": "Example configuration accepted by both the Research Console and CLI.",
   "tags": ["smoke", "n1"],
@@ -8,19 +8,17 @@
   "architecture": "emc",
   "experts": { "gpt": 1, "ssm": 1, "recurrent": 1, "delta": 1 },
   "routing": {
-    "top_k": 2,
-    "cycles": 2,
+    "trajectory_steps": 3,
     "router_type": "module_aware",
     "integrator_type": "proposal_attention",
-    "balance_coefficient": 0.01,
-    "balance_entropy_floor": 0.75,
     "switch_cost": 0.05,
     "persistence_bonus": 0.1,
-    "minimum_lease_chunks": 0,
+    "refractory_enabled": true,
+    "refractory_strength": 0.15,
+    "refractory_decay": 0.35,
     "loss_free_balance_enabled": true,
     "balance_bias_lr": 0.01,
-    "balance_bias_limit": 0.25,
-    "balance_warmup_chunks": 0
+    "balance_bias_limit": 0.25
   },
   "model": {
     "preset": "quick",

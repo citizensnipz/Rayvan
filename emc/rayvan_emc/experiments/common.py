@@ -15,7 +15,7 @@ from ..diagnostics import (
     parameter_breakdown,
     parameter_counts,
 )
-from ..model import EMCConfig, EMCModel
+from ..model import EMCConfig, EMCModel, SequentialEMCModel
 from ..n2 import N2_POPULATIONS, N2Config, N2EMCModel
 from ..tokenization import DEFAULT_TOKENIZER_IDENTIFIER
 
@@ -27,6 +27,7 @@ N1_STAGES = (
     "integrator",
     "heterogeneous",
     "n1",
+    "n1_sequential",
     "n1_chunked",
 )
 MODULE_POPULATIONS = (
@@ -115,23 +116,24 @@ def create_emc_model(
     if module_population not in MODULE_POPULATIONS:
         raise ValueError(f"unknown module population: {module_population!r}")
     chunked = n1_stage == "n1_chunked"
-    heterogeneous = n1_stage in {"heterogeneous", "n1", "n1_chunked"}
+    sequential = n1_stage == "n1_sequential"
+    heterogeneous = n1_stage in {"heterogeneous", "n1", "n1_sequential", "n1_chunked"}
     families = (
         module_families_for_population(
-            module_population, include_delta=chunked
+            module_population, include_delta=(chunked or sequential)
         )
         if heterogeneous
         else ("gpt",) * 4
     )
-    if not chunked and "delta" in families:
-        raise ValueError("DeltaNet populations require n1_stage='n1_chunked'")
+    if not (chunked or sequential) and "delta" in families:
+        raise ValueError("DeltaNet populations require n1_stage='n1_sequential' or 'n1_chunked'")
     integrator_type = (
         "proposal_attention"
-        if n1_stage in {"integrator", "heterogeneous", "n1", "n1_chunked"}
+        if n1_stage in {"integrator", "heterogeneous", "n1", "n1_sequential", "n1_chunked"}
         else "weighted_average"
     )
     router_type = (
-        "module_aware" if n1_stage in {"n1", "n1_chunked"} else "fixed_index"
+        "module_aware" if n1_stage in {"n1", "n1_sequential", "n1_chunked"} else "fixed_index"
     )
     if preset not in MODEL_PRESET_DIMENSIONS:
         raise ValueError(f"unknown preset: {preset}")
@@ -139,21 +141,28 @@ def create_emc_model(
     config = EMCConfig(
         **dimensions,
         num_modules=4,
-        modules_per_cycle=2,
-        num_cycles=2,
+        modules_per_cycle=(1 if sequential else 2),
+        num_cycles=(3 if sequential else 2),
+        trajectory_steps=(3 if sequential else None),
         vocab_size=vocab_size,
         max_sequence_length=maximum_sequence_length,
         tie_embeddings=(True if preset == "research" else tie_embeddings),
         module_families=families,
         router_type=router_type,
         integrator_type=integrator_type,
-        architecture_stage=("n1_chunked" if chunked else "token"),
+        architecture_stage=(
+            "n1_chunked" if chunked
+            else "n1_sequential" if sequential
+            else "token"
+        ),
         shared_state_slots=4,
         request_pool_size=4,
         recurrent_precision="fp16",
     )
     if chunked:
         return ChunkedEMCModel(config)
+    if sequential:
+        return SequentialEMCModel(config)
     return EMCModel(config)
 
 

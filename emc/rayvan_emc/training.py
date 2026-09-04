@@ -547,6 +547,7 @@ def train_model(
                     parameter_snapshot,
                     gradient_norms,
                     step,
+                    latest_output,
                 )
         except RuntimeError as error:
             if "out of memory" in str(error).lower():
@@ -790,6 +791,13 @@ def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] |
     update_values: list[float] = []
     contribution_sums = [0.0 for _ in range(num_modules)]
     contribution_counts = [0 for _ in range(num_modules)]
+    raw_winner_counts = [0 for _ in range(num_modules)]
+    effective_winner_counts = [0 for _ in range(num_modules)]
+    inhibition_changed = 0
+    inhibition_observations = 0
+    refractory_values: list[float] = []
+    trajectory_gate_magnitudes: list[float | None] = []
+    trajectory_update_magnitudes: list[float | None] = []
 
     if output.chunk_trace is not None:
         previous: torch.Tensor | None = None
@@ -836,6 +844,21 @@ def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] |
                 counts[index] += 1
                 cycle[index] += 1
             cycle_counts.append(cycle)
+            raw_scores = cycle_trace.pre_inhibition_router_scores
+            effective_scores = cycle_trace.effective_router_scores
+            if raw_scores is not None and effective_scores is not None:
+                raw_winners = raw_scores.argmax(dim=-1).reshape(-1)
+                effective_winners = effective_scores.argmax(dim=-1).reshape(-1)
+                for index in raw_winners.tolist():
+                    raw_winner_counts[index] += 1
+                for index in effective_winners.tolist():
+                    effective_winner_counts[index] += 1
+                inhibition_changed += int((raw_winners != effective_winners).sum().item())
+                inhibition_observations += raw_winners.numel()
+            if cycle_trace.refractory_penalty is not None:
+                refractory_values.extend(
+                    cycle_trace.refractory_penalty.float().reshape(-1).tolist()
+                )
             probabilities = torch.softmax(
                 cycle_trace.router_scores.detach().float().cpu(), dim=-1
             ).reshape(-1, num_modules)
@@ -856,6 +879,11 @@ def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] |
             if trace is not None:
                 gate_values.extend(float(v) for v in trace.gate_magnitude.detach().cpu().reshape(-1).tolist())
                 update_values.extend(float(v) for v in trace.integrated_update_norm.detach().cpu().reshape(-1).tolist())
+                trajectory_gate_magnitudes.append(float(trace.gate_magnitude.float().mean().item()))
+                trajectory_update_magnitudes.append(float(trace.integrated_update_norm.float().mean().item()))
+            else:
+                trajectory_gate_magnitudes.append(None)
+                trajectory_update_magnitudes.append(None)
 
     total = sum(counts)
     return {
@@ -870,7 +898,31 @@ def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] |
             sum(entropy_values) / len(entropy_values) if entropy_values else None
         ),
         "cycle_selection_counts": cycle_counts,
+        "trajectory_selection_counts": cycle_counts,
         "transitions": transitions,
+        "same_expert_continuation_rate": (
+            sum(transitions[index][index] for index in range(num_modules))
+            / max(sum(sum(row) for row in transitions), 1)
+        ),
+        "raw_winner_counts": raw_winner_counts,
+        "effective_winner_counts": effective_winner_counts,
+        "refractory_changed_winner_count": inhibition_changed,
+        "refractory_observations": inhibition_observations,
+        "refractory_changed_winner_rate": (
+            inhibition_changed / inhibition_observations
+            if inhibition_observations else 0.0
+        ),
+        "mean_refractory_penalty": (
+            sum(refractory_values) / len(refractory_values)
+            if refractory_values else 0.0
+        ),
+        "trajectory_mean_gate_magnitude": trajectory_gate_magnitudes,
+        "trajectory_mean_latent_change": trajectory_update_magnitudes,
+        "balance_bias": (
+            getattr(getattr(model, "router", None), "balance_bias").detach().cpu().tolist()
+            if getattr(getattr(model, "router", None), "balance_bias", None) is not None
+            else None
+        ),
         "mean_gate_magnitude": (
             sum(gate_values) / len(gate_values) if gate_values else None
         ),
@@ -917,7 +969,10 @@ def _module_update_diagnostics(
     before: list[list[Tensor]],
     gradient_norms: list[float | None],
     step: int,
+    output: object | None = None,
 ) -> dict[str, Any]:
+    routing = _live_routing_snapshot(output, model) or {}
+    execution_counts = list(routing.get("selection_counts", ()))
     modules = []
     for index, (module, previous, gradient_norm) in enumerate(
         zip(model.emc_modules, before, gradient_norms, strict=True)
@@ -938,6 +993,10 @@ def _module_update_diagnostics(
                 )
                 ** 0.5,
                 "update_norm": update_squared**0.5,
+                "execution_count": (
+                    int(execution_counts[index])
+                    if index < len(execution_counts) else None
+                ),
             }
         )
     return {
@@ -949,6 +1008,7 @@ def _module_update_diagnostics(
             "checkpoint/evaluation interval; no gradient history retained"
         ),
         "modules": modules,
+        "routing_snapshot": routing,
     }
 
 
@@ -957,6 +1017,8 @@ def _checkpoint_filename(prefix: str, label: str) -> str:
 
 
 def _active_top_k(model: nn.Module) -> int | None:
+    if getattr(getattr(model, "config", None), "architecture_stage", "") == "n1_sequential":
+        return None
     value = getattr(model, "active_top_k", None)
     return int(value) if value is not None else None
 

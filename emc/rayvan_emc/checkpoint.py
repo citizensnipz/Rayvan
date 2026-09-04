@@ -10,7 +10,7 @@ from torch import nn
 
 from .baseline import TransformerConfig, TransformerLanguageModel
 from .chunked import ChunkedEMCModel
-from .model import EMCConfig, EMCModel
+from .model import EMCConfig, EMCModel, SequentialEMCModel
 from .n2 import N2Config, N2EMCModel
 from .serial import HeterogeneousSerialModel
 from .tokenization import TextTokenizer, tokenizer_from_config
@@ -134,6 +134,8 @@ def _model_type(model: nn.Module) -> str:
         return "n2_emc"
     if isinstance(model, ChunkedEMCModel):
         return "emc_chunked"
+    if isinstance(model, SequentialEMCModel):
+        return "emc_sequential"
     if isinstance(model, EMCModel):
         return "emc"
     if isinstance(model, HeterogeneousSerialModel):
@@ -148,6 +150,8 @@ def _create_model(model_type: str, config: dict[str, Any]) -> nn.Module:
         return N2EMCModel(N2Config(**config))
     if model_type == "emc":
         return EMCModel(EMCConfig(**config))
+    if model_type == "emc_sequential":
+        return SequentialEMCModel(EMCConfig(**config))
     if model_type == "emc_chunked":
         return ChunkedEMCModel(EMCConfig(**config))
     if model_type == "baseline":
@@ -158,6 +162,8 @@ def _create_model(model_type: str, config: dict[str, Any]) -> nn.Module:
 
 
 def _runtime_routing(model: nn.Module) -> dict[str, Any]:
+    if isinstance(model, SequentialEMCModel):
+        return {"trajectory_steps": model.config.resolved_trajectory_steps}
     active_top_k = getattr(model, "active_top_k", None)
     return {"active_top_k": int(active_top_k)} if active_top_k is not None else {}
 

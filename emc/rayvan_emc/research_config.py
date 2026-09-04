@@ -8,10 +8,11 @@ from .capability_tasks import CAPABILITIES
 from .experiments.common import MODEL_PRESET_DIMENSIONS, N1_STAGES
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 EXPERT_FAMILIES = ("gpt", "ssm", "recurrent", "delta")
 ARCHITECTURES = (
     "emc",
+    "legacy_parallel_emc",
     "heterogeneous_serial",
     "homogeneous_serial",
     "old_emc",
@@ -22,11 +23,12 @@ SUITES = ("tinystories", "capability_10")
 
 @dataclass(frozen=True)
 class RoutingConfig:
-    top_k: int = 2
+    top_k: int | None = None
     cycles: int = 2
+    trajectory_steps: int = 3
     router_type: str = "module_aware"
     integrator_type: str = "proposal_attention"
-    balance_coefficient: float = 0.01
+    balance_coefficient: float = 0.0
     balance_entropy_floor: float = 0.75
     switch_cost: float = 0.05
     persistence_bonus: float = 0.1
@@ -35,6 +37,9 @@ class RoutingConfig:
     balance_bias_lr: float = 0.01
     balance_bias_limit: float = 0.25
     balance_warmup_chunks: int = 0
+    refractory_enabled: bool = True
+    refractory_strength: float = 0.15
+    refractory_decay: float = 0.35
 
 
 @dataclass(frozen=True)
@@ -99,12 +104,28 @@ class ExperimentConfig:
         if any(not isinstance(count, int) or count < 0 for count in self.experts.values()):
             raise ValueError("expert counts must be non-negative integers")
         total = sum(self.experts.values())
-        if self.architecture in {"emc", "heterogeneous_serial", "old_emc"} and total == 0:
+        if self.architecture in {"emc", "legacy_parallel_emc", "heterogeneous_serial", "old_emc"} and total == 0:
             raise ValueError("the selected architecture requires at least one expert")
-        if self.routing.top_k <= 0 or self.routing.top_k > max(total, 1):
-            raise ValueError("top_k must be between one and the configured expert count")
+        if self.architecture in {"legacy_parallel_emc", "old_emc", *N2_ARCHITECTURES}:
+            if self.routing.top_k is None:
+                raise ValueError(
+                    "top_k is required for legacy parallel and N2 architectures"
+                )
+            if self.routing.top_k <= 0 or self.routing.top_k > max(total, 1):
+                raise ValueError("top_k must be between one and the configured expert count")
+        if self.architecture == "emc" and self.routing.top_k is not None:
+            raise ValueError(
+                "sequential EMC does not accept top_k; use trajectory_steps or "
+                "select legacy_parallel_emc"
+            )
         if self.routing.cycles <= 0:
             raise ValueError("cycles must be positive")
+        if self.routing.trajectory_steps <= 0:
+            raise ValueError("trajectory_steps must be positive")
+        if self.routing.refractory_strength < 0:
+            raise ValueError("refractory_strength cannot be negative")
+        if not 0 <= self.routing.refractory_decay <= 1:
+            raise ValueError("refractory_decay must be between zero and one")
         if self.routing.router_type not in {"fixed_index", "module_aware"}:
             raise ValueError("unsupported router_type")
         if self.routing.integrator_type not in {"weighted_average", "proposal_attention"}:
@@ -138,8 +159,15 @@ class ExperimentConfig:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "ExperimentConfig":
+        incoming_version = int(value.get("schema_version", 1))
+        if incoming_version != SCHEMA_VERSION:
+            raise ValueError(
+                "experiment schema v1 is not auto-migrated because v1 'emc' "
+                "means parallel Top-K. Set schema_version=2 and explicitly choose "
+                "'emc' (sequential) or 'legacy_parallel_emc'."
+            )
         return cls(
-            schema_version=int(value.get("schema_version", SCHEMA_VERSION)),
+            schema_version=incoming_version,
             name=str(value.get("name", "")),
             notes=str(value.get("notes", "")),
             tags=tuple(str(tag) for tag in value.get("tags", ())),
@@ -153,7 +181,29 @@ class ExperimentConfig:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        routing = payload["routing"]
+        if self.architecture == "emc":
+            for key in (
+                "top_k",
+                "cycles",
+                "minimum_lease_chunks",
+                "balance_coefficient",
+                "balance_entropy_floor",
+                "balance_warmup_chunks",
+            ):
+                routing.pop(key, None)
+        elif self.architecture in {"legacy_parallel_emc", "old_emc", *N2_ARCHITECTURES}:
+            for key in (
+                "trajectory_steps",
+                "refractory_enabled",
+                "refractory_strength",
+                "refractory_decay",
+            ):
+                routing.pop(key, None)
+            if self.architecture == "legacy_parallel_emc":
+                routing.pop("cycles", None)
+        return payload
 
 
 def research_schema() -> dict[str, Any]:
@@ -174,7 +224,8 @@ def research_schema() -> dict[str, Any]:
             },
         ],
         "architectures": [
-            {"id": "emc", "label": "Heterogeneous Parallel EMC"},
+            {"id": "emc", "label": "Sequential EMC"},
+            {"id": "legacy_parallel_emc", "label": "Legacy Parallel Top-K EMC"},
             {"id": "heterogeneous_serial", "label": "Heterogeneous Serial"},
             {"id": "homogeneous_serial", "label": "Homogeneous Transformer"},
             {"id": "old_emc", "label": "Legacy Token-routed EMC"},

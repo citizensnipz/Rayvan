@@ -7,7 +7,10 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-ModuleFamily = Literal["gpt", "ssm", "recurrent"]
+from .chunk_contracts import ChunkMetadata, ModuleInput
+from .chunk_modules import ChunkGatedDeltaNetModule
+
+ModuleFamily = Literal["gpt", "ssm", "recurrent", "delta"]
 
 
 class EMCModuleBase(nn.Module, ABC):
@@ -124,6 +127,45 @@ class RecurrentEMCModule(EMCModuleBase):
         return self.output_adapter(recurrent_output)
 
 
+class DeltaEMCModule(EMCModuleBase):
+    """Token-trajectory adapter for the existing Gated DeltaNet N1."""
+
+    family: ModuleFamily = "delta"
+
+    def __init__(self, config: Any) -> None:
+        super().__init__()
+        self.module = ChunkGatedDeltaNetModule(config)
+        self.shared_slots = config.shared_state_slots
+
+    def forward(self, latent: Tensor) -> Tensor:
+        shared = latent.mean(dim=1, keepdim=True).expand(
+            -1, self.shared_slots, -1
+        )
+        batch = latent.size(0)
+        output = self.module.forward_chunk(
+            ModuleInput(
+                chunk_latent=latent,
+                shared_state=shared,
+                lease_state=self.module.begin_lease(shared),
+                metadata=ChunkMetadata(
+                    request_indices=torch.arange(batch, device=latent.device),
+                    chunk_index=0,
+                    lease_ages=torch.ones(
+                        batch, dtype=torch.long, device=latent.device
+                    ),
+                    module_index=0,
+                    lease_ids=torch.zeros(
+                        batch, 3, dtype=torch.long, device=latent.device
+                    ),
+                    continuing_lease=torch.zeros(
+                        batch, dtype=torch.bool, device=latent.device
+                    ),
+                ),
+            )
+        )
+        return output.token_proposal
+
+
 def create_emc_module(config: Any, family: str) -> EMCModuleBase:
     if family == "gpt":
         return EMCModule(config)
@@ -131,4 +173,6 @@ def create_emc_module(config: Any, family: str) -> EMCModuleBase:
         return StateSpaceEMCModule(config)
     if family in {"recurrent", "gru"}:
         return RecurrentEMCModule(config)
+    if family in {"delta", "deltanet"}:
+        return DeltaEMCModule(config)
     raise ValueError(f"unknown EMC module family: {family!r}")

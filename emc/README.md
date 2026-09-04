@@ -1,13 +1,13 @@
 # Rayvan EMC research prototype
 
-EMC (Emergent Modular Cognition) is an experimental language-model computation graph. Token embeddings form a shared latent state; a learned Nexus selects a sparse module set; those independent modules produce latent updates; a learned Integrator updates the shared state. The route-integrate cycle repeats a fixed number of times before normalization and vocabulary projection.
+EMC (Emergent Modular Cognition) is an experimental computation graph. Token embeddings form a shared latent state; a learned Nexus selects one module for the current computational need; that module proposes a transformation; and a learned Integrator gates the update into shared state. Nexus then reevaluates the changed state before the next fixed trajectory step. Normal EMC never chooses a parallel expert set in advance.
 
 ## N1 components
 
-- **Module-aware Nexus:** projects each causal latent token into a query and scores it against learned per-module descriptor keys. Descriptors contain no semantic labels. Top-K and the existing balancing objective remain unchanged. An availability mask can temporarily remove local modules without changing the scoring head.
+- **Module-aware Nexus:** projects the current request state into a learned computational-need query and scores it against learned per-module descriptor keys. Descriptors contain no semantic labels. Sequential EMC selects one module with `argmax`; Top-K remains only in explicitly labeled legacy/N2 comparisons. An availability mask can temporarily remove local modules without changing the scoring head.
 - **Heterogeneous modules:** every family implements `EMCModuleBase.forward([B,S,D]) → proposal [B,S,D]`. The existing GPT-style family remains. A pure-PyTorch selective diagonal state-space family and a GRU recurrent family add different established computation. Input/output adapters permit different internal widths.
-- **Proposal-aware Integrator:** preserves all selected proposals. Multi-head cross-attention uses the current latent as query, proposals as keys/values, and Nexus weights as learned-strength priors. Proposal mean/variance provide set context, followed by a learned token-dimensional gated residual update.
-- **Fixed cycles and output:** the integrated latent becomes the next cycle's input. No adaptive halting or persistent private memory is introduced.
+- **Proposal-aware Integrator:** in sequential EMC, cross-attention has one candidate and therefore acts as a learned single-proposal transform plus token-dimensional residual gate. The resulting latent is the input to the next routing step. Its original multi-proposal set behavior remains in the legacy parallel path.
+- **Fixed trajectory and output:** the integrated latent becomes the next trajectory step's input. No adaptive halting or persistent private memory is introduced.
 
 State-space and GRU state exists only while scanning one sequence in one module forward. It resets between EMC cycles, batches, and inference calls. Modules never call each other and communicate only through proposals and the Integrator.
 
@@ -23,7 +23,7 @@ Routing, dispatch metadata, proposal tensors, and streaming diagnostic reduction
 
 The CUDA path uses PyTorch operations only. It does not add custom CUDA/Triton kernels or an external MoE framework. PyTorch grouped GEMM is useful only for compatible homogeneous projections; the heterogeneous N1 graphs remain separate.
 
-## Chunk-routed N1
+## Legacy parallel chunk-routed N1
 
 `--n1-stage n1_chunked` selects the execution architecture. A request is embedded by a deliberately small shared core, initializes canonical state `[B, shared_state_slots, D]`, selects a request-level descriptor pool once, then processes contiguous `chunk_size` blocks. Chunk routing uses the first causal token plus the previous canonical state; it never summarizes future tokens inside the current chunk.
 
@@ -63,7 +63,9 @@ The chunk Nexus keeps learned module descriptors at both timescales. Chunk score
 
 Architecture metrics expose request pools, family composition, chunk selections, routing entropy, lease ages/lengths, switch/retention rates, persistence/switch contributions, executed modules, population touched, exact sparse compute pairs, balancing bias/totals, and separate token/state Integrator acceptance.
 
-Grouped configuration is carried by `EMCConfig`: execution (`architecture_stage`, `chunk_size`, `shared_state_slots`, `request_pool_size`, `active_top_k`), leases (`switch_cost`, `persistence_bonus`, `minimum_lease_chunks`), loss-free balance (`loss_free_balance_enabled`, `balance_target_utilization`, `balance_bias_lr`, `balance_bias_limit`, `balance_warmup_chunks`), shared core (`shared_core_enabled`, `shared_core_hidden_dim`), and family backends/widths (`state_space_dim`, `ssm_backend`, `recurrent_dim`, `recurrent_backend`, `recurrent_precision`, `delta_internal_dim`, `delta_heads`, `delta_ffn_dim`, `delta_backend`). Defaults keep the pool equal to the current four-module population and use four canonical state slots.
+Grouped configuration is carried by `EMCConfig`. The primary `n1_sequential` stage performs `trajectory_steps` route/execute/integrate transitions with exactly one expert per step. Nexus recomputes its module-aware competence query from the updated latent after every Integrator-gated transformation. A within-forward refractory penalty is added after each selection, decays geometrically, and resets for each independent forward; it discourages but never prohibits repetition. Loss-free balance bias is persistent checkpoint state and is updated once from the complete forward, never between routing decisions in that forward.
+
+`n1_chunked` now names the legacy parallel comparison path: it selects Top-K modules for each chunk, executes simultaneous proposals, integrates the proposal set, and may retain bounded module leases across chunks. It is exposed by the Research Console as `legacy_parallel_emc`; the normal `emc` identifier never reads or applies Top-K. The older token-routed parallel model remains `old_emc`. Schema-v1 research configs are rejected with a migration message because silently converting `top_k` to `trajectory_steps` would change the experiment's scientific meaning.
 
 ## TinyStories language training
 

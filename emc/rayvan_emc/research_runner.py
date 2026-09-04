@@ -24,14 +24,14 @@ from .chunked import ChunkedEMCModel
 from .diagnostics import parameter_counts
 from .evaluate import DiagnosticEvaluationConfig, evaluate_suite, write_report
 from .experiments.common import create_emc_model, create_n2_model, load_experiment_corpus
-from .model import EMCConfig, EMCModel
+from .model import EMCConfig, EMCModel, SequentialEMCModel
 from .projections import projection_payload
 from .research_config import ExperimentConfig
 from .serial import HeterogeneousSerialModel
 from .training import TrainingCancelledError, TrainingConfig, TrainingMetrics, train_model
 
 
-EVENT_SCHEMA_VERSION = 1
+EVENT_SCHEMA_VERSION = 2
 
 
 class EventWriter:
@@ -246,6 +246,7 @@ def run_experiment(
                 ),
                 checkpoint=result.latest_checkpoint,
                 checkpoint_training_config=asdict(training_config),
+                checkpoint_training_diagnostics=result.module_diagnostics,
             )
             write_report(diagnostics, run_directory / "diagnostics")
             writer.emit(
@@ -304,6 +305,7 @@ def _build_corpus(config: ExperimentConfig):
 
 def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
     families = config.expert_families
+    parallel_top_k = config.routing.top_k or 2
     if config.architecture.startswith("n2_"):
         return create_n2_model(
             vocab_size,
@@ -311,11 +313,11 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
             maximum_sequence_length=config.model.context_length,
             seed=config.training.seed,
             population=config.architecture.removeprefix("n2_"),
-            top_k=config.routing.top_k,
+            top_k=parallel_top_k,
             tie_embeddings=config.model.tie_embeddings,
             n1_depth=config.model.n1_depth,
         )
-    if config.model.fairness_mode != "custom" and config.architecture in {"emc", "heterogeneous_serial", "homogeneous_serial", "old_emc"}:
+    if config.model.fairness_mode != "custom" and config.architecture in {"heterogeneous_serial", "homogeneous_serial", "old_emc"}:
         build = build_architectures(
             (config.architecture,),
             vocab_size=vocab_size,
@@ -325,7 +327,7 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
             fairness_mode=config.model.fairness_mode,
             heterogeneous_order=families,
             tie_embeddings=config.model.tie_embeddings,
-            top_k=config.routing.top_k,
+            top_k=parallel_top_k,
             n1_depth=config.model.n1_depth,
         )
         return build.models[config.architecture]
@@ -341,16 +343,20 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
                 tie_embeddings=config.model.tie_embeddings,
             )
         )
-    stage = "n1" if config.architecture == "old_emc" else "n1_chunked"
-    if stage != "n1_chunked" and "delta" in families:
-        raise ValueError("Gated DeltaNet is supported by the chunk-routed EMC path only")
+    stage = (
+        "n1"
+        if config.architecture == "old_emc"
+        else "n1_chunked"
+        if config.architecture == "legacy_parallel_emc"
+        else "n1_sequential"
+    )
     template = create_emc_model(
         vocab_size,
         "quick" if config.model.preset == "custom" else config.model.preset,
         maximum_sequence_length=config.model.context_length,
         seed=config.training.seed,
         tie_embeddings=config.model.tie_embeddings,
-        n1_stage=stage,
+        n1_stage=("n1_chunked" if stage == "n1_sequential" else stage),
         module_population="mixed",
     )
     values = asdict(template.config)
@@ -358,8 +364,17 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
         {
             "latent_dim": config.model.latent_dim,
             "num_modules": len(families),
-            "modules_per_cycle": config.routing.top_k,
-            "num_cycles": config.routing.cycles,
+            "modules_per_cycle": (1 if stage == "n1_sequential" else parallel_top_k),
+            "num_cycles": (
+                config.routing.trajectory_steps
+                if stage == "n1_sequential"
+                else 1 if stage == "n1_chunked"
+                else config.routing.cycles
+            ),
+            "trajectory_steps": (
+                config.routing.trajectory_steps
+                if stage == "n1_sequential" else None
+            ),
             "vocab_size": vocab_size,
             "max_sequence_length": config.model.context_length,
             "module_hidden_dim": config.model.module_hidden_dim,
@@ -369,11 +384,15 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
             "router_type": config.routing.router_type,
             "integrator_type": config.routing.integrator_type,
             "integrator_heads": config.model.integrator_heads,
-            "architecture_stage": "n1_chunked" if stage == "n1_chunked" else "token",
+            "architecture_stage": (
+                "n1_chunked" if stage == "n1_chunked"
+                else "n1_sequential" if stage == "n1_sequential"
+                else "token"
+            ),
             "chunk_size": config.model.chunk_size,
             "shared_state_slots": config.model.shared_state_slots,
             "request_pool_size": len(families),
-            "active_top_k": config.routing.top_k,
+            "active_top_k": (None if stage == "n1_sequential" else parallel_top_k),
             "switch_cost": config.routing.switch_cost,
             "persistence_bonus": config.routing.persistence_bonus,
             "minimum_lease_chunks": config.routing.minimum_lease_chunks,
@@ -381,6 +400,9 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
             "balance_bias_lr": config.routing.balance_bias_lr,
             "balance_bias_limit": config.routing.balance_bias_limit,
             "balance_warmup_chunks": config.routing.balance_warmup_chunks,
+            "refractory_enabled": config.routing.refractory_enabled,
+            "refractory_strength": config.routing.refractory_strength,
+            "refractory_decay": config.routing.refractory_decay,
         }
     )
     if config.model.preset == "custom":
@@ -399,7 +421,11 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
     emc_config = EMCConfig(**values)
     if config.architecture == "heterogeneous_serial":
         return HeterogeneousSerialModel(emc_config)
-    return ChunkedEMCModel(emc_config) if stage == "n1_chunked" else EMCModel(emc_config)
+    if stage == "n1_chunked":
+        return ChunkedEMCModel(emc_config)
+    if stage == "n1_sequential":
+        return SequentialEMCModel(emc_config)
+    return EMCModel(emc_config)
 
 
 def _projection_update(measured: list[tuple[float, float]], budget: int, configured_targets: tuple[int, ...]) -> dict[str, Any]:

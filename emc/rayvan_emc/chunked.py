@@ -213,8 +213,6 @@ class ChunkNexus(nn.Module):
             scores, k=top_k, dim=-1
         )
         weights = torch.softmax(selected_scores, dim=-1)
-        if self.training:
-            self._update_balance_bias(selected)
         return ChunkRoutingDecision(
             scores=scores,
             selected_indices=selected,
@@ -354,6 +352,15 @@ class ChunkedEMCModel(nn.Module):
         return tuple(module.family for module in self.emc_modules)
 
     @property
+    def expert_names(self) -> tuple[str, ...]:
+        counts: dict[str, int] = {}
+        names = []
+        for family in self.module_families:
+            counts[family] = counts.get(family, 0) + 1
+            names.append(f"{family}-{counts[family]}")
+        return tuple(names)
+
+    @property
     def active_top_k(self) -> int:
         return self._active_top_k
 
@@ -420,6 +427,7 @@ class ChunkedEMCModel(nn.Module):
         output_chunks: list[Tensor] = []
         chunk_traces: list[ChunkRoutingTrace] = []
         modules_touched: set[int] = set()
+        forward_selections: list[Tensor] = []
 
         for chunk_index, start in enumerate(
             range(0, sequence_length, self.config.chunk_size)
@@ -447,6 +455,7 @@ class ChunkedEMCModel(nn.Module):
                 )
             selected_mask = torch.zeros_like(previous_active)
             selected_mask.scatter_(1, decision.selected_indices, True)
+            forward_selections.append(decision.selected_indices.detach())
             self._end_inactive_leases(
                 lease_states, previous_active, selected_mask
             )
@@ -562,6 +571,11 @@ class ChunkedEMCModel(nn.Module):
                     )
                 )
 
+        if self.training and forward_selections:
+            # Update once from the complete forward. Mutating this bias after
+            # every chunk made checkpoint evaluation route with a different
+            # state than the one which produced the recorded gradients.
+            self.router._update_balance_bias(torch.cat(forward_selections, dim=0))
         latent = torch.cat(output_chunks, dim=1)
         logits = self.output_projection(self.output_norm(latent))
         overall_switch_rate = _overall_switch_rate(chunk_traces)

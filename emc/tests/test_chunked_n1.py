@@ -601,6 +601,8 @@ def test_loss_free_balance_bias_is_not_in_model_gradient() -> None:
     )
     decision.scores[torch.isfinite(decision.scores)].sum().backward()
 
+    assert torch.equal(before, nexus.balance_bias)
+    nexus._update_balance_bias(decision.selected_indices)
     assert not torch.equal(before, nexus.balance_bias)
     assert nexus.balance_bias.requires_grad is False
     assert nexus.balance_bias.grad is None
