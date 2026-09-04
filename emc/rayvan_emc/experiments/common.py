@@ -51,6 +51,35 @@ TOKEN_BUDGETS: dict[BudgetPreset, int] = {
     "research": 25_000_000,
 }
 
+MODEL_PRESET_DIMENSIONS: dict[str, dict[str, int]] = {
+    "quick": {
+        "latent_dim": 64,
+        "module_hidden_dim": 128,
+        "attention_heads": 4,
+        "state_space_dim": 96,
+        "recurrent_dim": 64,
+        "router_descriptor_dim": 64,
+        "integrator_heads": 4,
+        "chunk_size": 16,
+        "delta_internal_dim": 64,
+        "delta_heads": 4,
+        "delta_ffn_dim": 128,
+    },
+    "research": {
+        "latent_dim": 256,
+        "module_hidden_dim": 6_144,
+        "attention_heads": 8,
+        "state_space_dim": 960,
+        "recurrent_dim": 704,
+        "router_descriptor_dim": 128,
+        "integrator_heads": 8,
+        "chunk_size": 64,
+        "delta_internal_dim": 512,
+        "delta_heads": 8,
+        "delta_ffn_dim": 4_096,
+    },
+}
+
 
 def load_experiment_corpus(
     dataset: DatasetName,
@@ -104,62 +133,25 @@ def create_emc_model(
     router_type = (
         "module_aware" if n1_stage in {"n1", "n1_chunked"} else "fixed_index"
     )
-    if preset == "quick":
-        config = EMCConfig(
-            latent_dim=64,
-            num_modules=4,
-            modules_per_cycle=2,
-            num_cycles=2,
-            vocab_size=vocab_size,
-            max_sequence_length=maximum_sequence_length,
-            module_hidden_dim=128,
-            attention_heads=4,
-            tie_embeddings=tie_embeddings,
-            module_families=families,
-            state_space_dim=96,
-            recurrent_dim=64,
-            router_type=router_type,
-            router_descriptor_dim=64,
-            integrator_type=integrator_type,
-            integrator_heads=4,
-            architecture_stage=("n1_chunked" if chunked else "token"),
-            chunk_size=16,
-            shared_state_slots=4,
-            request_pool_size=4,
-            recurrent_precision="fp16",
-            delta_internal_dim=64,
-            delta_heads=4,
-            delta_ffn_dim=128,
-        )
-    elif preset == "research":
-        config = EMCConfig(
-            latent_dim=256,
-            num_modules=4,
-            modules_per_cycle=2,
-            num_cycles=2,
-            vocab_size=vocab_size,
-            max_sequence_length=maximum_sequence_length,
-            module_hidden_dim=6_144,
-            attention_heads=8,
-            tie_embeddings=True,
-            module_families=families,
-            state_space_dim=960,
-            recurrent_dim=704,
-            router_type=router_type,
-            router_descriptor_dim=128,
-            integrator_type=integrator_type,
-            integrator_heads=8,
-            architecture_stage=("n1_chunked" if chunked else "token"),
-            chunk_size=64,
-            shared_state_slots=4,
-            request_pool_size=4,
-            recurrent_precision="fp16",
-            delta_internal_dim=512,
-            delta_heads=8,
-            delta_ffn_dim=4_096,
-        )
-    else:
+    if preset not in MODEL_PRESET_DIMENSIONS:
         raise ValueError(f"unknown preset: {preset}")
+    dimensions = MODEL_PRESET_DIMENSIONS[preset]
+    config = EMCConfig(
+        **dimensions,
+        num_modules=4,
+        modules_per_cycle=2,
+        num_cycles=2,
+        vocab_size=vocab_size,
+        max_sequence_length=maximum_sequence_length,
+        tie_embeddings=(True if preset == "research" else tie_embeddings),
+        module_families=families,
+        router_type=router_type,
+        integrator_type=integrator_type,
+        architecture_stage=("n1_chunked" if chunked else "token"),
+        shared_state_slots=4,
+        request_pool_size=4,
+        recurrent_precision="fp16",
+    )
     if chunked:
         return ChunkedEMCModel(config)
     return EMCModel(config)

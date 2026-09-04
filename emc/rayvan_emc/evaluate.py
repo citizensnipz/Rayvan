@@ -191,9 +191,12 @@ def evaluate_suite(
     baseline_records: list[dict[str, Any]] = []
     evaluated_tokens = 0
     for index, example in enumerate(examples):
+        example_started = time.perf_counter()
         record, _, token_count = _evaluate_example(
             model, tokenizer, example, resolved, return_trace=True
         )
+        record["elapsed_seconds"] = time.perf_counter() - example_started
+        record["evaluated_tokens"] = token_count
         record["example_index"] = index
         baseline_records.append(record)
         evaluated_tokens += token_count
@@ -1184,6 +1187,8 @@ def _aggregate_capability_results(records: list[dict[str, Any]]) -> dict[str, di
         mean_loss = _mean(row["loss"] for row in valid)
         result[capability] = {
             "examples": len(valid), "skipped": len(rows) - len(valid),
+            "evaluated_tokens": sum(int(row.get("evaluated_tokens", 0)) for row in valid),
+            "elapsed_seconds": sum(float(row.get("elapsed_seconds", 0.0)) for row in valid),
             "exact_accuracy": _mean(row["exact_match"] for row in valid),
             "token_accuracy": _mean(row["token_accuracy"] for row in valid),
             "cross_entropy": mean_loss,

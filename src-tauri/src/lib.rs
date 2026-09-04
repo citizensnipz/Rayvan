@@ -3,6 +3,7 @@ pub mod domain;
 pub mod network;
 pub mod runtime;
 pub mod simulation;
+pub mod research;
 pub use application::status::NetworkStatus;
 
 use application::status::NetworkStatusStore;
@@ -20,6 +21,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(network_status)
+        .manage(research::ExperimentProcessState::default())
         .setup(move |app| {
             let identity_path = app.path().app_local_data_dir()?.join(NODE_ID_FILE_NAME);
             let node_id = NodeIdentityStore::new(identity_path).load_or_create()?;
@@ -36,7 +38,14 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            application::status::get_application_status
+            application::status::get_application_status,
+            research::get_research_schema,
+            research::estimate_experiment,
+            research::start_experiment,
+            research::cancel_experiment,
+            research::get_active_experiment,
+            research::list_experiments,
+            research::get_experiment
         ])
         .run(tauri::generate_context!())
         .expect("failed to run the Rayvan desktop application");

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "name": "tinystories-emc-smoke",
+  "notes": "Example configuration accepted by both the Research Console and CLI.",
+  "tags": ["smoke", "n1"],
+  "projection_targets": [250000, 500000, 1000000, 10000000],
+  "suite": "tinystories",
+  "architecture": "emc",
+  "experts": { "gpt": 1, "ssm": 1, "recurrent": 1, "delta": 1 },
+  "routing": {
+    "top_k": 2,
+    "cycles": 2,
+    "router_type": "module_aware",
+    "integrator_type": "proposal_attention",
+    "balance_coefficient": 0.01,
+    "balance_entropy_floor": 0.75,
+    "switch_cost": 0.05,
+    "persistence_bonus": 0.1,
+    "minimum_lease_chunks": 0,
+    "loss_free_balance_enabled": true,
+    "balance_bias_lr": 0.01,
+    "balance_bias_limit": 0.25,
+    "balance_warmup_chunks": 0
+  },
+  "model": {
+    "preset": "quick",
+    "fairness_mode": "custom",
+    "latent_dim": 64,
+    "context_length": 256,
+    "attention_heads": 4,
+    "module_hidden_dim": 128,
+    "integrator_heads": 4,
+    "chunk_size": 16,
+    "shared_state_slots": 4,
+    "n1_depth": 3,
+    "tie_embeddings": true
+  },
+  "training": {
+    "tokens": 50000,
+    "batch_size": 4,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.01,
+    "seed": 42,
+    "gradient_accumulation": 1,
+    "precision": "auto",
+    "device": "cuda",
+    "evaluation_interval": 25,
+    "evaluation_batches": 4,
+    "telemetry_interval": 1,
+    "diagnostic_examples_per_capability": 20
+  }
+}

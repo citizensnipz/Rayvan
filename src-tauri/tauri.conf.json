@@ -13,10 +13,12 @@
     "windows": [
       {
         "title": "Rayvan",
-        "width": 440,
-        "height": 320,
+        "width": 1480,
+        "height": 940,
+        "minWidth": 1120,
+        "minHeight": 720,
         "center": true,
-        "resizable": false,
+        "resizable": true,
         "fullscreen": false
       }
     ],

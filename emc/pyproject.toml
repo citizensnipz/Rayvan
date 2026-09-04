@@ -13,6 +13,9 @@ dependencies = ["torch>=2.2"]
 test = ["pytest>=8"]
 data = ["datasets>=2.20", "transformers>=4.40"]
 
+[project.scripts]
+rayvan-experiment = "rayvan_emc.research:main"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-p", "no:asyncio", "--basetemp=.pytest-tmp"]

@@ -183,6 +183,12 @@ class CycleEvaluationMetrics:
 
 
 EvaluationCallback = Callable[[int, nn.Module, TrainingMetrics], None]
+ProgressCallback = Callable[[int, nn.Module, dict[str, Any]], None]
+CancellationCallback = Callable[[], bool]
+
+
+class TrainingCancelledError(RuntimeError):
+    """Raised at a safe optimizer-step boundary when a run is cancelled."""
 
 
 def steps_for_token_budget(
@@ -349,7 +355,12 @@ def train_model(
     *,
     print_progress: bool = True,
     evaluation_callback: EvaluationCallback | None = None,
+    progress_callback: ProgressCallback | None = None,
+    progress_callback_interval: int = 1,
+    cancellation_callback: CancellationCallback | None = None,
 ) -> TrainingResult:
+    if progress_callback_interval <= 0:
+        raise ValueError("progress_callback_interval must be positive")
     device = torch.device(config.device)
     precision = _resolved_precision(config.precision, device)
     model.to(device)
@@ -438,6 +449,9 @@ def train_model(
         torch.cuda.reset_peak_memory_stats(device)
 
     for step in range(start_step + 1, total_steps + 1):
+        if cancellation_callback is not None and cancellation_callback():
+            raise TrainingCancelledError("experiment cancelled before the next optimizer step")
+        step_started = time.perf_counter()
         _apply_top_k_schedule(model, config.top_k_schedule, tokens_processed)
         crossed_milestones = tuple(
             milestone
@@ -452,6 +466,7 @@ def train_model(
         optimizer.zero_grad(set_to_none=True)
         step_balance_loss = 0.0
         step_tokens = 0
+        latest_output: object | None = None
         capture_module_diagnostics = bool(
             (config.collect_module_diagnostics or telemetry is not None)
             and evaluation_due
@@ -486,6 +501,7 @@ def train_model(
                                 "EMC forward did not return router balance loss"
                             )
                         logits = output.logits
+                        latest_output = output
                         balance_loss = output.router_balance_loss
                         if emc_diagnostics is not None:
                             emc_diagnostics.observe_trace(output.trace)
@@ -518,7 +534,7 @@ def train_model(
             if emc_diagnostics is not None:
                 emc_diagnostics.observe_router_gradients(model)
                 emc_diagnostics.observe_module_gradients(model)
-            torch.nn.utils.clip_grad_norm_(
+            gradient_norm = torch.nn.utils.clip_grad_norm_(
                 model.parameters(),
                 config.gradient_clip_norm,
                 error_if_nonfinite=True,
@@ -545,6 +561,41 @@ def train_model(
         cumulative_balance_loss += (
             step_balance_loss / config.gradient_accumulation_steps
         )
+
+        step_elapsed = time.perf_counter() - step_started
+        if progress_callback is not None and step % progress_callback_interval == 0:
+            progress_callback(
+                step,
+                model,
+                {
+                    "step": step,
+                    "planned_steps": total_steps,
+                    "tokens_processed": tokens_processed,
+                    "target_tokens": config.train_tokens,
+                    "training_loss": float(language_model_loss.detach().item()),
+                    "router_balance_loss": (
+                        step_balance_loss / config.gradient_accumulation_steps
+                    ),
+                    "gradient_norm": float(gradient_norm.detach().item()),
+                    "learning_rate": float(optimizer.param_groups[0]["lr"]),
+                    "step_time_seconds": step_elapsed,
+                    "elapsed_seconds": time.perf_counter() - started,
+                    "tokens_per_second": step_tokens / max(step_elapsed, 1e-12),
+                    "gpu_memory_used_bytes": (
+                        int(torch.cuda.memory_allocated(device))
+                        if device.type == "cuda"
+                        else 0
+                    ),
+                    "gpu_peak_memory_bytes": (
+                        int(torch.cuda.max_memory_allocated(device))
+                        if device.type == "cuda"
+                        else 0
+                    ),
+                    "routing": _live_routing_snapshot(latest_output, model),
+                },
+            )
+        if cancellation_callback is not None and cancellation_callback():
+            raise TrainingCancelledError("experiment cancelled after a safe optimizer step")
 
         if evaluation_due:
             evaluation_started = time.perf_counter()
@@ -714,6 +765,123 @@ def train_model(
         milestone_checkpoints=tuple(milestone_checkpoints),
         telemetry_path=telemetry_path,
     )
+
+
+def _live_routing_snapshot(output: object, model: nn.Module) -> dict[str, Any] | None:
+    """Return small, host-side routing aggregates without retaining training tensors."""
+    if not isinstance(output, EMCOutput):
+        return None
+    families = list(getattr(model, "module_families", ()))
+    names = list(
+        getattr(
+            model,
+            "expert_names",
+            tuple(f"m{index}" for index in range(len(families))),
+        )
+    )
+    num_modules = len(families)
+    counts = [0 for _ in range(num_modules)]
+    probability_sums = [0.0 for _ in range(num_modules)]
+    probability_counts = 0
+    entropy_values: list[float] = []
+    cycle_counts: list[list[int]] = []
+    transitions = [[0 for _ in range(num_modules)] for _ in range(num_modules)]
+    gate_values: list[float] = []
+    update_values: list[float] = []
+    contribution_sums = [0.0 for _ in range(num_modules)]
+    contribution_counts = [0 for _ in range(num_modules)]
+
+    if output.chunk_trace is not None:
+        previous: torch.Tensor | None = None
+        for chunk in output.chunk_trace.chunks:
+            selected = chunk.active_modules.reshape(-1, chunk.active_modules.size(-1))
+            cycle = [0 for _ in range(num_modules)]
+            for index in selected.reshape(-1).tolist():
+                counts[index] += 1
+                cycle[index] += 1
+            cycle_counts.append(cycle)
+            weights = chunk.routing_weights.reshape(-1, chunk.routing_weights.size(-1))
+            for row_indices, row_weights in zip(selected.tolist(), weights.tolist()):
+                for index, weight in zip(row_indices, row_weights):
+                    probability_sums[index] += float(weight)
+                    probability_counts += 1
+            entropy_values.extend(
+                float(value) for value in chunk.routing_entropy.reshape(-1).tolist()
+            )
+            if previous is not None:
+                for source_row, target_row in zip(previous.tolist(), selected.tolist()):
+                    for source in source_row:
+                        for target in target_row:
+                            transitions[source][target] += 1
+            previous = selected
+            trace = chunk.token_integrator_trace
+            gate_values.extend(float(v) for v in trace.gate_magnitude.reshape(-1).tolist())
+            update_values.extend(
+                float(v) for v in trace.integrated_update_norm.reshape(-1).tolist()
+            )
+            contributions = trace.proposal_contributions.reshape(-1, selected.size(-1))
+            for row_indices, row_values in zip(selected.tolist(), contributions.tolist()):
+                for index, value in zip(row_indices, row_values):
+                    contribution_sums[index] += float(value)
+                    contribution_counts[index] += 1
+    else:
+        previous = None
+        for cycle_trace in output.trace:
+            selected = cycle_trace.selected_indices
+            if selected is None:
+                selected = torch.tensor([cycle_trace.selected_modules])
+            selected = selected.reshape(-1, selected.size(-1)).detach().cpu()
+            cycle = [0 for _ in range(num_modules)]
+            for index in selected.reshape(-1).tolist():
+                counts[index] += 1
+                cycle[index] += 1
+            cycle_counts.append(cycle)
+            probabilities = torch.softmax(
+                cycle_trace.router_scores.detach().float().cpu(), dim=-1
+            ).reshape(-1, num_modules)
+            for row in probabilities.tolist():
+                for index, value in enumerate(row):
+                    probability_sums[index] += float(value)
+                probability_counts += 1
+                entropy_values.append(
+                    -sum(value * math.log(max(value, 1e-12)) for value in row)
+                )
+            if previous is not None:
+                for source_row, target_row in zip(previous.tolist(), selected.tolist()):
+                    for source in source_row:
+                        for target in target_row:
+                            transitions[source][target] += 1
+            previous = selected
+            trace = cycle_trace.integrator_trace
+            if trace is not None:
+                gate_values.extend(float(v) for v in trace.gate_magnitude.detach().cpu().reshape(-1).tolist())
+                update_values.extend(float(v) for v in trace.integrated_update_norm.detach().cpu().reshape(-1).tolist())
+
+    total = sum(counts)
+    return {
+        "expert_names": names,
+        "families": families,
+        "selection_counts": counts,
+        "utilization": [value / max(total, 1) for value in counts],
+        "mean_probabilities": [
+            value / max(probability_counts, 1) for value in probability_sums
+        ],
+        "entropy": (
+            sum(entropy_values) / len(entropy_values) if entropy_values else None
+        ),
+        "cycle_selection_counts": cycle_counts,
+        "transitions": transitions,
+        "mean_gate_magnitude": (
+            sum(gate_values) / len(gate_values) if gate_values else None
+        ),
+        "mean_update_norm": (
+            sum(update_values) / len(update_values) if update_values else None
+        ),
+        "mean_contribution": [
+            total_value / max(count, 1)
+            for total_value, count in zip(contribution_sums, contribution_counts)
+        ],
+    }
 
 
 

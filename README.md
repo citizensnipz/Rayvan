@@ -4,19 +4,39 @@ Rayvan is intended to become a decentralized AI inference node for personal comp
 
 ## Current scope
 
-This repository contains the desktop foundation, the first Rust distributed-inference domain model, and local network membership:
+This repository contains the desktop foundation, the first Rust distributed-inference domain model, local network membership, and a graphical EMC Research Console:
 
-- a small Tauri desktop window;
-- a minimal vanilla TypeScript UI;
+- a resizable Tauri desktop application;
+- a React and Apache ECharts research UI;
 - a Rust-owned live `NotConnected`, `Connecting`, or `Connected` status;
 - a localhost bootstrap service with versioned registration and heartbeats;
 - a persistent installation node ID;
 - model manifests, nodes, contiguous layer shards, validated swarms, and transport-independent activations; and
 - a replaceable shard-runtime trait with a three-node local dummy simulation.
 
-There is no inference, shard assignment, peer-to-peer routing, decentralized discovery, NAT traversal, authentication, account, payment, model download, or GPU detection.
+The distributed-node layer does not yet provide shard assignment, peer-to-peer routing, decentralized discovery, NAT traversal, authentication, accounts, payments, or model download. The EMC research workflow remains local and separate from that networking layer.
 
 See [Core architecture](docs/architecture.md) for the domain boundaries and prior-work influences.
+
+## EMC Research Console
+
+The Research Console configures, launches, monitors, reopens, and compares EMC
+experiments. Suites, architectures, and expert families come from the Python
+backend. Runs are written incrementally under the app-local `research-runs`
+directory (or `RAYVAN_RUNS_DIR`) with config, metadata, JSONL events,
+checkpoints, projections, diagnostics, summary, and logs.
+
+Every saved UI configuration is also a CLI configuration:
+
+```powershell
+cd emc
+python -m rayvan_emc.research validate experiment.example.json
+python -m rayvan_emc.research run experiment.example.json --runs-dir runs
+```
+
+Set `RAYVAN_PYTHON` if the desktop app should use a specific Python environment,
+and `RAYVAN_EMC_ROOT` if the package is not located beside the desktop source.
+TinyStories runs require the normal `rayvan-emc[data]` dependencies.
 
 ## Run locally
 

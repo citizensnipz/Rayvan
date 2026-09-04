@@ -13,7 +13,7 @@ from .chunked import ChunkedEMCModel
 from .data import LanguageCorpus
 from .diagnostics import count_parameters
 from .experiments.common import create_emc_model, create_n2_model
-from .model import EMCConfig
+from .model import EMCConfig, EMCModel
 from .n2 import N2EMCModel
 from .serial import HeterogeneousSerialModel
 from .training import TrainingConfig
@@ -110,15 +110,13 @@ def build_architectures(
     )
     if not isinstance(template, ChunkedEMCModel):
         raise RuntimeError("n1_chunked factory did not create the real ChunkedEMCModel")
-    if len(heterogeneous_order) != template.config.num_modules:
-        raise ValueError(
-            "heterogeneous order must contain exactly the EMC module population size"
-        )
     emc_config = replace(
         template.config,
         module_families=heterogeneous_order,
         num_modules=len(heterogeneous_order),
         request_pool_size=len(heterogeneous_order),
+        modules_per_cycle=top_k,
+        active_top_k=top_k,
     )
     torch.manual_seed(seed)
     emc = ChunkedEMCModel(emc_config)
@@ -286,6 +284,27 @@ def architecture_accounting(
         )
         limitations.append(
             "Heterogeneous expert cost uses the population mean before routing trajectories exist."
+        )
+    elif isinstance(model, EMCModel):
+        module_counts = [count_parameters(module) for module in model.emc_modules]
+        top_k = model.config.modules_per_cycle
+        expected_modules = top_k / len(module_counts) * sum(module_counts)
+        overhead = _unique_parameters((model.router, model.integrator))
+        active = int(output_parameters + overhead + expected_modules)
+        module_computations = float(model.config.num_cycles * top_k)
+        parameter_uses = (
+            output_parameters
+            + model.config.num_cycles * (overhead + expected_modules)
+        ) * sequence_length
+        flops = 2 * parameter_uses
+        routable = sum(module_counts)
+        architecture = "old_emc"
+        method = (
+            "Legacy token-routed EMC estimate includes selected modules, router, "
+            "Integrator, and output projection for every configured cycle."
+        )
+        limitations.append(
+            "Legacy token routing uses a parameter-use proxy without attention-score products."
         )
     elif isinstance(model, HeterogeneousSerialModel):
         module_counts = [count_parameters(module) for module in model.emc_modules]
