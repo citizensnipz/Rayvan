@@ -453,7 +453,7 @@ def _system_metrics(device_name: str) -> dict[str, Any]:
         pass
     try:
         result["gpu_utilization_percent"] = float(torch.cuda.utilization(device))
-    except (AttributeError, RuntimeError, TypeError):
+    except (AttributeError, ImportError, ModuleNotFoundError, RuntimeError, TypeError):
         pass
     return result
 

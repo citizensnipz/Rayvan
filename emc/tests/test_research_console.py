@@ -4,7 +4,7 @@ import json
 
 from rayvan_emc.projections import fit_projection
 from rayvan_emc.research_config import ExperimentConfig, ModelConfig, ResearchTrainingConfig, RoutingConfig, research_schema
-from rayvan_emc.research_runner import run_experiment
+from rayvan_emc.research_runner import _system_metrics, run_experiment
 
 
 def test_research_schema_uses_the_real_capability_registry() -> None:
@@ -40,6 +40,23 @@ def test_projection_selects_supported_curve_and_marks_long_extrapolation() -> No
     assert fit.r_squared > 0.95
     assert fit.confidence == "low"
     assert fit.warning is not None
+
+
+def test_missing_nvml_keeps_gpu_utilization_optional(monkeypatch) -> None:
+    monkeypatch.setattr("rayvan_emc.research_runner.torch.cuda.is_available", lambda: True)
+    monkeypatch.setattr("rayvan_emc.research_runner.torch.cuda.memory_allocated", lambda _device: 123)
+    monkeypatch.setattr("rayvan_emc.research_runner.torch.cuda.mem_get_info", lambda _device: (100, 456))
+
+    def missing_nvml(_device):
+        raise ModuleNotFoundError("nvidia-ml-py is not installed")
+
+    monkeypatch.setattr("rayvan_emc.research_runner.torch.cuda.utilization", missing_nvml)
+    metrics = _system_metrics("cuda")
+    assert metrics == {
+        "gpu_utilization_percent": None,
+        "vram_used_bytes": 123,
+        "vram_total_bytes": 456,
+    }
 
 
 def test_tiny_cpu_run_streams_and_persists_full_run(tmp_path) -> None:
