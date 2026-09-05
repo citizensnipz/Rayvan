@@ -11,6 +11,7 @@ from .experiments.common import MODEL_PRESET_DIMENSIONS, N1_STAGES
 SCHEMA_VERSION = 3
 EXPERT_FAMILIES = ("gpt", "ssm", "recurrent", "delta")
 ARCHITECTURES = (
+    "counterfactual_value_emc",
     "emc",
     "sequential_module_aware_emc",
     "legacy_parallel_emc",
@@ -55,6 +56,16 @@ class RoutingConfig:
     counterfactual_probe_temperature: float = 0.25
     geometry_temperature: float = 0.25
     geometry_calibration_weight: float = 1.0
+    value_target: str = "suffix"
+    value_expert_training: str = "controlled"
+    value_common_fraction: float = 0.5
+    value_specialist_temperature: float = 0.25
+    value_warmup_steps: int = 100
+    value_development_interval: int = 1
+    value_development_batch_size: int = 4
+    value_exploration_rate: float = 0.1
+    value_probe_rate: float = 0.08
+    value_probe_budget: int = 1
 
 
 @dataclass(frozen=True)
@@ -119,7 +130,7 @@ class ExperimentConfig:
         if any(not isinstance(count, int) or count < 0 for count in self.experts.values()):
             raise ValueError("expert counts must be non-negative integers")
         total = sum(self.experts.values())
-        if self.architecture in {"emc", "sequential_module_aware_emc", "legacy_parallel_emc", "heterogeneous_serial", "old_emc"} and total == 0:
+        if self.architecture in {"counterfactual_value_emc", "emc", "sequential_module_aware_emc", "legacy_parallel_emc", "heterogeneous_serial", "old_emc"} and total == 0:
             raise ValueError("the selected architecture requires at least one expert")
         if self.architecture in {"legacy_parallel_emc", "old_emc", *N2_ARCHITECTURES}:
             if self.routing.top_k is None:
@@ -128,7 +139,7 @@ class ExperimentConfig:
                 )
             if self.routing.top_k <= 0 or self.routing.top_k > max(total, 1):
                 raise ValueError("top_k must be between one and the configured expert count")
-        if self.architecture in {"emc", "sequential_module_aware_emc"} and self.routing.top_k is not None:
+        if self.architecture in {"counterfactual_value_emc", "emc", "sequential_module_aware_emc"} and self.routing.top_k is not None:
             raise ValueError(
                 "sequential EMC does not accept top_k; use trajectory_steps or "
                 "select legacy_parallel_emc"
@@ -141,9 +152,9 @@ class ExperimentConfig:
             raise ValueError("refractory_strength cannot be negative")
         if not 0 <= self.routing.refractory_decay <= 1:
             raise ValueError("refractory_decay must be between zero and one")
-        if self.routing.router_type not in {"fixed_index", "module_aware", "geometric"}:
+        if self.routing.router_type not in {"fixed_index", "module_aware", "geometric", "counterfactual_value"}:
             raise ValueError("unsupported router_type")
-        if self.routing.integrator_type not in {"weighted_average", "proposal_attention", "acceptance_gate"}:
+        if self.routing.integrator_type not in {"weighted_average", "proposal_attention", "acceptance_gate", "identity_free_gate"}:
             raise ValueError("unsupported integrator_type")
         if self.routing.routing_geometry_dim <= 0 or self.routing.competence_prototypes_per_expert <= 0:
             raise ValueError("routing geometry dimensions and prototype counts must be positive")
@@ -163,6 +174,10 @@ class ExperimentConfig:
             raise ValueError("counterfactual probe budget cannot be negative")
         if self.routing.counterfactual_probe_temperature <= 0 or self.routing.geometry_temperature <= 0:
             raise ValueError("routing calibration temperatures must be positive")
+        if self.architecture == "counterfactual_value_emc":
+            validate_value_settings(self.routing)
+            if self.training.precision == "fp16":
+                raise ValueError("value EMC requires fp32, bf16 or auto precision")
         if self.model.preset not in {"quick", "research", "custom"}:
             raise ValueError("preset must be quick, research, or custom")
         if self.model.fairness_mode not in {"custom", "capacity", "compute"}:
@@ -221,7 +236,7 @@ class ExperimentConfig:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         routing = payload["routing"]
-        if self.architecture in {"emc", "sequential_module_aware_emc"}:
+        if self.architecture in {"counterfactual_value_emc", "emc", "sequential_module_aware_emc"}:
             for key in (
                 "top_k",
                 "cycles",
@@ -262,6 +277,11 @@ class ExperimentConfig:
                 routing.pop(key, None)
             if self.architecture == "legacy_parallel_emc":
                 routing.pop("cycles", None)
+        if self.architecture == "counterfactual_value_emc":
+            payload["routing"] = {k: v for k, v in routing.items()
+                                  if k.startswith("value_") or k in {"trajectory_steps", "routing_geometry_dim"}}
+        else:
+            payload["routing"] = {k: v for k, v in routing.items() if not k.startswith("value_")}
         return payload
 
 
@@ -283,6 +303,7 @@ def research_schema() -> dict[str, Any]:
             },
         ],
         "architectures": [
+            {"id": "counterfactual_value_emc", "label": "Sequential EMC — Counterfactual Value"},
             {"id": "emc", "label": "Sequential EMC — Geometric"},
             {"id": "sequential_module_aware_emc", "label": "Sequential EMC — Legacy Module-Aware"},
             {"id": "legacy_parallel_emc", "label": "Legacy Parallel Top-K EMC"},
@@ -306,3 +327,22 @@ def research_schema() -> dict[str, Any]:
         "model_presets": MODEL_PRESET_DIMENSIONS,
         "defaults": ExperimentConfig().to_dict(),
     }
+
+
+
+def validate_value_settings(config) -> None:
+    if config.value_target not in {"suffix", "immediate"}:
+        raise ValueError("value_target must be suffix or immediate")
+    if config.value_expert_training not in {"controlled", "ordinary", "frozen"}:
+        raise ValueError("value_expert_training must be controlled, ordinary or frozen")
+    for name in ("value_common_fraction", "value_exploration_rate", "value_probe_rate"):
+        if not 0 <= getattr(config, name) <= 1:
+            raise ValueError(f"{name} must lie in [0, 1]")
+    if not config.value_specialist_temperature > 0:
+        raise ValueError("specialist temperature must be positive")
+    for name in ("value_development_interval", "value_development_batch_size", "value_probe_budget"):
+        value = getattr(config, name)
+        if not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if not isinstance(config.value_warmup_steps, int) or config.value_warmup_steps < 0:
+        raise ValueError("value_warmup_steps must be a nonnegative integer")

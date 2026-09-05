@@ -49,13 +49,8 @@ class SequentialAcceptanceIntegrator(nn.Module):
             raise ValueError(
                 "sequential acceptance Integrator requires exactly one proposal"
             )
-        if selected_indices is None:
-            raise ValueError("selected_indices are required for expert identity")
         proposal = module_updates.squeeze(2)
-        expert_ids = selected_indices.reshape(latent.size(0))
-        identity = self.expert_identity(expert_ids).unsqueeze(1).expand(
-            -1, latent.size(1), -1
-        )
+        identity = self.identity_features(latent, selected_indices)
         proposal_norm = proposal.norm(dim=-1, keepdim=True)
         magnitude_feature = torch.log1p(proposal_norm)
         features = torch.cat(
@@ -79,6 +74,32 @@ class SequentialAcceptanceIntegrator(nn.Module):
             integrated_update_norm=accepted_update.norm(dim=-1).detach(),
             gate_magnitude=acceptance.squeeze(-1).detach(),
         )
+
+
+    def identity_features(self, latent: Tensor, selected_indices: Tensor | None) -> Tensor:
+        if selected_indices is None:
+            raise ValueError("selected_indices are required for expert identity")
+        return self.expert_identity(selected_indices.reshape(latent.size(0))).unsqueeze(1).expand(
+            -1, latent.size(1), -1
+        )
+
+
+class IdentityFreeAcceptanceIntegrator(SequentialAcceptanceIntegrator):
+    """Same raw-update gate, with no expert-ID feature; initially accepts 0.5."""
+
+    def __init__(self, config: Any) -> None:
+        super().__init__(config)
+        del self.expert_identity
+        self.identity_dim = 0
+        self.gate = nn.Sequential(
+            nn.Linear(config.latent_dim * 2 + 1, config.latent_dim),
+            nn.GELU(), nn.Linear(config.latent_dim, 1),
+        )
+        nn.init.zeros_(self.gate[-1].weight)
+        nn.init.zeros_(self.gate[-1].bias)
+
+    def identity_features(self, latent: Tensor, selected_indices: Tensor | None) -> Tensor:
+        return latent.new_empty(latent.size(0), latent.size(1), 0)
 
 
 class WeightedAverageIntegrator(nn.Module):
@@ -230,3 +251,4 @@ def _trace(
         integrated_update_norm=integrated_update.norm(dim=-1).detach(),
         gate_magnitude=gate.abs().mean(dim=-1).detach(),
     )
+

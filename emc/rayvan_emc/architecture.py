@@ -327,7 +327,9 @@ def architecture_accounting(
         routable = sum(module_counts)
         sequential = model.config.architecture_stage == "n1_sequential"
         architecture = (
-            "emc"
+            "counterfactual_value_emc"
+            if sequential and model.config.router_type == "counterfactual_value"
+            else "emc"
             if sequential and model.config.router_type == "geometric"
             else "sequential_module_aware_emc"
             if sequential
@@ -340,6 +342,12 @@ def architecture_accounting(
             if sequential else
             "Legacy token-routed EMC estimate includes selected modules, router, Integrator, and output projection for every configured cycle."
         )
+        if model.config.router_type == "counterfactual_value":
+            limitations.append(
+                "Value EMC scores one supervised endpoint per observed prefix. This per-context-token proxy "
+                "excludes snapshot copying, probes, development and validation. Use measured wall time "
+                "and the phase-specific expert-item counters for comparisons."
+            )
         limitations.append(
             "Parameter-use accounting is a proxy without attention-score products."
         )
@@ -507,3 +515,4 @@ def _unique_parameters(modules: tuple[nn.Module, ...]) -> int:
                 seen.add(identity)
                 total += parameter.numel()
     return total
+

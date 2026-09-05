@@ -34,6 +34,17 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
   const utilization = (latestRoute?.utilization as number[] | undefined) ?? [];
   const expertNames = (latestRoute?.expert_names as string[] | undefined) ?? [];
   const starvation = utilization.map((value, index) => ({ value, name: expertNames[index] ?? `m${index}` })).filter((row) => row.value < 0.01);
+  const valueRouting = (latestRoute?.value_routing ?? detail?.summary?.value_routing) as Record<string, unknown> | undefined;
+  const heldOut = valueRouting?.held_out as Record<string, unknown> | undefined;
+  const opportunity = (valueRouting?.expert_update_batches ?? []) as number[];
+  const practiceItems = (valueRouting?.expert_training_items ?? []) as number[];
+  const valueCosts = valueRouting?.costs as Record<string, number> | undefined;
+  const valueAudits = routing.filter((event) => {
+    const value = event.value_routing as Record<string, unknown> | undefined;
+    const audit = value?.held_out as Record<string, unknown> | undefined;
+    return audit?.snapshot_version === Number(value?.label_snapshot_version) + 1;
+  });
+  const xLabel = valueRouting ? "Supervised endpoints" : "Tokens";
   const geometric = latestRoute?.geometric_routing as Record<string, unknown> | undefined;
 
   const lossSeries: MetricSeries[] = [
@@ -68,13 +79,17 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
     {warnings.length > 0 && <section className="warning-list panel"><p className="eyebrow">Diagnostic warnings</p>{warnings.slice(-6).map((warning, index) => <div key={`${warning.code}-${index}`}><b>{warning.code?.replaceAll("_", " ")}</b><span>{warning.message ?? String(warning)}</span></div>)}</section>}
 
     <section className="chart-grid">
-      <MetricChart title="Loss & scaling projection" series={lossSeries} yLabel="Loss" />
-      <MetricChart title="Perplexity · projected from loss" series={[{ name: "Validation PPL — measured", color: "#8e69ff", data: validation.map((event) => [Number(event.tokens_processed), number(event.validation_perplexity)]) }, ...perplexityProjectionSeries]} yLabel="PPL" />
-      <MetricChart title="Training throughput" series={[{ name: "Tokens / second", color: "#38c6cc", data: training.map((event) => [Number(event.tokens_processed), number(event.tokens_per_second)]) }]} yLabel="tok/s" />
-      <MetricChart title="Step performance" series={[{ name: "Step duration", color: "#f2d276", data: training.map((event) => [Number(event.tokens_processed), number(event.step_time_seconds)]) }]} yLabel="seconds" />
-      <MetricChart title="Learning rate & gradient norm" series={[{ name: "Learning rate", color: "#8e69ff", data: training.map((event) => [Number(event.tokens_processed), number(event.learning_rate)]) }, { name: "Gradient norm", color: "#ef7b86", data: training.map((event) => [Number(event.tokens_processed), number(event.gradient_norm)]) }]} />
-      <MetricChart title="GPU utilization & VRAM" series={[{ name: "GPU %", color: "#d8ff75", data: training.map((event) => [Number(event.tokens_processed), number((event.system as Record<string, unknown> | undefined)?.gpu_utilization_percent)]) }, { name: "VRAM GiB", color: "#38c6cc", data: training.map((event) => [Number(event.tokens_processed), bytesToGiB(event.gpu_memory_used_bytes)]) }]} />
-      <MetricChart title="Routing entropy & integrator" series={[{ name: "Entropy", color: "#d8ff75", data: routing.map((event) => [Number(event.tokens_processed), number(event.entropy)]) }, { name: "Gate magnitude", color: "#8e69ff", data: routing.map((event) => [Number(event.tokens_processed), number(event.mean_gate_magnitude)]) }, { name: "Latent update", color: "#38c6cc", data: routing.map((event) => [Number(event.tokens_processed), number(event.mean_update_norm)]) }]} />
+      <MetricChart xLabel={xLabel} title="Loss & scaling projection" series={lossSeries} yLabel="Loss" />
+      <MetricChart xLabel={xLabel} title="Perplexity · projected from loss" series={[{ name: "Validation PPL — measured", color: "#8e69ff", data: validation.map((event) => [Number(event.tokens_processed), number(event.validation_perplexity)]) }, ...perplexityProjectionSeries]} yLabel="PPL" />
+      <MetricChart xLabel={xLabel} title="Training throughput" series={[{ name: valueRouting ? "Endpoints / second" : "Tokens / second", color: "#38c6cc", data: training.map((event) => [Number(event.tokens_processed), number(event.tokens_per_second)]) }]} yLabel={valueRouting ? "endpoints/s" : "tok/s"} />
+      <MetricChart xLabel={xLabel} title="Step performance" series={[{ name: "Step duration", color: "#f2d276", data: training.map((event) => [Number(event.tokens_processed), number(event.step_time_seconds)]) }]} yLabel="seconds" />
+      <MetricChart xLabel={xLabel} title="Learning rate & gradient norm" series={[{ name: "Learning rate", color: "#8e69ff", data: training.map((event) => [Number(event.tokens_processed), number(event.learning_rate)]) }, { name: "Gradient norm", color: "#ef7b86", data: training.map((event) => [Number(event.tokens_processed), number(event.gradient_norm)]) }]} />
+      <MetricChart xLabel={xLabel} title="GPU utilization & VRAM" series={[{ name: "GPU %", color: "#d8ff75", data: training.map((event) => [Number(event.tokens_processed), number((event.system as Record<string, unknown> | undefined)?.gpu_utilization_percent)]) }, { name: "VRAM GiB", color: "#38c6cc", data: training.map((event) => [Number(event.tokens_processed), bytesToGiB(event.gpu_memory_used_bytes)]) }]} />
+      <MetricChart xLabel={xLabel} title="Routing entropy & integrator" series={[{ name: "Entropy", color: "#d8ff75", data: routing.map((event) => [Number(event.tokens_processed), number(event.entropy)]) }, { name: "Gate magnitude", color: "#8e69ff", data: routing.map((event) => [Number(event.tokens_processed), number(event.mean_gate_magnitude)]) }, { name: "Latent update", color: "#38c6cc", data: routing.map((event) => [Number(event.tokens_processed), number(event.mean_update_norm)]) }]} />
+      {valueRouting && <MetricChart xLabel={xLabel} title="Held-out suffix routing quality" series={[
+        { name: "Decision regret (nats)", color: "#38c6cc", data: valueAudits.map((event) => [Number(event.tokens_processed), number(((event.value_routing as Record<string, unknown>).held_out as Record<string, unknown>).mean_regret)]) },
+        { name: "Cost-gap RMSE", color: "#d8ff75", data: valueAudits.map((event) => [Number(event.tokens_processed), number(((event.value_routing as Record<string, unknown>).held_out as Record<string, unknown>).gap_rmse)]) },
+      ]} />}
       <RoutingOverview events={events} />
       <TrajectoryByStep events={events} />
       <ExpertHeatmap events={events} />
@@ -90,7 +105,14 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
 
     {projectionFits.length > 0 && <section className="panel projection-quality"><div><p className="eyebrow">Exploratory projection · not measured truth</p><h3>Fit quality and runtime estimates</h3></div><div className="table-wrap"><table><thead><tr><th>Target</th><th>Model</th><th>Predicted loss</th><th>R²</th><th>Points</th><th>Confidence</th><th>Warning</th></tr></thead><tbody>{projectionFits.map((fit, index) => <tr key={index}><td>{Number(fit.prediction_target).toLocaleString()} tokens</td><td>{String(fit.model_type).replaceAll("_", " ")}</td><td>{Number(fit.predicted_value).toFixed(4)}</td><td>{Number(fit.r_squared).toFixed(3)}</td><td>{String(fit.measured_points)}</td><td><span className={`confidence ${fit.confidence}`}>{String(fit.confidence)}</span></td><td>{fit.warning ? String(fit.warning) : "—"}</td></tr>)}</tbody></table></div>{runtimeEstimates.length > 0 && <div className="runtime-projections">{runtimeEstimates.map((item, index) => <span key={index}><b>{Number(item.target_tokens).toLocaleString()} tokens</b>{duration(item.estimated_total_seconds)} total · {String(item.confidence)}</span>)}</div>}</section>}
 
-    {expertNames.length > 0 && <section className="panel expert-diagnostic"><div><p className="eyebrow">Starvation diagnostic</p><h3>{starvation.length ? `${starvation.length} expert${starvation.length > 1 ? "s" : ""} below 1%` : "No expert starvation detected"}</h3></div><div className="expert-pills">{expertNames.map((name, index) => <span className={utilization[index] < 0.01 ? "starved" : ""} key={name}>{name} {(utilization[index] * 100).toFixed(1)}%</span>)}</div></section>}
+    {valueRouting && <section className="panel">
+      <h3>Counterfactual value experiment · prefix endpoint objective</h3>
+      <p>Snapshot {String(valueRouting.label_snapshot_version ?? "—")} · held-out suffix probes {String(heldOut?.probe_count ?? "—")}. Each validation audit uses fresh states and does not train the router.</p>
+      <div className="table-wrap"><table><thead><tr><th>Expert</th><th>Training route share</th><th>Update batches</th><th>Practice / routed items</th></tr></thead><tbody>{opportunity.map((updates, i) => <tr key={i}><td>{expertNames[i] ?? `Expert ${i + 1}`}</td><td>{formatPercent(utilization[i])}</td><td>{updates}</td><td>{practiceItems[i]}</td></tr>)}</tbody></table></div>
+      <p>Traffic concentration alone does not establish collapse. Check held-out regret, capability quality and controlled update counts.</p>
+      <dl>{Object.entries(valueCosts ?? {}).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{value.toLocaleString()}</dd></div>)}</dl>
+    </section>}
+    {!valueRouting && expertNames.length > 0 && <section className="panel expert-diagnostic"><div><p className="eyebrow">Starvation diagnostic</p><h3>{starvation.length ? `${starvation.length} expert${starvation.length > 1 ? "s" : ""} below 1%` : "No expert starvation detected"}</h3></div><div className="expert-pills">{expertNames.map((name, index) => <span className={utilization[index] < 0.01 ? "starved" : ""} key={name}>{name} {(utilization[index] * 100).toFixed(1)}%</span>)}</div></section>}
     {Object.keys(tasks).length > 0 && <><TaskChart tasks={tasks} /><section className="table-wrap task-table"><table><thead><tr><th>Task</th><th>Loss</th><th>Exact</th><th>Token score</th><th>Perplexity</th><th>Samples</th><th>Tokens</th><th>Elapsed</th></tr></thead><tbody>{Object.entries(tasks).map(([task, values]) => <tr key={task}><td>{task.replaceAll("_", " ")}</td><td>{formatMetric(values.cross_entropy)}</td><td>{formatPercent(values.exact_accuracy)}</td><td>{formatPercent(values.token_accuracy)}</td><td>{formatMetric(values.perplexity)}</td><td>{String(values.examples ?? "—")}</td><td>{typeof values.evaluated_tokens === "number" ? values.evaluated_tokens.toLocaleString() : "—"}</td><td>{duration(values.elapsed_seconds)}</td></tr>)}</tbody></table></section></>}
 
     <details className="logs panel"><summary>Process logs & raw errors <span>{logs.length || (detail?.logs ? detail.logs.split("\n").length : 0)} lines</span></summary><pre>{[...logs, detail?.logs ?? ""].filter(Boolean).join("\n") || "No process output."}</pre></details>
@@ -125,3 +147,4 @@ function projectionLines(detail: RunDetail | undefined, events: ResearchEvent[],
     data: [endPoint, ...projected],
   }];
 }
+

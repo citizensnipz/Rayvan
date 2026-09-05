@@ -1,0 +1,209 @@
+"""Continuation-value routing. See docs/counterfactual-value-routing.md.
+
+Only observed-prefix endpoint logits are computed in one trajectory. The public
+all-position forward explicitly evaluates separate prefixes to preserve causality.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import torch
+from torch import Tensor, nn
+from torch.nn import functional as F
+
+from .model import EMCConfig, EMCOutput, EMCCycleTrace, SequentialEMCModel
+
+
+def center(values: Tensor) -> Tensor:
+    return values - values.mean(dim=-1, keepdim=True)
+
+
+class ValueNexusRouter(nn.Module):
+    """A(s, e) = [P(W f(s, remaining) + b)]_e; smaller is better."""
+
+    def __init__(self, config: EMCConfig) -> None:
+        super().__init__()
+        width = config.latent_dim
+        dim = config.resolved_routing_geometry_dim
+        self.max_steps = config.resolved_trajectory_steps
+        self.positions = nn.Embedding(config.max_sequence_length, width)
+        self.key = nn.Linear(width, dim)
+        self.query = nn.Parameter(torch.randn(dim) / dim**0.5)
+        self.encoder = nn.Sequential(nn.Linear(2 * width + 1, width), nn.GELU(), nn.Linear(width, dim))
+        self.value = nn.Linear(dim, config.num_modules)
+
+    def need(self, latent: Tensor, remaining: int) -> Tensor:
+        if not 1 <= remaining <= self.max_steps:
+            raise ValueError("remaining steps outside configured horizon")
+        positions = self.positions(torch.arange(latent.size(1), device=latent.device))
+        keys = torch.tanh(self.key(latent + positions))
+        attention = torch.softmax(keys @ self.query, dim=1)
+        pooled = (attention.unsqueeze(-1) * latent).sum(dim=1)
+        horizon = latent.new_full((latent.size(0), 1), remaining / self.max_steps)
+        return self.encoder(torch.cat((pooled, latent[:, -1], horizon), dim=-1))
+
+    def forward(self, latent: Tensor, remaining: int) -> Tensor:
+        return center(self.value(self.need(latent, remaining)))
+
+    def choose(self, latent: Tensor, remaining: int, availability: Tensor | None = None) -> Tensor:
+        costs = self(latent, remaining)
+        if availability is not None:
+            mask = availability.to(device=latent.device, dtype=torch.bool)
+            mask = torch.broadcast_to(mask, costs.shape)
+            if not mask.any(dim=-1).all():
+                raise ValueError("each request must have an available expert")
+            costs = costs.masked_fill(~mask, torch.inf)
+        return costs.argmin(dim=-1)
+
+    def calibration_loss(self, state: Tensor, remaining: int, losses: Tensor) -> Tensor:
+        # Detach INPUT, not encoder output: router learns, upstream experts do not.
+        prediction = self(state.detach(), remaining).float()
+        return F.mse_loss(prediction, center(losses.detach().float()))
+
+    def metric(self) -> Tensor:
+        coefficients = self.value.weight - self.value.weight.mean(dim=0, keepdim=True)
+        return coefficients.T @ coefficients / coefficients.size(0)
+
+
+@dataclass(frozen=True)
+class StateBatch:
+    latent: Tensor
+    targets: Tensor
+    depth: int
+
+
+class CounterfactualValueEMC(SequentialEMCModel):
+    """Reusable experts with greedy sequential cost-to-go decisions."""
+
+    prefix_endpoint_objective = True
+
+    def __init__(self, config: EMCConfig) -> None:
+        if config.router_type != "counterfactual_value" or config.integrator_type != "identity_free_gate":
+            raise ValueError("value EMC requires counterfactual_value and identity_free_gate")
+        if config.refractory_enabled or config.loss_free_balance_enabled or config.switch_cost or config.persistence_bonus:
+            raise ValueError("value EMC requires unbiased scores: disable refractory, balance and persistence")
+        from .research_config import validate_value_settings
+        validate_value_settings(config)
+        super().__init__(config)
+
+    def embed(self, tokens: Tensor) -> Tensor:
+        if tokens.ndim != 2 or not 0 < tokens.size(1) <= self.config.max_sequence_length:
+            raise ValueError("expected a nonempty observed prefix within context length")
+        return self.token_embedding(tokens) + self.position_embedding(torch.arange(tokens.size(1), device=tokens.device))
+
+    def read_endpoint(self, state: Tensor) -> Tensor:
+        return self.output_projection(self.output_norm(state[:, -1]))
+
+    def apply_expert(self, state: Tensor, selected: Tensor, *, diagnostics: bool = False,
+                     zero_mask: Tensor | None = None):
+        proposal = self.execute_selected_requests(state, selected)
+        if zero_mask is not None:
+            mask = zero_mask.to(state.device, dtype=torch.bool)[selected]
+            proposal = proposal.masked_fill(mask[:, None, None, None], 0)
+        return self.integrator(state, proposal, state.new_ones(state.size(0), state.size(1), 1),
+                               selected_indices=selected, return_diagnostics=diagnostics)
+
+    def continue_state(self, state: Tensor, depth: int, *, first: int | Tensor | None = None,
+                       stop: int | None = None) -> Tensor:
+        end = self.config.resolved_trajectory_steps if stop is None else stop
+        for t in range(depth, end):
+            if t == depth and first is not None:
+                selected = (torch.full((state.size(0),), first, device=state.device, dtype=torch.long)
+                            if isinstance(first, int) else first)
+            else:
+                selected = self.router.choose(state, self.config.resolved_trajectory_steps - t)
+            state = self.apply_expert(state, selected)
+        return state
+
+    @torch.no_grad()
+    def counterfactual_losses(self, batch: StateBatch, *, target: str = "suffix") -> Tensor:
+        if target not in {"suffix", "immediate"}:
+            raise ValueError("unknown counterfactual target")
+        # Caller supplies a fixed eval-mode snapshot; each branch reroutes its suffix.
+        end = batch.depth + 1 if target == "immediate" else self.config.resolved_trajectory_steps
+        return torch.stack([
+            F.cross_entropy(self.read_endpoint(self.continue_state(batch.latent, batch.depth, first=e, stop=end)).float(),
+                            batch.targets, reduction="none")
+            for e in range(self.config.num_modules)
+        ], dim=-1)
+
+    @torch.no_grad()
+    def collect_states(self, tokens: Tensor, targets: Tensor, *, generator: torch.Generator,
+                       exploration: float) -> list[StateBatch]:
+        state = self.embed(tokens)
+        batches = []
+        for depth in range(self.config.resolved_trajectory_steps):
+            batches.append(StateBatch(state.detach(), targets.detach(), depth))
+            if depth + 1 < self.config.resolved_trajectory_steps:
+                selected = self.router.choose(state, self.config.resolved_trajectory_steps - depth)
+                random_ids = torch.randint(self.config.num_modules, (state.size(0),), generator=generator).to(state.device)
+                explore = (torch.rand(state.size(0), generator=generator) < exploration).to(state.device)
+                selected = torch.where(explore, random_ids, selected)
+                state = self.apply_expert(state, selected)
+        return batches
+
+    def endpoint(self, tokens: Tensor, *, return_trace: bool = False, return_cycle_logits: bool = False,
+                 exploration: float = 0.0, generator: torch.Generator | None = None,
+                 availability_mask: Tensor | None = None, evaluation_cycle_limit: int | None = None,
+                 diagnostic_forced_modules: Tensor | None = None,
+                 diagnostic_zero_proposal_mask: Tensor | None = None) -> Tensor | EMCOutput:
+        state = self.embed(tokens)
+        horizon = self.config.resolved_trajectory_steps
+        steps = horizon if evaluation_cycle_limit is None else evaluation_cycle_limit
+        if not 1 <= steps <= horizon:
+            raise ValueError("invalid evaluation cycle limit")
+        traces, cycle_logits = [], []
+        for depth in range(steps):
+            costs = self.router(state, horizon - depth)
+            selected = self.router.choose(state, horizon - depth, availability_mask)
+            if diagnostic_forced_modules is not None:
+                forced = diagnostic_forced_modules.to(state.device, dtype=torch.long).reshape(-1)
+                if forced.numel() != 1:
+                    raise ValueError("value routing forces exactly one expert per step")
+                selected = forced.expand(state.size(0))
+            elif exploration:
+                random_ids = torch.randint(self.config.num_modules, (state.size(0),), generator=generator).to(state.device)
+                mask = (torch.rand(state.size(0), generator=generator) < exploration).to(state.device)
+                selected = torch.where(mask, random_ids, selected)
+            integrated = self.apply_expert(state, selected, diagnostics=return_trace, zero_mask=diagnostic_zero_proposal_mask)
+            if return_trace:
+                state, gate_trace = integrated
+                traces.append(EMCCycleTrace(
+                    cycle=depth + 1, selected_modules=tuple(torch.unique(selected).tolist()),
+                    router_scores=-costs.detach().unsqueeze(1), router_weights=state.new_ones(state.size(0), 1, 1),
+                    latent_shape=tuple(state.shape), selected_indices=selected.detach().view(-1, 1, 1),
+                    integrator_trace=gate_trace, module_families=self.module_families, expert_names=self.expert_names,
+                    base_actions=costs.detach().unsqueeze(1), effective_actions=costs.detach().unsqueeze(1),
+                ))
+            else:
+                state = integrated
+            if return_cycle_logits:
+                cycle_logits.append(self.read_endpoint(state).unsqueeze(1))
+        logits = self.read_endpoint(state).unsqueeze(1)
+        if return_trace or return_cycle_logits:
+            return EMCOutput(logits, tuple(traces), logits.new_zeros(()), tuple(cycle_logits) if return_cycle_logits else None)
+        return logits
+
+    def forward(self, token_ids: Tensor, *, return_trace: bool = False, return_cycle_logits: bool = False,
+                balance_entropy_floor: float = 0.75, counterfactual_targets: Tensor | None = None,
+                training_step: int = 0, force_counterfactual_probe: bool = False, **kwargs) -> Tensor | EMCOutput:
+        del balance_entropy_floor, counterfactual_targets, training_step
+        if force_counterfactual_probe:
+            raise ValueError("use the value trainer's snapshot audit for value counterfactuals")
+        # Compatibility path is genuinely causal, including forced Delta routes.
+        rows, cycles = [], []
+        final = None
+        for length in range(1, token_ids.size(1) + 1):
+            result = self.endpoint(token_ids[:, :length], return_trace=return_trace and length == token_ids.size(1),
+                                   return_cycle_logits=return_cycle_logits, **kwargs)
+            rows.append(result.logits if isinstance(result, EMCOutput) else result)
+            if isinstance(result, EMCOutput):
+                final = result
+                if return_cycle_logits:
+                    cycles.append(result.cycle_logits)
+        logits = torch.cat(rows, dim=1)
+        if return_trace or return_cycle_logits:
+            assert final is not None
+            per_cycle = tuple(torch.cat([row[t] for row in cycles], dim=1) for t in range(len(cycles[0]))) if cycles else None
+            return EMCOutput(logits, final.trace, logits.new_zeros(()), per_cycle)
+        return logits

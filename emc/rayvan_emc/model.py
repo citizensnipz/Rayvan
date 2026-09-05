@@ -66,6 +66,16 @@ class EMCConfig:
     geometry_temperature: float = 0.25
     geometry_calibration_weight: float = 1.0
     counterfactual_tie_epsilon: float = 1e-3
+    value_target: str = "suffix"
+    value_expert_training: str = "controlled"
+    value_common_fraction: float = 0.5
+    value_specialist_temperature: float = 0.25
+    value_warmup_steps: int = 100
+    value_development_interval: int = 1
+    value_development_batch_size: int = 4
+    value_exploration_rate: float = 0.1
+    value_probe_rate: float = 0.08
+    value_probe_budget: int = 1
     integrator_type: str = "weighted_average"
     integrator_heads: int = 4
     architecture_stage: str = "token"
@@ -196,9 +206,9 @@ class EMCConfig:
                 raise ValueError(
                     "balance target utilization must have positive mass"
                 )
-        if self.router_type not in {"fixed_index", "module_aware", "geometric"}:
+        if self.router_type not in {"fixed_index", "module_aware", "geometric", "counterfactual_value"}:
             raise ValueError("router_type must be fixed_index, module_aware, or geometric")
-        if self.integrator_type not in {"weighted_average", "proposal_attention", "acceptance_gate"}:
+        if self.integrator_type not in {"weighted_average", "proposal_attention", "acceptance_gate", "identity_free_gate"}:
             raise ValueError(
                 "integrator_type must be weighted_average, proposal_attention, or acceptance_gate"
             )
@@ -337,7 +347,10 @@ class EMCModel(nn.Module):
         self.position_embedding = nn.Embedding(
             config.max_sequence_length, config.latent_dim
         )
-        if config.router_type == "geometric":
+        if config.router_type == "counterfactual_value":
+            from .value_routing import ValueNexusRouter
+            self.router = ValueNexusRouter(config)
+        elif config.router_type == "geometric":
             self.router: NexusRouter | ModuleAwareNexusRouter | GeometricNexusRouter = (
                 GeometricNexusRouter(config)
             )
@@ -349,7 +362,10 @@ class EMCModel(nn.Module):
             create_emc_module(config, family)
             for family in config.resolved_module_families
         )
-        if config.integrator_type == "acceptance_gate":
+        if config.integrator_type == "identity_free_gate":
+            from .integrator import IdentityFreeAcceptanceIntegrator
+            self.integrator = IdentityFreeAcceptanceIntegrator(config)
+        elif config.integrator_type == "acceptance_gate":
             self.integrator: WeightedAverageIntegrator | Integrator | SequentialAcceptanceIntegrator = (
                 SequentialAcceptanceIntegrator(config)
             )
@@ -1192,3 +1208,4 @@ def _force_token_routing(
         pre_inhibition_scores=routing.pre_inhibition_scores,
         refractory_penalty=routing.refractory_penalty,
     )
+

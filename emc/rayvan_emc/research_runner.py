@@ -25,6 +25,7 @@ from .diagnostics import parameter_counts
 from .evaluate import DiagnosticEvaluationConfig, evaluate_suite, write_report
 from .experiments.common import create_emc_model, create_n2_model, load_experiment_corpus
 from .model import EMCConfig, EMCModel, SequentialEMCModel
+from .value_routing import CounterfactualValueEMC
 from .projections import perplexity_projection_payload, projection_payload
 from .research_config import ExperimentConfig
 from .serial import HeterogeneousSerialModel
@@ -114,6 +115,7 @@ def run_experiment(
         counts = parameter_counts(model)
         model_info = {
             **asdict(accounting),
+            "objective": "prefix_endpoint" if isinstance(model, CounterfactualValueEMC) else "all_positions",
             "expert_names": list(getattr(model, "expert_names", ())),
             "module_families": list(getattr(model, "module_families", ())),
             "approximate_active_parameters_per_cycle": counts.approximate_active_per_cycle,
@@ -152,7 +154,7 @@ def run_experiment(
         def progress(step: int, current_model: nn.Module, values: dict[str, Any]) -> None:
             del current_model
             latest.update(values)
-            if step % config.training.telemetry_interval:
+            if step % config.training.telemetry_interval and not values.get("evaluation_completed"):
                 return
             system = _system_metrics(config.training.device)
             writer.emit("training_step", run_id=resolved_id, **values, system=system)
@@ -293,6 +295,7 @@ def run_experiment(
             "headline": _headline(asdict(result), diagnostics),
             "warnings": _final_warnings(result, final_latest),
             "geometric_routing": geometric_routing,
+            "value_routing": (result.module_diagnostics or {}).get("value_routing"),
             "git": metadata["git"],
         }
         _write_json(run_directory / "summary.json", summary)
@@ -472,8 +475,15 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
                 "delta_ffn_dim": config.model.module_hidden_dim,
             }
         )
+    if config.architecture == "counterfactual_value_emc":
+        values.update({key: value for key, value in asdict(config.routing).items() if key.startswith("value_")})
+        values.update(router_type="counterfactual_value", integrator_type="identity_free_gate",
+                      refractory_enabled=False, loss_free_balance_enabled=False, switch_cost=0., persistence_bonus=0.,
+                      counterfactual_calibration_enabled=False)
     torch.manual_seed(config.training.seed)
     emc_config = EMCConfig(**values)
+    if config.architecture == "counterfactual_value_emc":
+        return CounterfactualValueEMC(emc_config)
     if config.architecture == "heterogeneous_serial":
         return HeterogeneousSerialModel(emc_config)
     if stage == "n1_chunked":
@@ -540,6 +550,8 @@ def _system_metrics(device_name: str) -> dict[str, Any]:
 
 
 def _routing_warnings(routing: Mapping[str, Any]) -> list[dict[str, str]]:
+    if "value_routing" in routing:
+        return []  # Traffic concentration alone is not evidence of training starvation.
     utilization = [float(value) for value in routing.get("utilization", [])]
     warnings = []
     dead = [str(index) for index, value in enumerate(utilization) if value == 0]
@@ -673,3 +685,4 @@ def _json_safe(value: Any) -> Any:
 
 def _run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8]
+
