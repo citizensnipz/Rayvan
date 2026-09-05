@@ -57,7 +57,7 @@ export interface RunDetail {
   metadata?: Record<string, unknown>;
   model?: Record<string, unknown>;
   summary?: RunSummary;
-  projections?: { predictions?: Array<Record<string, unknown>>; calibration?: Array<Record<string, unknown>> };
+  projections?: { schema_version?: number; perplexity_derivation?: string; predictions?: Array<Record<string, unknown>>; calibration?: Array<Record<string, unknown>> };
   diagnostics?: Record<string, unknown>;
   events: ResearchEvent[];
   logs: string;

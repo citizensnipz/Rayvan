@@ -22,8 +22,8 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
     const rate = number(latest?.tokens_per_second);
     return rate && target > processed ? (target - processed) / rate : null;
   }, [latest, target, processed]);
-  const projectionSeries = projectionLines(detail, events, validation, "fits", "validation_loss");
-  const perplexityProjectionSeries = projectionLines(detail, events, validation, "perplexity_fits", "validation_perplexity");
+  const projectionSeries = projectionLines(detail, events, validation, "fits", "validation_loss", "Bounded loss");
+  const perplexityProjectionSeries = projectionLines(detail, events, validation, "perplexity_fits", "validation_perplexity", "PPL = exp(projected loss)", Number.MIN_VALUE);
   const diagnosticEvent = [...events].reverse().find((event: ResearchEvent) => event.type === "diagnostic_result" && event.tasks);
   const tasks = ((diagnosticEvent?.tasks ?? detail?.diagnostics?.capability_results) || {}) as Record<string, Record<string, unknown>>;
   const warnings = events.flatMap((event) => Array.isArray(event.warnings) ? event.warnings as Array<Record<string, string>> : []);
@@ -37,8 +37,8 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
   const geometric = latestRoute?.geometric_routing as Record<string, unknown> | undefined;
 
   const lossSeries: MetricSeries[] = [
-    { name: "Train (measured)", color: "#d8ff75", data: training.map((event) => [Number(event.tokens_processed), number(event.training_loss)]) },
-    { name: "Validation (measured)", color: "#38c6cc", data: validation.map((event) => [Number(event.tokens_processed), number(event.validation_loss)]) },
+    { name: "Train loss — measured", color: "#d8ff75", data: training.map((event) => [Number(event.tokens_processed), number(event.training_loss)]) },
+    { name: "Validation loss — measured", color: "#38c6cc", data: validation.map((event) => [Number(event.tokens_processed), number(event.validation_loss)]) },
     ...projectionSeries,
   ];
 
@@ -69,7 +69,7 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
 
     <section className="chart-grid">
       <MetricChart title="Loss & scaling projection" series={lossSeries} yLabel="Loss" />
-      <MetricChart title="Perplexity" series={[{ name: "Validation (measured)", color: "#8e69ff", data: validation.map((event) => [Number(event.tokens_processed), number(event.validation_perplexity)]) }, ...perplexityProjectionSeries]} yLabel="PPL" />
+      <MetricChart title="Perplexity · projected from loss" series={[{ name: "Validation PPL — measured", color: "#8e69ff", data: validation.map((event) => [Number(event.tokens_processed), number(event.validation_perplexity)]) }, ...perplexityProjectionSeries]} yLabel="PPL" />
       <MetricChart title="Training throughput" series={[{ name: "Tokens / second", color: "#38c6cc", data: training.map((event) => [Number(event.tokens_processed), number(event.tokens_per_second)]) }]} yLabel="tok/s" />
       <MetricChart title="Step performance" series={[{ name: "Step duration", color: "#f2d276", data: training.map((event) => [Number(event.tokens_processed), number(event.step_time_seconds)]) }]} yLabel="seconds" />
       <MetricChart title="Learning rate & gradient norm" series={[{ name: "Learning rate", color: "#8e69ff", data: training.map((event) => [Number(event.tokens_processed), number(event.learning_rate)]) }, { name: "Gradient norm", color: "#ef7b86", data: training.map((event) => [Number(event.tokens_processed), number(event.gradient_norm)]) }]} />
@@ -104,7 +104,7 @@ function formatBytes(value: unknown) { const gib = bytesToGiB(value); return gib
 function formatMetric(value: unknown) { return typeof value === "number" ? value.toFixed(4) : "—"; }
 function formatPercent(value: unknown) { return typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "—"; }
 
-function projectionLines(detail: RunDetail | undefined, events: ResearchEvent[], validation: ResearchEvent[], fitField: string, measuredField: string): MetricSeries[] {
+function projectionLines(detail: RunDetail | undefined, events: ResearchEvent[], validation: ResearchEvent[], fitField: string, measuredField: string, label: string, lowerBound = 0): MetricSeries[] {
   const predictionEvents = events.filter((event) => event.type === "projection_update");
   const stored = detail?.projections?.predictions ?? [];
   const latest = (predictionEvents.at(-1) ?? stored.at(-1)) as Record<string, unknown> | undefined;
@@ -112,10 +112,16 @@ function projectionLines(detail: RunDetail | undefined, events: ResearchEvent[],
   if (!fits.length || !validation.length) return [];
   const end = validation.at(-1)!;
   const endPoint: [number, number | null] = [Number(end.tokens_processed), number(end[measuredField])];
-  return fits.slice(0, 4).map((fit) => ({
-    name: `Projected ${String(fit.model_type)} (${String(fit.confidence)})`,
+  const projected = fits
+    .map((fit) => [Number(fit.prediction_target), Math.max(lowerBound, Number(fit.predicted_value))] as [number, number])
+    .filter(([target, value]) => Number.isFinite(target) && Number.isFinite(value))
+    .sort((left, right) => left[0] - right[0]);
+  if (!projected.length) return [];
+  const fit = fits[0];
+  return [{
+    name: `${label} — projected (${String(fit.model_type).replaceAll("_", " ")}, ${String(fit.confidence)} confidence)`,
     dashed: true,
     color: "#f2d276",
-    data: [endPoint, [Number(fit.prediction_target), number(fit.predicted_value)]],
-  }));
+    data: [endPoint, ...projected],
+  }];
 }

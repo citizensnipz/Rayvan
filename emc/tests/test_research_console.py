@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
-from rayvan_emc.projections import fit_projection
+import pytest
+
+from rayvan_emc.projections import fit_projection, perplexity_projection_payload, projection_payload
 from rayvan_emc.research_config import ExperimentConfig, ModelConfig, ResearchTrainingConfig, RoutingConfig, research_schema
 from rayvan_emc.research_runner import _system_metrics, run_experiment
 
@@ -41,10 +44,32 @@ def test_projection_selects_supported_curve_and_marks_long_extrapolation() -> No
     points = [(x, 4.0 * x ** -0.2) for x in (10_000, 20_000, 40_000, 80_000, 100_000)]
     fit = fit_projection(points, 10_000_000, metric="validation_loss")
     assert fit is not None
-    assert fit.model_type in {"power_law", "exponential", "logarithmic", "linear"}
+    assert fit.model_type in {
+        "power_law_decay",
+        "power_law_asymptote",
+        "exponential_decay",
+        "exponential_asymptote",
+    }
     assert fit.r_squared > 0.95
     assert fit.confidence == "low"
     assert fit.warning is not None
+
+
+def test_projected_perplexity_is_derived_from_non_negative_loss() -> None:
+    points = [(1.0, 4.0), (2.0, 3.0), (3.0, 2.0), (4.0, 1.0)]
+    loss_projection = projection_payload(
+        points, (100.0, 1_000.0), metric="validation_loss"
+    )
+    perplexity = perplexity_projection_payload(loss_projection)
+    assert perplexity["derivation"] == "exp(projected_validation_loss)"
+    for loss_fit, ppl_fit in zip(
+        loss_projection["fits"], perplexity["fits"], strict=True
+    ):
+        assert loss_fit["predicted_value"] >= 0
+        assert ppl_fit["predicted_value"] > 0
+        assert ppl_fit["predicted_value"] == pytest.approx(
+            math.exp(loss_fit["predicted_value"])
+        )
 
 
 def test_missing_nvml_keeps_gpu_utilization_optional(monkeypatch) -> None:

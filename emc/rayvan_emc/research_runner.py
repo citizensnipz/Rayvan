@@ -25,7 +25,7 @@ from .diagnostics import parameter_counts
 from .evaluate import DiagnosticEvaluationConfig, evaluate_suite, write_report
 from .experiments.common import create_emc_model, create_n2_model, load_experiment_corpus
 from .model import EMCConfig, EMCModel, SequentialEMCModel
-from .projections import projection_payload
+from .projections import perplexity_projection_payload, projection_payload
 from .research_config import ExperimentConfig
 from .serial import HeterogeneousSerialModel
 from .training import TrainingCancelledError, TrainingConfig, TrainingMetrics, train_model
@@ -100,7 +100,6 @@ def run_experiment(
     _write_json(run_directory / "status.json", {"status": "initializing", "updated_at": started_at})
     latest: dict[str, Any] = {}
     measured: list[tuple[float, float]] = []
-    measured_perplexity: list[tuple[float, float]] = []
     prediction_records: list[dict[str, Any]] = []
     calibration: list[dict[str, Any]] = []
     throughput_history: list[float] = []
@@ -188,21 +187,17 @@ def run_experiment(
             latest.update(row)
             writer.emit("validation", run_id=resolved_id, **row)
             measured.append((float(metrics.tokens_processed), float(metrics.validation_loss)))
-            measured_perplexity.append((float(metrics.tokens_processed), float(metrics.validation_perplexity)))
             projection = _projection_update(measured, config.training.tokens, config.projection_targets)
             if projection["fits"]:
+                perplexity_projection = perplexity_projection_payload(projection)
                 projection_record = {
                     "made_at_tokens": metrics.tokens_processed,
-                    **projection,
-                    "perplexity_fits": projection_payload(
-                        measured_perplexity,
-                        (
-                            target
-                            for target in sorted({*config.projection_targets, config.training.tokens})
-                            if target > metrics.tokens_processed
-                        ),
-                        metric="validation_perplexity",
-                    )["fits"],
+                    "projection_schema_version": projection["schema_version"],
+                    "metric": projection["metric"],
+                    "constraints": projection["constraints"],
+                    "fits": projection["fits"],
+                    "perplexity_projection": perplexity_projection,
+                    "perplexity_fits": perplexity_projection["fits"],
                     "runtime_estimates": _runtime_estimates(metrics.tokens_per_second, metrics.tokens_processed, config.projection_targets),
                 }
                 prediction_records.append(projection_record)
@@ -212,7 +207,15 @@ def run_experiment(
             if len(measured) >= 2 and metrics.validation_loss > measured[-2][1] * 1.05:
                 writer.emit("diagnostic_result", run_id=resolved_id, warnings=[{"code": "validation_regression", "severity": "warning", "message": "Validation loss increased by more than 5% from the previous checkpoint."}])
             _calibrate_predictions(prediction_records, calibration, metrics.tokens_processed, metrics.validation_loss)
-            _write_json(run_directory / "projections.json", {"predictions": prediction_records, "calibration": calibration})
+            _write_json(
+                run_directory / "projections.json",
+                {
+                    "schema_version": 2,
+                    "predictions": prediction_records,
+                    "calibration": calibration,
+                    "perplexity_derivation": "exp(projected_validation_loss)",
+                },
+            )
 
         result = train_model(
             model,
