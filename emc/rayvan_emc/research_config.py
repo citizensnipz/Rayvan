@@ -71,6 +71,9 @@ class RoutingConfig:
     value_calibration_min_probes: int = 64
     value_head_type: str = "linear"
     value_head_hidden_dim: int = 32
+    value_geometry_slots: int = 4
+    value_geometry_prototypes: int = 4
+    value_geometry_regret_weight: float = 0.01
     value_fit_bank_path: str = ""
     value_fit_enabled: bool = False
     value_fit_prefixes: int = 64
@@ -352,10 +355,15 @@ def research_schema() -> dict[str, Any]:
 
 
 def validate_value_settings(config) -> None:
-    if config.value_head_type not in {"linear", "mlp"}:
-        raise ValueError("value_head_type must be linear or mlp")
+    if config.value_head_type not in {"linear", "mlp", "geometric"}:
+        raise ValueError("value_head_type must be linear, mlp or geometric")
     if not isinstance(config.value_head_hidden_dim, int) or config.value_head_hidden_dim <= 0:
         raise ValueError("value_head_hidden_dim must be a positive integer")
+    for name in ("value_geometry_slots", "value_geometry_prototypes"):
+        if not isinstance(getattr(config, name), int) or getattr(config, name) <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if not 0 <= config.value_geometry_regret_weight <= 1:
+        raise ValueError("Geometry regret weight must lie in [0, 1]")
     if config.value_fit_bank_path and not config.value_fit_enabled:
         raise ValueError("Saved bank reuse requires fixed-bank fitting")
     if config.value_target not in {"suffix", "immediate"}:

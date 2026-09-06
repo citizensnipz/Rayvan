@@ -121,7 +121,7 @@ def test_measure_bank_batches_collection_and_suffixes_under_delta_limit():
         torch.testing.assert_close(labels, model.counterfactual_losses(state), rtol=1e-5, atol=1e-6)
 
 
-@pytest.mark.parametrize('dimension,head', [(32, 'linear'), (8, 'mlp')])
+@pytest.mark.parametrize('dimension,head', [(32, 'linear'), (8, 'mlp'), (32, 'geometric')])
 def test_router_variants_reuse_identical_bank_without_expert_calls(tmp_path, dimension, head):
     c = experiment()
     source = run_experiment(c, runs_directory=tmp_path, run_id='source')
@@ -179,3 +179,47 @@ def test_nonlinear_head_centering_and_gradients():
     torch.testing.assert_close(model.router(x, 3).sum(-1), torch.zeros(4), atol=1e-6, rtol=0)
     with pytest.raises(ValueError, match='no single global'):
         model.router.metric()
+
+
+def test_geometric_energy_and_objective_match_equations():
+    from rayvan_emc.value_routing import CompetenceEnergy
+    c = experiment()
+    model = _build_model(replace(c, routing=replace(c.routing, value_head_type='geometric', routing_geometry_dim=32)), 16)
+    router = model.router
+    x = torch.randn(5, 8, 8)
+    labels = torch.randn(5, 2)
+    torch.testing.assert_close(router(x, 3), torch.zeros(5, 2), atol=1e-7, rtol=0)
+    with torch.no_grad():
+        router.value.prototypes[0, 0].add_(.2)
+    z = router.need(x, 3)
+    mu = torch.nn.functional.normalize(router.value.prototypes, dim=-1)
+    distance = (z[:, None, None] - mu[None]).square().sum(-1)
+    expected = router.value.bias - .05*.25*(torch.logsumexp(-distance/.25, -1)-torch.log(torch.tensor(4.)))
+    predicted = router(x, 3)
+    torch.testing.assert_close(predicted, center(expected))
+    regret = labels-labels.min(-1, keepdim=True).values
+    expected_loss = (predicted-center(labels)).square().mean() + .01*(torch.softmax(-predicted/.05,-1)*regret).sum(-1).mean()
+    torch.testing.assert_close(router.calibration_loss(x, 3, labels), expected_loss)
+    router.calibration_loss(x, 3, labels).backward()
+    assert router.value.prototypes.grad.abs().sum() > 0
+    assert router.cross_attention.in_proj_weight.grad.abs().sum() > 0
+    assert router.slot_attention.in_proj_weight.grad.abs().sum() > 0
+    assert router.queries.grad.abs().sum() > 0
+    with pytest.raises(ValueError, match='no single global'):
+        router.metric()
+
+
+def test_geometric_router_fits_without_running_experts():
+    torch.manual_seed(11)
+    c = experiment()
+    model = _build_model(replace(c, routing=replace(c.routing, value_head_type='geometric', routing_geometry_dim=32)), 16)
+    x = torch.randn(16, 4, 8)
+    a = .03 * torch.sign(x[:, 0, 0])
+    labels = torch.stack((a, -a), -1)
+    opt = torch.optim.AdamW(model.router.parameters(), lr=.003, weight_decay=0)
+    initial = float((model.router(x, 3).detach()-center(labels)).square().mean())
+    with patch.object(model, 'apply_expert', side_effect=AssertionError('Router inference cannot execute experts')):
+        for _ in range(200):
+            opt.zero_grad(); model.router.calibration_loss(x, 3, labels).backward(); opt.step()
+        error = float((model.router(x, 3).detach()-center(labels)).square().mean())
+    assert error < .1*initial

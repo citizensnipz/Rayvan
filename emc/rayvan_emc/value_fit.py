@@ -195,7 +195,8 @@ def train_fixed_bank(model, corpus, config, *, print_progress=True, evaluation_c
                     setup_seconds=time.perf_counter()-setup_start,
                     bank_file=str(bank_file) if bank_file else None,
                     bank_reused=reused, need_dimension=c.resolved_routing_geometry_dim, head_type=c.value_head_type,
-                    head_hidden_dim=c.value_head_hidden_dim,
+                    head_hidden_dim=c.value_head_hidden_dim, geometry_slots=c.value_geometry_slots,
+                    geometry_prototypes=c.value_geometry_prototypes, geometry_regret_weight=c.value_geometry_regret_weight,
                     bank_expert_items=0 if reused else 2*c.value_fit_prefixes*(c.resolved_trajectory_steps-1 +
                         c.num_modules*c.resolved_trajectory_steps*(c.resolved_trajectory_steps+1)//2),
                     fitting_expert_items=0)

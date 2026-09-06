@@ -358,7 +358,9 @@ def _build_training_model(config, tokenizer):
         raise ValueError("Checkpoint tokenizer differs from the selected suite; use the original suite")
     router_changes = (expected.config.resolved_routing_geometry_dim != model.config.resolved_routing_geometry_dim
                       or expected.config.value_head_type != model.config.value_head_type
-                      or expected.config.value_head_hidden_dim != model.config.value_head_hidden_dim)
+                      or expected.config.value_head_hidden_dim != model.config.value_head_hidden_dim
+                      or expected.config.value_geometry_slots != model.config.value_geometry_slots
+                      or expected.config.value_geometry_prototypes != model.config.value_geometry_prototypes)
     if router_changes and (config.routing.value_expert_training != "frozen" or not config.routing.value_reset_router):
         raise ValueError("Router architecture overrides require frozen experts and Reset router on checkpoint load")
     # Preserve expert shapes and the source continuation router.

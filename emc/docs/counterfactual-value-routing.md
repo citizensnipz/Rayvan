@@ -517,3 +517,68 @@ This is a capacity comparison, not a perfectly parameter-matched experiment:
 increasing need dimension also enlarges the attention keys and encoder output,
 and the nonlinear head adds parameters. An improvement identifies a useful variant;
 it does not by itself prove an information-theoretic compression bottleneck.
+
+### Relational geometric router experiment
+
+Select **Relational geometric (slots + basins)** under Prediction head. This
+selects a new encoder and energy model, not just a different output layer.
+Defaults: four ordered query slots, 32 features per slot, four attention heads,
+32-dimensional need embedding, and four competence prototypes per expert.
+
+At every decision the router projects the position-aware observed latent sequence.
+Slot queries are conditioned on the last latent and remaining trajectory depth.
+Cross-attention reads the sequence into slots; a residual self-attention and
+feed-forward block lets slots interact. Their concatenation, last latent and depth
+are encoded into a unit-normalized need vector z. No task roles are assigned.
+Only the observed prefix is visible, and no candidate expert is executed by the
+router. The existing trajectory loop recomputes this representation after every
+expert/Integrator update.
+
+With unit-normalized prototype vectors mu[e,m], the uncentered energy is
+
+    E_e(z) = b_e - a*tau * (logsumexp_m(-||z-mu[e,m]||^2/tau) - log(M))
+
+where a=0.05 and tau=0.25 are fixed. The positive scale converts squared unit-sphere
+distances to the approximate scale of measured loss differences. Center E across
+experts for prediction, then choose its minimum. Biases express global competence
+differences and multiple basins allow disconnected competence regions. The model
+has no single global Mahalanobis metric. Prototypes start different within an
+expert, but identical across experts, and biases start at zero: initial centered
+scores are exactly zero. Counterfactual supervision breaks that symmetry without
+random initial competence advantages. Zero-score argmin still ties to the first
+expert; fixed-bank collection uses the separate original reference policy and
+random exploration, so that tie does not determine measurement opportunities.
+
+The training objective is
+
+    mean((P E - P Y)^2) + lambda * mean(sum_e p_e * (Y_e - min_j Y_j))
+    p = softmax(-P E / 0.05), lambda = 0.01 by default.
+
+Y is the detached measured suffix-loss vector under the frozen source continuation.
+The second term encourages low-regret choices without making hard winner labels
+out of near ties. It is a training surrogate; inference remains greedy. No balance
+loss is added. The console's train/held-out MSE remains plain MSE (not the combined
+objective), and decision regret remains the actual greedy regret. Geometry settings
+are recorded in fixed-bank diagnostics. Setting Decision regret weight to zero
+retains only the prediction objective if a later objective ablation is needed.
+
+To compare with existing results, use the ORIGINAL expert checkpoint, fixed-bank
+fitting, router reset and fixed continuation. Select the new geometric option,
+keep the defaults above, 256 prefixes/split, 1000 updates, FP32, learning rate
+0.0003, zero weight decay, evaluation interval 50, and unchanged data/router seeds.
+Reuse a router-fit-bank.pt produced by c331acd or later (e.g. the preceding 32D or
+nonlinear tests); its source identity is compatible with this new router. No new
+baseline bank is required. Compare bank fingerprints and final/latest metrics.
+Older pre-source-validation banks still require regeneration.
+
+"Least action" here means selecting the predicted lowest final-loss continuation
+among experts at each current state. It is not an exact globally optimal trajectory
+or classical physical action. Measurements use a fixed continuation policy, so
+end-to-end deployment of the learned router still needs trajectory validation.
+This experiment preserves outcome-supervised geometry but cannot guarantee that
+the basins discover unique cognitive roles or that expert training avoids monopoly.
+The first test freezes experts to isolate the router redesign. Four query slots
+cost O(L*S*w) attention work after projection; slot interaction costs O(S^2*w),
+and basin scoring costs O(E*M*d) per state. No full L-by-L attention is introduced.
+The larger encoder and changed objective may overfit; evidence of success is improved
+held-out regret and prediction error, not lower training loss alone.

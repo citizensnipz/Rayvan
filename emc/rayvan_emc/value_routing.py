@@ -6,6 +6,7 @@ all-position forward explicitly evaluates separate prefixes to preserve causalit
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 import torch
 from torch import Tensor, nn
@@ -75,6 +76,77 @@ class ValueNexusRouter(nn.Module):
         return coefficients.T @ coefficients / coefficients.size(0)
 
 
+class CompetenceEnergy(nn.Module):
+    """Scaled soft minimum over unit-sphere prototypes; smaller is better."""
+    temperature = 0.25
+    scale = 0.05
+
+    def __init__(self, experts: int, prototypes: int, dim: int):
+        super().__init__()
+        # Identical initial basins across experts avoid random initial winners.
+        # Supervision separates experts; prototypes within each expert differ.
+        initial = F.normalize(torch.randn(prototypes, dim), dim=-1)
+        self.prototypes = nn.Parameter(initial.unsqueeze(0).repeat(experts, 1, 1))
+        self.bias = nn.Parameter(torch.zeros(experts))
+
+    def forward(self, z: Tensor) -> Tensor:
+        z = F.normalize(z, dim=-1)
+        mu = F.normalize(self.prototypes, dim=-1)
+        distance = (z[:, None, None, :] - mu[None]).square().sum(-1)
+        softmin = -self.temperature * (torch.logsumexp(-distance / self.temperature, dim=-1)
+                                       - math.log(mu.size(1)))
+        return self.bias + self.scale * softmin
+
+
+class RelationalGeometricRouter(ValueNexusRouter):
+    """Position-aware slot attention followed by counterfactual competence basins."""
+    def __init__(self, config: EMCConfig):
+        nn.Module.__init__(self)
+        self.max_steps = config.resolved_trajectory_steps
+        self.regret_weight = config.value_geometry_regret_weight
+        self.policy_temperature = 0.05
+        width, slot_width = config.latent_dim, 32
+        self.positions = nn.Embedding(config.max_sequence_length, width)
+        self.input_norm = nn.LayerNorm(width)
+        self.input_projection = nn.Linear(width, slot_width)
+        self.queries = nn.Parameter(torch.randn(config.value_geometry_slots, slot_width) / slot_width**0.5)
+        self.condition = nn.Linear(width + 1, slot_width)
+        self.cross_attention = nn.MultiheadAttention(slot_width, 4, batch_first=True, dropout=0.)
+        self.cross_norm = nn.LayerNorm(slot_width)
+        self.slot_attention = nn.MultiheadAttention(slot_width, 4, batch_first=True, dropout=0.)
+        self.slot_norm = nn.LayerNorm(slot_width)
+        self.slot_ff = nn.Sequential(nn.Linear(slot_width, 2*slot_width), nn.GELU(), nn.Linear(2*slot_width, slot_width))
+        self.output_norm = nn.LayerNorm(slot_width)
+        self.encoder = nn.Sequential(nn.Linear(config.value_geometry_slots * slot_width + width + 1, slot_width),
+                                     nn.GELU(), nn.Linear(slot_width, config.resolved_routing_geometry_dim))
+        self.value = CompetenceEnergy(config.num_modules, config.value_geometry_prototypes,
+                                      config.resolved_routing_geometry_dim)
+
+    def need(self, latent: Tensor, remaining: int) -> Tensor:
+        if not 1 <= remaining <= self.max_steps:
+            raise ValueError("remaining steps outside configured horizon")
+        position = self.positions(torch.arange(latent.size(1), device=latent.device))
+        sequence = self.input_projection(self.input_norm(latent + position))
+        horizon = latent.new_full((latent.size(0), 1), remaining / self.max_steps)
+        context = torch.cat((latent[:, -1], horizon), -1)
+        queries = self.queries[None] + self.condition(context)[:, None]
+        slots = self.cross_norm(queries + self.cross_attention(queries, sequence, sequence, need_weights=False)[0])
+        slots = self.slot_norm(slots + self.slot_attention(slots, slots, slots, need_weights=False)[0])
+        slots = self.output_norm(slots + self.slot_ff(slots))
+        return F.normalize(self.encoder(torch.cat((slots.flatten(1), context), -1)), dim=-1)
+
+    def calibration_loss(self, state: Tensor, remaining: int, losses: Tensor) -> Tensor:
+        prediction = self(state.detach(), remaining).float()
+        truth = losses.detach().float()
+        mse = F.mse_loss(prediction, center(truth))
+        regret = truth - truth.min(-1, keepdim=True).values
+        probabilities = torch.softmax(-prediction / self.policy_temperature, dim=-1)
+        return mse + self.regret_weight * (probabilities * regret).sum(-1).mean()
+
+    def metric(self) -> Tensor:
+        raise ValueError("Multiple competence basins have no single global Mahalanobis metric")
+
+
 @dataclass(frozen=True)
 class StateBatch:
     latent: Tensor
@@ -101,7 +173,8 @@ class CounterfactualValueEMC(SequentialEMCModel):
         # Isolate router randomness from expert initialization and data sampling.
         with torch.random.fork_rng(devices=[]):
             torch.random.default_generator.manual_seed(seed)
-            router = ValueNexusRouter(self.config)
+            router = (RelationalGeometricRouter(self.config) if self.config.value_head_type == "geometric"
+                      else ValueNexusRouter(self.config))
         self.router = router.to(device=self.token_embedding.weight.device,
                                 dtype=self.token_embedding.weight.dtype)
 
