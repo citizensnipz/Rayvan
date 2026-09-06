@@ -91,6 +91,22 @@ function App() {
   };
   const stop = async () => { try { await cancelExperiment(); setLogs((current) => [...current, "Cancellation requested; waiting for a safe optimizer-step boundary…"]); } catch (reason) { setError(message(reason)); } };
   const openRun = async (runId: string) => { try { const loaded = await getExperiment(runId); setDetail(loaded); setRunState((loaded.summary?.status ?? "interrupted") as RunState); setView("report"); } catch (reason) { setError(message(reason)); } };
+  const testRouter = () => {
+    if (!detail?.config || detail.config.architecture !== "counterfactual_value_emc") return;
+    const checkpoint = detail.summary?.training_result?.best_checkpoint
+      ?? `${detail.runDirectory}/checkpoints/model-best.pt`;
+    setConfig({ ...detail.config, name: `${detail.config.name || detail.runId} · router seed 0`,
+      routing: { ...schema?.defaults.routing, ...detail.config.routing,
+        value_expert_training: "frozen", value_checkpoint_path: String(checkpoint),
+        value_reset_router: true, value_fixed_reference: true, value_router_seed: 0,
+        value_calibration_steps: 64, value_calibration_min_probes: 64,
+        value_probe_rate: 1, value_probe_budget: 4, value_target: "suffix" },
+      model: { ...detail.config.model, ssm_backend: "auto" },
+      training: { ...detail.config.training, tokens: 1024, evaluation_interval: 64,
+        evaluation_batches: 16, telemetry_interval: 1 },
+    });
+    setView("build");
+  };
   const compare = async () => { try { const loaded = await Promise.all([...selected].map(getExperiment)); setComparison(loaded); setView("compare"); } catch (reason) { setError(message(reason)); } };
 
   return <div className="app">
@@ -107,7 +123,7 @@ function App() {
           {view === "build" && <ExperimentBuilder schema={schema} config={config} setConfig={setConfig} estimate={estimate} estimating={estimating} active={active} onRun={launch} />}
           {view === "live" && <LiveExperiment events={events} state={runState} runId={activeRun} logs={logs} onCancel={active ? stop : undefined} />}
           {view === "history" && <ExperimentHistory runs={runs} selected={selected} setSelected={setSelected} onOpen={openRun} onCompare={compare} refresh={refreshRuns} />}
-          {view === "report" && detail && <LiveExperiment events={detail.events} state={(detail.summary?.status ?? runState) as RunState} runId={detail.runId} logs={[]} detail={detail} />}
+          {view === "report" && detail && <LiveExperiment events={detail.events} state={(detail.summary?.status ?? runState) as RunState} runId={detail.runId} logs={[]} detail={detail} onRouterTest={!active && detail.config?.architecture === "counterfactual_value_emc" ? testRouter : undefined} />}
           {view === "compare" && <RunComparison runs={comparison} />}
         </>}
       </div>
@@ -118,3 +134,4 @@ function App() {
 function message(reason: unknown) { return reason instanceof Error ? reason.message : typeof reason === "string" ? reason : JSON.stringify(reason); }
 
 createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);
+

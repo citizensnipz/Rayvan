@@ -60,8 +60,14 @@ def test_calibration_preserves_magnitudes_and_detaches_state_and_labels():
     torch.testing.assert_close(actual, ((router(state, 2) - center(labels))**2).mean())
     actual.backward()
     assert state.grad is None and labels.grad is None
-    assert router.encoder[0].weight.grad.abs().sum() > 0
+    assert router.encoder[0].weight.grad.abs().sum() == 0  # neutral head, first step
     assert router.value.weight.grad.abs().sum() > 0
+    with torch.no_grad():
+        router.value.weight.add_(router.value.weight.grad, alpha=-0.01)
+    router.zero_grad(set_to_none=True)
+    router.calibration_loss(state, 2, labels).backward()
+    assert router.encoder[0].weight.grad.abs().sum() > 0
+    assert state.grad is None and labels.grad is None
     torch.testing.assert_close(center(labels)[1], torch.zeros(2))
 
 
@@ -202,7 +208,7 @@ def test_probe_sampling_is_reproducible_and_not_front_or_first_depth_biased():
 
 
 def test_controlled_updates_are_equal_despite_complete_traffic_monopoly():
-    model = CounterfactualValueEMC(config(value_exploration_rate=0., value_probe_rate=0.))
+    model = CounterfactualValueEMC(config(value_exploration_rate=0., value_probe_rate=0., value_calibration_steps=0, value_calibration_min_probes=0))
     with torch.no_grad():
         model.router.value.weight.zero_()
         model.router.value.bias.copy_(torch.tensor([-100., 100.]))
@@ -256,6 +262,10 @@ def test_availability_and_empty_prefix_fail_explicitly():
 
 def test_permuting_experts_and_value_rows_preserves_computation():
     model = CounterfactualValueEMC(config()).eval()
+    # Greedy permutation invariance holds away from exact score ties.
+    with torch.no_grad():
+        model.router.value.weight.normal_()
+        model.router.value.bias.normal_()
     permuted = deepcopy(model)
     permuted.emc_modules = nn.ModuleList([permuted.emc_modules[1], permuted.emc_modules[0]])
     with torch.no_grad():
@@ -309,3 +319,47 @@ def test_specialist_distribution_survives_extreme_incumbent_advantage():
     q = curriculum_probabilities(snapshot,states,0.,.01)
     torch.testing.assert_close(q.sum(0), torch.ones(2))
     torch.testing.assert_close(q,torch.full((4,2),.25))
+
+
+def test_calibration_overrides_seed_monopoly_until_steps_and_evidence_satisfied():
+    c = config(value_expert_training='frozen', value_calibration_steps=2,
+               value_calibration_min_probes=3, value_probe_rate=0, value_probe_budget=1, value_exploration_rate=0)
+    model = CounterfactualValueEMC(c)
+    with torch.no_grad():
+        model.router.value.bias.copy_(torch.tensor([-100., 100.]))
+    opts = ValueOptimizers(model, .001, 0, 42)
+    x, y = torch.randint(16, (32, 4)), torch.randint(16, (32, 4))
+    for step in range(1, 5):
+        block = train_block(model, opts, x, y, step, 1.)
+        if step <= 3:
+            assert block['router_phase'] == 'calibration'
+            assert block['training_probe_count'] == 1
+            assert block['collection_exploration'] == 1
+            selected = torch.cat([t.selected_indices.flatten() for t in block['output'].trace])
+            assert set(selected.tolist()) == {0, 1}
+        else:
+            assert block['router_phase'] == 'learning'
+            assert block['collection_exploration'] == 0
+            assert block['training_probe_count'] == 0
+
+
+@pytest.mark.parametrize('seed', [0, 7, 31])
+def test_router_learns_state_dependent_losses_despite_wrong_initial_preference(seed):
+    # A controlled learnability check, not evidence of real EMC specialization.
+    model = CounterfactualValueEMC(config(value_router_seed=seed))
+    router = model.router
+    rng = torch.Generator().manual_seed(51)
+    states = torch.randn(96, 3, 8, generator=rng) * .1
+    sign = torch.where(torch.arange(96) % 2 == 0, 1., -1.)
+    states[:, :, 0] = sign[:, None]
+    # Two opposing transformations: e0 corrects +1, e1 corrects -1.
+    losses = torch.stack(((sign - 1).square(), (sign + 1).square()), -1)
+    with torch.no_grad():
+        router.value.bias.copy_(torch.tensor([.2, -.2]))
+    optimizer = torch.optim.Adam(router.parameters(), lr=.01)
+    for _ in range(120):
+        optimizer.zero_grad(set_to_none=True)
+        router.calibration_loss(states[:64], 3, losses[:64]).backward()
+        optimizer.step()
+    chosen = router.choose(states[64:], 3)
+    assert float(losses[64:].gather(1, chosen[:, None]).mean()) < .01

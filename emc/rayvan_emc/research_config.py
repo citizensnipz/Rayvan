@@ -66,6 +66,12 @@ class RoutingConfig:
     value_exploration_rate: float = 0.1
     value_probe_rate: float = 0.08
     value_probe_budget: int = 1
+    value_router_seed: int = 0
+    value_calibration_steps: int = 64
+    value_calibration_min_probes: int = 64
+    value_fixed_reference: bool = True
+    value_checkpoint_path: str = ""
+    value_reset_router: bool = True
 
 
 @dataclass(frozen=True)
@@ -80,6 +86,7 @@ class ModelConfig:
     chunk_size: int = 16
     shared_state_slots: int = 4
     n1_depth: int = 3
+    ssm_backend: str = "auto"
     tie_embeddings: bool = True
 
 
@@ -178,6 +185,10 @@ class ExperimentConfig:
             validate_value_settings(self.routing)
             if self.training.precision == "fp16":
                 raise ValueError("value EMC requires fp32, bf16 or auto precision")
+        if self.model.ssm_backend not in {"auto", "cuda", "parallel_scan", "reference"}:
+            raise ValueError("unsupported SSM backend")
+        if self.routing.value_checkpoint_path and self.architecture != "counterfactual_value_emc":
+            raise ValueError("checkpoint warm-start is currently supported for value EMC only")
         if self.model.preset not in {"quick", "research", "custom"}:
             raise ValueError("preset must be quick, research, or custom")
         if self.model.fairness_mode not in {"custom", "capacity", "compute"}:
@@ -346,3 +357,7 @@ def validate_value_settings(config) -> None:
             raise ValueError(f"{name} must be a positive integer")
     if not isinstance(config.value_warmup_steps, int) or config.value_warmup_steps < 0:
         raise ValueError("value_warmup_steps must be a nonnegative integer")
+
+    for name in ("value_router_seed", "value_calibration_steps", "value_calibration_min_probes"):
+        if not isinstance(getattr(config, name), int) or getattr(config, name) < 0:
+            raise ValueError(f"{name} must be a nonnegative integer")

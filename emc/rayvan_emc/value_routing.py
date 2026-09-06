@@ -31,6 +31,9 @@ class ValueNexusRouter(nn.Module):
         self.query = nn.Parameter(torch.randn(dim) / dim**0.5)
         self.encoder = nn.Sequential(nn.Linear(2 * width + 1, width), nn.GELU(), nn.Linear(width, dim))
         self.value = nn.Linear(dim, config.num_modules)
+        # No arbitrary expert preference in an uncalibrated value head.
+        nn.init.zeros_(self.value.weight)
+        nn.init.zeros_(self.value.bias)
 
     def need(self, latent: Tensor, remaining: int) -> Tensor:
         if not 1 <= remaining <= self.max_steps:
@@ -85,6 +88,15 @@ class CounterfactualValueEMC(SequentialEMCModel):
         from .research_config import validate_value_settings
         validate_value_settings(config)
         super().__init__(config)
+        self.reset_router(config.value_router_seed)
+
+    def reset_router(self, seed: int) -> None:
+        # Isolate router randomness from expert initialization and data sampling.
+        with torch.random.fork_rng(devices=[]):
+            torch.random.default_generator.manual_seed(seed)
+            router = ValueNexusRouter(self.config)
+        self.router = router.to(device=self.token_embedding.weight.device,
+                                dtype=self.token_embedding.weight.dtype)
 
     def embed(self, tokens: Tensor) -> Tensor:
         if tokens.ndim != 2 or not 0 < tokens.size(1) <= self.config.max_sequence_length:

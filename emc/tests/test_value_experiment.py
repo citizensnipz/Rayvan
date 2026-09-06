@@ -43,10 +43,12 @@ def test_invalid_value_settings_fail_before_launch(settings):
         experiment(routing=RoutingConfig(**settings))
 
 
-def test_checkpoint_resume_restores_expert_clocks_and_sampling_exactly(tmp_path):
+@pytest.mark.parametrize("expert_training", ["controlled", "frozen"])
+def test_checkpoint_resume_restores_expert_clocks_and_sampling_exactly(tmp_path, expert_training):
     torch.set_num_threads(1)
     corpus = LanguageCorpus.from_texts(['ababacabbc\n'*10], ['bacabbcaba\n'*10])
     c = experiment()
+    c = replace(c, routing=replace(c.routing, value_expert_training=expert_training))
     initial = _build_model(c, corpus.tokenizer.vocab_size)
     full, part = deepcopy(initial), deepcopy(initial)
     train = TrainingConfig(steps=2,batch_size=2,sequence_length=4,learning_rate=.001,
@@ -60,7 +62,7 @@ def test_checkpoint_resume_restores_expert_clocks_and_sampling_exactly(tmp_path)
                          checkpoint_directory=str(tmp_path/'resumed')),print_progress=False)
     for name, p in full.state_dict().items():
         torch.testing.assert_close(p, loaded.model.state_dict()[name],rtol=0,atol=0)
-    assert resumed.module_diagnostics['value_routing']['expert_update_batches']==[2,2]
+    assert resumed.module_diagnostics['value_routing']['expert_update_batches']==([2,2] if expert_training == 'controlled' else [0,0])
     assert resumed.tokens_processed==full_result.tokens_processed==4
     assert resumed.module_diagnostics['value_routing']['costs']==full_result.module_diagnostics['value_routing']['costs']
     assert evaluate_model_metrics(loaded.model,corpus,train)[0] > 0
@@ -84,3 +86,50 @@ def test_backend_saves_endpoint_budget_opportunity_and_heldout_metrics(tmp_path)
     assert all(row['objective']=='prefix_endpoint' for row in training)
     assert all('held_out' in row['routing']['value_routing'] for row in training)
     assert not any(w.get('code')=='collapsed_routing' for row in events for w in row.get('warnings',[]))
+
+
+def test_router_seed_does_not_change_experts_or_shared_layers():
+    c = experiment()
+    a = _build_model(c, 16)
+    b = _build_model(replace(c, routing=replace(c.routing, value_router_seed=19)), 16)
+    assert any(not torch.equal(p, b.state_dict()[name]) for name, p in a.state_dict().items() if name.startswith('router.'))
+    for name, p in a.state_dict().items():
+        if not name.startswith('router.'):
+            torch.testing.assert_close(p, b.state_dict()[name], rtol=0, atol=0)
+    assert torch.count_nonzero(a.router.value.weight) == 0
+    assert torch.count_nonzero(a.router.value.bias) == 0
+
+
+def test_router_only_checkpoint_roundtrip_fixed_labels_and_frozen_weights(tmp_path):
+    torch.set_num_threads(1)
+    c = experiment()
+    trained = run_experiment(c, runs_directory=tmp_path, run_id='source')
+    path = trained['training_result']['best_checkpoint']
+    original = load_model_checkpoint(path).model.state_dict()
+    initial_losses = []
+    for seed in (2, 9):
+        test = replace(c, routing=replace(c.routing, value_expert_training='frozen',
+                       value_checkpoint_path=path, value_router_seed=seed, value_fixed_reference=True))
+        summary = run_experiment(test, runs_directory=tmp_path, run_id=f'router-{seed}')
+        assert summary['status'] == 'completed'
+        value = summary['value_routing']
+        assert value['expert_update_batches'] == [0, 0]
+        assert value['costs']['development_expert_items'] == 0
+        assert value['held_out']['target'] == 'fixed_reference_suffix'
+        initial_losses.append([r['expert_mean_losses'] for r in value['initial_held_out']['by_depth']])
+        assert initial_losses[-1] == [r['expert_mean_losses'] for r in value['held_out']['by_depth']]
+        saved = load_model_checkpoint(summary['training_result']['latest_checkpoint']).model.state_dict()
+        for name, p in original.items():
+            if not name.startswith('router.'):
+                torch.testing.assert_close(p, saved[name], rtol=0, atol=0)
+        assert any(not torch.equal(p, saved[name]) for name, p in original.items() if name.startswith('router.'))
+        assert summary['headline']['context_tokens_per_second'] == summary['headline']['endpoints_per_second'] * 8
+    assert initial_losses[0] == initial_losses[1]
+
+
+def test_router_only_rejects_missing_checkpoint():
+    from rayvan_emc.research_runner import _build_training_model
+    from rayvan_emc.capability_tasks import diagnostic_tokenizer
+    c = experiment()
+    with pytest.raises(ValueError, match='require a trained'):
+        _build_training_model(replace(c, routing=replace(c.routing, value_expert_training='frozen')), diagnostic_tokenizer())

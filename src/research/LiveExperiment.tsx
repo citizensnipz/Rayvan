@@ -9,7 +9,7 @@ const number = (value: unknown) => typeof value === "number" ? value : null;
 const compact = (value: unknown, digits = 2) => typeof value === "number" ? Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: digits }).format(value) : "—";
 const duration = (seconds: unknown) => typeof seconds === "number" ? seconds < 60 ? `${seconds.toFixed(1)}s` : `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s` : "—";
 
-export function LiveExperiment({ events, state, runId, logs, detail, onCancel }: { events: ResearchEvent[]; state: RunState; runId?: string; logs: string[]; detail?: RunDetail; onCancel?: () => void }) {
+export function LiveExperiment({ events, state, runId, logs, detail, onCancel, onRouterTest }: { events: ResearchEvent[]; state: RunState; runId?: string; logs: string[]; detail?: RunDetail; onCancel?: () => void; onRouterTest?: () => void }) {
   const training = events.filter((event) => event.type === "training_step");
   const validation = events.filter((event) => event.type === "validation");
   const routing = events.filter((event) => event.type === "routing_metrics");
@@ -44,7 +44,12 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
     const audit = value?.held_out as Record<string, unknown> | undefined;
     return audit?.snapshot_version === Number(value?.label_snapshot_version) + 1;
   });
-  const xLabel = valueRouting ? "Supervised endpoints" : "Tokens";
+  const isEndpoint = Boolean(valueRouting) || detail?.config?.architecture === "counterfactual_value_emc" || latest?.objective === "prefix_endpoint";
+  const unit = isEndpoint ? "endpoint/s" : "tok/s";
+  const countUnit = isEndpoint ? "endpoints" : "tokens";
+  const contextLength = number(latest?.context_length) ?? number(detail?.config?.model.context_length);
+  const contextRate = (event: ResearchEvent) => number(event.context_tokens_per_second) ?? (contextLength == null ? null : Number(event.tokens_per_second) * contextLength);
+  const xLabel = isEndpoint ? "Supervised endpoints" : "Tokens";
   const geometric = latestRoute?.geometric_routing as Record<string, unknown> | undefined;
 
   const lossSeries: MetricSeries[] = [
@@ -56,15 +61,22 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
   return <div className="live-view">
     <section className="run-header panel">
       <div><p className="eyebrow">{detail ? "Stored run" : "Live experiment"}</p><h2>{detail?.summary?.name ?? runId ?? "Waiting for a run"}</h2><div className="state-line"><span className={`state-dot ${state}`} />{state}<small>{runId}</small></div></div>
+      {onRouterTest && <button className="primary" onClick={onRouterTest}>Test router from checkpoint</button>}
       {onCancel && ["initializing", "running", "validation", "diagnostics"].includes(state) && <button className="danger" onClick={onCancel}>Stop safely</button>}
-      <div className="progress-wrap"><div><span>{processed.toLocaleString()} / {target.toLocaleString()} tokens</span><span>{progress.toFixed(1)}%</span></div><div className="progress"><i style={{ width: `${progress}%` }} /></div></div>
+      <div className="progress-wrap"><div><span>{processed.toLocaleString()} / {target.toLocaleString()} {countUnit}</span><span>{progress.toFixed(1)}%</span></div><div className="progress"><i style={{ width: `${progress}%` }} /></div></div>
     </section>
 
     <section className="metric-cards">
       <Metric label="Train loss" value={compact(latest?.training_loss, 4)} />
       <Metric label="Validation loss" value={compact(latestValidation?.validation_loss ?? detail?.summary?.headline?.validation_loss, 4)} accent />
       <Metric label="Perplexity" value={compact(latestValidation?.validation_perplexity ?? detail?.summary?.headline?.perplexity, 3)} />
-      <Metric label="Throughput" value={`${compact(latest?.tokens_per_second ?? detail?.summary?.headline?.tokens_per_second, 2)} tok/s`} />
+      <Metric label={isEndpoint ? "Supervised endpoints" : "Training throughput"} value={`${compact(latest?.tokens_per_second ?? detail?.summary?.headline?.tokens_per_second, 2)} ${unit}`} />
+      {isEndpoint && <Metric label="Main context throughput" value={`${compact(latest ? contextRate(latest) : detail?.summary?.headline?.context_tokens_per_second, 2)} tok/s`} />}
+      {isEndpoint && <Metric label="Router phase" value={String(valueRouting?.router_phase ?? "initializing")} />}
+      {isEndpoint && <Metric label="Training probes" value={compact(valueRouting?.total_training_probes, 0)} />}
+      {isEndpoint && <Metric label="Initial routing regret" value={compact((valueRouting?.initial_held_out as Record<string, unknown> | undefined)?.mean_regret, 4)} />}
+      {isEndpoint && <Metric label="Constant-per-step regret" value={compact(heldOut?.constant_regret, 4)} />}
+      {isEndpoint && <Metric label="Uniform routing regret" value={compact(heldOut?.uniform_regret, 4)} />}
       <Metric label="Elapsed" value={duration(latest?.elapsed_seconds ?? detail?.summary?.headline?.runtime_seconds)} />
       <Metric label="ETA" value={duration(remaining)} />
       <Metric label="GPU" value={latest?.system && number((latest.system as Record<string, unknown>).gpu_utilization_percent) != null ? `${number((latest.system as Record<string, unknown>).gpu_utilization_percent)}%` : "Unavailable"} />
@@ -78,10 +90,12 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
 
     {warnings.length > 0 && <section className="warning-list panel"><p className="eyebrow">Diagnostic warnings</p>{warnings.slice(-6).map((warning, index) => <div key={`${warning.code}-${index}`}><b>{warning.code?.replaceAll("_", " ")}</b><span>{warning.message ?? String(warning)}</span></div>)}</section>}
 
+    {isEndpoint && <p>Main context tok/s = endpoint/s × context length. This counts primary input-token exposures, excludes repeated expert/probe work, and is not generation tok/s. Both rates include training-loop overhead and periodic validation; initial setup/compilation is excluded.</p>}
     <section className="chart-grid">
       <MetricChart xLabel={xLabel} title="Loss & scaling projection" series={lossSeries} yLabel="Loss" />
       <MetricChart xLabel={xLabel} title="Perplexity · projected from loss" series={[{ name: "Validation PPL — measured", color: "#8e69ff", data: validation.map((event) => [Number(event.tokens_processed), number(event.validation_perplexity)]) }, ...perplexityProjectionSeries]} yLabel="PPL" />
-      <MetricChart xLabel={xLabel} title="Training throughput" series={[{ name: valueRouting ? "Endpoints / second" : "Tokens / second", color: "#38c6cc", data: training.map((event) => [Number(event.tokens_processed), number(event.tokens_per_second)]) }]} yLabel={valueRouting ? "endpoints/s" : "tok/s"} />
+      <MetricChart xLabel={xLabel} title="Training throughput" series={[{ name: isEndpoint ? "Endpoints / second" : "Tokens / second", color: "#38c6cc", data: training.map((event) => [Number(event.tokens_processed), number(event.tokens_per_second)]) }]} yLabel={isEndpoint ? "endpoint/s" : "tok/s"} />
+      {isEndpoint && <MetricChart xLabel={xLabel} title="Main context throughput" series={[{ name: "Context tok/s", color: "#8e69ff", data: training.map((event) => [Number(event.tokens_processed), contextRate(event)]) }]} yLabel="tok/s" />}
       <MetricChart xLabel={xLabel} title="Step performance" series={[{ name: "Step duration", color: "#f2d276", data: training.map((event) => [Number(event.tokens_processed), number(event.step_time_seconds)]) }]} yLabel="seconds" />
       <MetricChart xLabel={xLabel} title="Learning rate & gradient norm" series={[{ name: "Learning rate", color: "#8e69ff", data: training.map((event) => [Number(event.tokens_processed), number(event.learning_rate)]) }, { name: "Gradient norm", color: "#ef7b86", data: training.map((event) => [Number(event.tokens_processed), number(event.gradient_norm)]) }]} />
       <MetricChart xLabel={xLabel} title="GPU utilization & VRAM" series={[{ name: "GPU %", color: "#d8ff75", data: training.map((event) => [Number(event.tokens_processed), number((event.system as Record<string, unknown> | undefined)?.gpu_utilization_percent)]) }, { name: "VRAM GiB", color: "#38c6cc", data: training.map((event) => [Number(event.tokens_processed), bytesToGiB(event.gpu_memory_used_bytes)]) }]} />
@@ -103,12 +117,15 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel }:
       {geometric && <GeometryByStep events={events} />}
     </section>
 
-    {projectionFits.length > 0 && <section className="panel projection-quality"><div><p className="eyebrow">Exploratory projection · not measured truth</p><h3>Fit quality and runtime estimates</h3></div><div className="table-wrap"><table><thead><tr><th>Target</th><th>Model</th><th>Predicted loss</th><th>R²</th><th>Points</th><th>Confidence</th><th>Warning</th></tr></thead><tbody>{projectionFits.map((fit, index) => <tr key={index}><td>{Number(fit.prediction_target).toLocaleString()} tokens</td><td>{String(fit.model_type).replaceAll("_", " ")}</td><td>{Number(fit.predicted_value).toFixed(4)}</td><td>{Number(fit.r_squared).toFixed(3)}</td><td>{String(fit.measured_points)}</td><td><span className={`confidence ${fit.confidence}`}>{String(fit.confidence)}</span></td><td>{fit.warning ? String(fit.warning) : "—"}</td></tr>)}</tbody></table></div>{runtimeEstimates.length > 0 && <div className="runtime-projections">{runtimeEstimates.map((item, index) => <span key={index}><b>{Number(item.target_tokens).toLocaleString()} tokens</b>{duration(item.estimated_total_seconds)} total · {String(item.confidence)}</span>)}</div>}</section>}
+    {projectionFits.length > 0 && <section className="panel projection-quality"><div><p className="eyebrow">Exploratory projection · not measured truth</p><h3>Fit quality and runtime estimates</h3></div><div className="table-wrap"><table><thead><tr><th>Target</th><th>Model</th><th>Predicted loss</th><th>R²</th><th>Points</th><th>Confidence</th><th>Warning</th></tr></thead><tbody>{projectionFits.map((fit, index) => <tr key={index}><td>{Number(fit.prediction_target).toLocaleString()} {countUnit}</td><td>{String(fit.model_type).replaceAll("_", " ")}</td><td>{Number(fit.predicted_value).toFixed(4)}</td><td>{Number(fit.r_squared).toFixed(3)}</td><td>{String(fit.measured_points)}</td><td><span className={`confidence ${fit.confidence}`}>{String(fit.confidence)}</span></td><td>{fit.warning ? String(fit.warning) : "—"}</td></tr>)}</tbody></table></div>{runtimeEstimates.length > 0 && <div className="runtime-projections">{runtimeEstimates.map((item, index) => <span key={index}><b>{Number(item.target_tokens).toLocaleString()} {countUnit}</b>{duration(item.estimated_total_seconds)} total · {String(item.confidence)}</span>)}</div>}</section>}
 
     {valueRouting && <section className="panel">
       <h3>Counterfactual value experiment · prefix endpoint objective</h3>
-      <p>Snapshot {String(valueRouting.label_snapshot_version ?? "—")} · held-out suffix probes {String(heldOut?.probe_count ?? "—")}. Each validation audit uses fresh states and does not train the router.</p>
+      <p>Snapshot {String(valueRouting.label_snapshot_version ?? "—")} · held-out suffix probes {String(heldOut?.probe_count ?? "—")}. Audit target: {String(heldOut?.target ?? "pending")}. Validation labels never train the router.</p>
       <div className="table-wrap"><table><thead><tr><th>Expert</th><th>Training route share</th><th>Update batches</th><th>Practice / routed items</th></tr></thead><tbody>{opportunity.map((updates, i) => <tr key={i}><td>{expertNames[i] ?? `Expert ${i + 1}`}</td><td>{formatPercent(utilization[i])}</td><td>{updates}</td><td>{practiceItems[i]}</td></tr>)}</tbody></table></div>
+      {heldOut && <div className="table-wrap"><table><thead><tr><th>Audit step</th><th>Greedy expert counts</th><th>Regret</th><th>Constant expert baseline</th></tr></thead><tbody>{((heldOut.by_depth ?? []) as Array<Record<string, unknown>>).map((row) => <tr key={Number(row.depth)}><td>{Number(row.depth) + 1}</td><td>{((row.route_counts ?? []) as number[]).map((count, index) => `${expertNames[index] ?? index}: ${count}`).join(" · ")}</td><td>{compact(row.regret, 4)}</td><td>{row.constant_expert == null ? "—" : expertNames[Number(row.constant_expert)]}</td></tr>)}</tbody></table></div>}
+      <p>Training route shares reflect exploration. Greedy audit counts above show learned choices. The constant-per-step baseline is chosen from training probes only.</p>
+      <p>SSM execution: {JSON.stringify(valueRouting.ssm_backends ?? {})}. Collection exploration: {formatPercent(valueRouting.collection_exploration)}.</p>
       <p>Traffic concentration alone does not establish collapse. Check held-out regret, capability quality and controlled update counts.</p>
       <dl>{Object.entries(valueCosts ?? {}).map(([key, value]) => <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{value.toLocaleString()}</dd></div>)}</dl>
     </section>}

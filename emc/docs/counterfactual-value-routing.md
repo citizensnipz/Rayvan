@@ -3,7 +3,7 @@
 This branch adds `counterfactual_value_emc` to the Python research console. It is
 an experimental implementation of continuation-value geometry and controlled
 expert development. Existing geometric, module-aware and parallel architectures
-retain their existing behavior and checkpoint identities. Native C++ is unchanged.
+retain their routing behavior and checkpoint identities. The selective diagonal SSM now has batched projections and optional fused CUDA execution.
 
 ## What is implemented
 
@@ -151,11 +151,11 @@ piecewise-constant suffix choices, not the full gradient of a tied trajectory.
 
 `ordinary` removes protected practice and learns experts on traffic-selected
 main trajectories. `frozen` learns only the router, freezing both expert and
-shared parameters. A frozen run initialized from scratch is only an infrastructure
-control. For a meaningful competence study, load a trained model using
-`load_model_checkpoint`, replace `model.config.value_expert_training` with
-`"frozen"` via `dataclasses.replace`, and call `train_model` with fresh optimizers
-(`resume_from=None`). The console does not yet provide checkpoint warm-start UI.
+shared parameters. The console now requires a trained value-EMC checkpoint for
+router-only runs. Open its saved report and use **Test router from checkpoint**;
+this copies the suite, expert composition, horizon and model dimensions. A warm
+start loads weights with fresh optimizers, not the source training clock. Incompatible
+model settings or tokenizers are rejected rather than silently remapped.
 
 This design removes the direct traffic-count feedback loop in the controlled
 arm. It cannot guarantee useful specialization or prevent every monopoly:
@@ -210,7 +210,7 @@ The smoke preset uses CUDA/FP32, eight Delta copies, 16-wide states, context 256
 and an eight-block common warmup. It checks execution and recording; its loss is
 not evidence for specialization. Change `training.device` to `cpu` for CPU use.
 
-For the first hypothesis pilot, choose these console settings:
+The original joint-training pilot used the following settings (historical; use the router-only protocol below for the next test):
 
 | Control | Value |
 |---|---|
@@ -280,3 +280,122 @@ expert IDs. Probes cost up to $E(T-t)$ expert-items per sampled state; controlle
 practice and snapshot storage scale with the population. There is no ANN index,
 uncertainty bandit, differentiable routing relaxation, native distributed executor,
 nonzero cost price or optimal-trajectory guarantee in this version.
+
+
+## Router isolation and calibration update
+
+The value head starts with W=0 and b=0. The encoder has its own `value_router_seed`;
+resetting it does not change expert/shared parameters or the data RNG. A zero head
+has no expert preference, but greedy argmin would break ties by index. Therefore
+**neutral initialization alone is not the mechanism**: during calibration,
+collection and the shared training trajectory choose experts uniformly at each
+step, and every request is eligible for probing (the configured cap still applies).
+Greedy training traffic is enabled only when both conditions hold:
+
+$$k>K_{calibration}\quad\text{and}\quad N_{probes}\geq N_{minimum}.$$
+
+Defaults are 64 blocks and 64 probes. Afterwards joint training uses the configured
+exploration/probe rates. `value_warmup_steps` remains the separate common-practice
+schedule. Calibration counters are saved/restored in training checkpoints. With a
+zero head the first gradient update trains W/b; encoder gradients begin once W
+becomes nonzero. Setting both calibration thresholds to zero is an explicit ablation.
+
+In frozen, fixed-reference mode, the source checkpoint's router is preserved **before**
+resetting the trainable router. Collection stays uniformly random throughout this
+test, while all suffix labels use the preserved checkpoint policy on each branch's
+changed latent. Experts, shared parameters and that reference policy never learn.
+Thus the target is stationary:
+
+$$Y_e(s)=\ell(F_{\theta_*}^{\pi_*}(s;e),y),\qquad
+L=\operatorname{MSE}(\hat A_\phi(s),Y(s)-\overline{Y(s)}).$$
+
+The collection/probe RNG is independent of the router seed. No held-out labels are
+used for fitting. Fixed validation prefixes and randomized collection routes are
+recreated deterministically; initial and final audits measure the same targets.
+`held_out.target=fixed_reference_suffix` distinguishes this test from the ordinary
+live-policy suffix audit. The preserved reference router is saved with optimizer
+state so CLI checkpoint resume keeps the same measuring policy.
+
+This tests supervised competence prediction under one continuation policy. It does
+**not** establish that repeatedly substituting the learned router improves full
+trajectories: actual greedy endpoint validation runs separately. A subsequent test
+can disable fixed continuation to study policy improvement with changing labels.
+The console skips the expensive final capability-generation report for router-only
+runs; it still performs endpoint validation and all-candidate routing audits.
+
+### Next console test
+
+1. Open **History**, open an existing trained value-EMC run, then click
+   **Test router from checkpoint**. Prefer the completed checkpoint over the
+   188-endpoint cancelled run. Keep its expert composition: eight Delta or 2/2/2/2
+   are both supported; changing composition requires a different checkpoint.
+2. The shortcut fills: router-only, reset router enabled, fixed checkpoint
+   continuation enabled, suffix targets, calibration 64 blocks / minimum 64 probes,
+   probe probability 1.0, cap 4, 1,024 endpoints, validation every 64 blocks with
+   16 batches. Keep batch 4, multiplier 1, original context/dimensions and data seed.
+3. Use learning rate 0.0003, weight decay 0.01, CUDA, precision Auto, SSM backend Auto.
+4. Run router seeds 0, 1 and 2 **from the same original checkpoint**, keeping all
+   other settings fixed. Do not use one router test's output as the next source.
+
+Watch held-out decision regret, pairwise gap RMSE, initial regret, uniform regret,
+and the constant-per-step baseline. That baseline chooses one expert at each depth
+from accumulated **training** counterfactual losses, then evaluates it on held-out
+states; it does not select the baseline on validation labels. Lower regret than
+uniform shows useful selection; beating this constant-per-step baseline is stronger
+evidence for state-dependent routing. Agreement across three seeds is preliminary
+robustness evidence, not a guarantee of seed independence or useful specialization.
+
+Expert update counts must remain zero. Training route shares include randomized
+collection; read **greedy audit counts** to assess the learned router's preference.
+Poor regret across all seeds falsifies this router's current predictive usefulness;
+a stable global winner can be real competence, or evidence that the checkpoint has
+little conditional specialization. This test cannot repair its experts.
+
+### SSM execution and verification
+
+All token-dependent projections are now batched. The portable `parallel_scan` uses
+associative composition `(a2,b2) o (a1,b1) = (a2*a1, b2+a2*b1)` in O(log L) tensor
+stages, with O(BLD log L) work. The optional C++/CUDA extension fuses the complete
+recurrence into one forward launch, parallel across request/channel lanes, with the
+time loop inside the kernel. It has O(BLD) work; it is not a parallel-time scan.
+Backward uses the exact adjoint recurrence
+
+$$q_t=g_t+a_{t+1}q_{t+1},\qquad
+\frac{\partial L}{\partial b_t}=q_t,\qquad
+\frac{\partial L}{\partial a_t}=q_t h_{t-1}.$$
+
+It supports first-order gradients through the latent even when expert parameters
+are frozen, uses the current CUDA stream/device, and accumulates in FP32. No decay
+product divisions or fast-math flags are used. FP64 portable checks compare both
+outputs and all parameter/input gradients against the original token loop. Reduced
+precision rounding and changed operation order mean bitwise parity is not promised.
+The CUDA custom backward is first-order only; higher-order differentiation requires
+the portable backend.
+
+`Auto` attempts a cached JIT build once per process on CUDA; missing tools/build
+failure produce a warning and select the optimized PyTorch scan. Explicit `cuda`
+fails rather than falling back. Runtime telemetry names the backend actually used.
+Install `python -m pip install -e "./emc[test,kernels]"`; the fused backend also needs
+a compatible CUDA toolkit (nvcc) and C++ compiler (MSVC Build Tools on Windows).
+The JIT build occurs before training throughput timing. The CUDA kernel's speedup
+and CUDA gradient tests still need verification on the user's GPU; neither is
+established by CPU tests. Narrow request/channel grids may underutilize a GPU, so
+compare against `parallel_scan` instead of assuming fusion always wins.
+
+From `emc/`, run `python -m pytest tests/test_ssm_scan.py -q` and optionally
+`python -m rayvan_emc.benchmark_ssm --device cuda --backend auto`. The benchmark
+reports whole-module forward/backward milliseconds, excluding warmup/compilation;
+both benchmark paths already batch projections. It is not LM generation throughput.
+
+### Throughput units
+
+Endpoint runs export `endpoints_per_second`, `context_tokens_per_second`,
+`context_length`, `objective=prefix_endpoint`, and `throughput_unit=endpoint/s`.
+The legacy `tokens_per_second` field remains the endpoint rate for compatibility.
+For fixed context L, main-context tok/s = endpoint/s × L. This is primary input-token
+exposure throughput, excluding repeated expert/probe visits. Elapsed training-loop
+time includes periodic validation and audit overhead; initial setup/compilation and
+the initial fixed-reference audit are excluded. It is neither generation tok/s nor
+an equivalent all-position supervision rate. Live, history and comparison views
+label target units explicitly and keep context tok/s separate. Existing logs with
+known context length can derive this proxy; missing context yields no invented rate.

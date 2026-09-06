@@ -76,6 +76,10 @@ class EMCConfig:
     value_exploration_rate: float = 0.1
     value_probe_rate: float = 0.08
     value_probe_budget: int = 1
+    value_router_seed: int = 0
+    value_calibration_steps: int = 64
+    value_calibration_min_probes: int = 64
+    value_fixed_reference: bool = True
     integrator_type: str = "weighted_average"
     integrator_heads: int = 4
     architecture_stage: str = "token"
@@ -93,7 +97,7 @@ class EMCConfig:
     balance_warmup_chunks: int = 0
     shared_core_enabled: bool = True
     shared_core_hidden_dim: int | None = None
-    ssm_backend: str = "parallel_scan"
+    ssm_backend: str = "auto"
     recurrent_backend: str = "gru"
     recurrent_precision: str = "fp16"
     delta_backend: str = "parallel_delta"
@@ -187,7 +191,7 @@ class EMCConfig:
             raise ValueError("request_pool_size cannot exceed num_modules")
         if self.recurrent_precision not in {"model", "fp32", "fp16", "bf16"}:
             raise ValueError("unsupported recurrent_precision")
-        if self.ssm_backend != "parallel_scan":
+        if self.ssm_backend not in {"auto", "parallel_scan", "cuda", "reference"}:
             raise ValueError("unsupported ssm_backend")
         if self.recurrent_backend != "gru":
             raise ValueError("unsupported recurrent_backend")
