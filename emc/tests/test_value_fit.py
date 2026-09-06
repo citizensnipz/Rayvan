@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 import torch
 
-from rayvan_emc.value_fit import FitBank, bank_loss, bank_metrics
+from rayvan_emc.value_fit import FitBank, bank_loss, bank_metrics, measure_bank
 from rayvan_emc.value_routing import CounterfactualValueEMC, StateBatch, center
 from rayvan_emc.research_runner import _build_model, run_experiment
 from rayvan_emc.checkpoint import load_model_checkpoint
@@ -92,3 +92,30 @@ def test_fit_rejects_moving_targets_and_reduced_precision():
     with pytest.raises(ValueError,match='FP32'):
         replace(c,routing=replace(c.routing,value_fit_enabled=True,value_expert_training='frozen'),
                 training=replace(c.training,precision='auto'))
+
+
+def test_measure_bank_batches_collection_and_suffixes_under_delta_limit():
+    model = _build_model(experiment(), 16).eval()
+    inputs = torch.randint(16, (7, 8))
+    targets = torch.randint(16, (7, 8))
+    guarded = [m for m in model.modules() if hasattr(m, 'max_transition_bytes')]
+    assert guarded
+    for module in guarded:
+        module.max_transition_bytes = 2 * 8 * module.heads * module.head_dim**2 * 4
+    # Reproduce the failure when measuring the entire bank at once.
+    state = StateBatch(model.embed(inputs).detach(), targets[:, -1], 0)
+    with pytest.raises(RuntimeError, match='transition tensor exceeds'):
+        model.counterfactual_losses(state)
+    with patch.object(model, 'apply_expert', wraps=model.apply_expert) as calls:
+        bank = measure_bank(model, inputs, targets, torch.Generator().manual_seed(42))
+    assert max(call.args[0].size(0) for call in calls.call_args_list) == 2
+    assert any(call.args[0].size(0) == 1 for call in calls.call_args_list)
+    assert torch.equal(bank.prefixes, inputs)
+    for state, labels in zip(bank.states, bank.losses):
+        assert state.latent.size(0) == 7 and labels.shape == (7, 2)
+        assert torch.equal(state.targets, targets[:, -1])
+    # Concatenation preserves order and the original suffix-loss mathematics.
+    for module in guarded:
+        module.max_transition_bytes *= 100
+    for state, labels in zip(bank.states, bank.losses):
+        torch.testing.assert_close(labels, model.counterfactual_losses(state), rtol=1e-5, atol=1e-6)

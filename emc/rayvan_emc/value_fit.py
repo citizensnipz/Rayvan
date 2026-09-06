@@ -44,14 +44,33 @@ def unique_prefixes(corpus, split, count, length, generator, device, excluded=()
 
 @torch.no_grad()
 def measure_bank(reference, inputs, targets, generator, cancelled=None):
-    states = reference.collect_states(inputs, targets[:, -1], generator=generator, exploration=1.)
-    labels = []
-    for state in states:
+    # Bank size is statistical coverage, not an expert execution batch size.
+    # Bound both state collection and counterfactual suffix execution, including
+    # branches where every item selects the same expert.
+    batch_size = min(4, inputs.size(0))
+    for module in reference.modules():
+        if hasattr(module, 'max_transition_bytes'):
+            per_item = inputs.size(1) * module.heads * module.head_dim**2 * 4
+            batch_size = min(batch_size, max(1, module.max_transition_bytes // per_item))
+    pieces = []
+    for start in range(0, inputs.size(0), batch_size):
         if cancelled and cancelled():
             from .training import TrainingCancelledError
             raise TrainingCancelledError('Cancelled while measuring router fit bank')
-        labels.append(reference.counterfactual_losses(state, target='suffix').detach())
-    return FitBank(tuple(states), tuple(labels), inputs.detach())
+        states = reference.collect_states(inputs[start:start+batch_size], targets[start:start+batch_size, -1],
+                                          generator=generator, exploration=1.)
+        labels = []
+        for state in states:
+            if cancelled and cancelled():
+                from .training import TrainingCancelledError
+                raise TrainingCancelledError('Cancelled while measuring router fit bank')
+            labels.append(reference.counterfactual_losses(state, target='suffix').detach())
+        pieces.append((states, labels))
+    states = tuple(StateBatch(torch.cat([s[d].latent for s, _ in pieces]),
+                              torch.cat([s[d].targets for s, _ in pieces]), d)
+                   for d in range(reference.config.resolved_trajectory_steps))
+    labels = tuple(torch.cat([y[d] for _, y in pieces]) for d in range(len(states)))
+    return FitBank(states, labels, inputs.detach())
 
 
 def bank_loss(router, bank):

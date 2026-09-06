@@ -461,3 +461,16 @@ MSE, so reserve a new untouched panel for any later generalization claim. Optimi
 resume is deliberately unsupported for this diagnostic; repeat from the source
 checkpoint instead. Initial bank measurement can be cancelled between sampling
 batches and trajectory depths, and fitting between updates.
+
+Fixed-bank setup measures prefixes in microbatches of at most four, reduced further
+when necessary to respect a Delta expert's transition-tensor limit. This applies
+to state collection and every counterfactual suffix. Results are concatenated in
+prefix order before fitting: the router still uses every bank state in each
+full-bank update. Increasing prefixes per split no longer increases the expert
+execution batch size, and the transition safety guard remains enabled. If even
+one prefix exceeds that guard, the normal error still applies.
+
+This batching correction changes the order of random draws during state collection
+relative to the initial unbatched diagnostic. Existing bank hashes may therefore
+change; compare new runs using the same code, source checkpoint, data seed and bank
+size. Router-seed comparisons remain deterministic under those fixed conditions.
