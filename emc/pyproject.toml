@@ -22,6 +22,10 @@ testpaths = ["tests"]
 addopts = ["-p", "no:asyncio", "--basetemp=.pytest-tmp"]
 pythonpath = ["."]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rayvan_emc", "rayvan_emc.*"]
+namespaces = false
 
 [tool.setuptools.package-data]
 rayvan_emc = ["csrc/*.cpp", "csrc/*.cu"]
