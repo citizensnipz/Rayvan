@@ -175,6 +175,9 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
         <label><span>Precision</span><select value={String(config.training.precision)} onChange={(event) => setNested("training", "precision", event.target.value)}><option value="auto">Auto</option><option value="bf16">BF16</option>{!valueRouting && <option value="fp16">FP16</option>}<option value="fp32">FP32</option></select></label>
         <label><span>Device</span><select value={String(config.training.device)} onChange={(event) => setNested("training", "device", event.target.value)}><option value="cuda">CUDA GPU</option><option value="cpu">CPU</option></select></label>
         <NumberField label="Validation cadence (steps)" value={Number(config.training.evaluation_interval)} min={1} onChange={(value) => setNested("training", "evaluation_interval", value)} />
+        <NumberField label="Validation batches" value={Number(config.training.evaluation_batches ?? 4)} min={1} onChange={(value) => setNested("training", "evaluation_batches", value)} />
+        <NumberField label="Telemetry cadence (steps)" value={Number(config.training.telemetry_interval ?? 1)} min={1} onChange={(value) => setNested("training", "telemetry_interval", value)} />
+        {config.suite === "capability_10" && <NumberField label="Diagnostic examples per capability" value={Number(config.training.diagnostic_examples_per_capability ?? 20)} min={1} onChange={(value) => setNested("training", "diagnostic_examples_per_capability", value)} />}
         <label><span>Projection targets <em>tokens, comma separated</em></span><input value={config.projection_targets.join(", ")} onChange={(event) => setRoot("projection_targets", event.target.value.split(",").map((value) => Number(value.trim())).filter((value) => Number.isFinite(value) && value > 0))} /></label>
       </div>
     </section>
