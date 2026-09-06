@@ -98,7 +98,7 @@ function App() {
     setConfig({ ...detail.config, name: `${detail.config.name || detail.runId} · router seed 0`,
       routing: { ...schema?.defaults.routing, ...detail.config.routing,
         value_expert_training: "frozen", value_checkpoint_path: String(checkpoint),
-        value_reset_router: true, value_fixed_reference: true, value_router_seed: 0,
+        value_reset_router: true, value_fixed_reference: true, value_router_seed: 0, value_fit_enabled: false,
         value_calibration_steps: 64, value_calibration_min_probes: 64,
         value_probe_rate: 1, value_probe_budget: 4, value_target: "suffix" },
       model: { ...detail.config.model, ssm_backend: "auto" },

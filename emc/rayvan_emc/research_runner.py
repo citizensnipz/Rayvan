@@ -116,7 +116,7 @@ def run_experiment(
         counts = parameter_counts(model)
         model_info = {
             **asdict(accounting),
-            "objective": "prefix_endpoint" if isinstance(model, CounterfactualValueEMC) else "all_positions",
+            "objective": "router_fixed_bank" if config.routing.value_fit_enabled else "prefix_endpoint" if isinstance(model, CounterfactualValueEMC) else "all_positions",
             "expert_names": list(getattr(model, "expert_names", ())),
             "module_families": list(getattr(model, "module_families", ())),
             "approximate_active_parameters_per_cycle": counts.approximate_active_per_cycle,
@@ -125,7 +125,7 @@ def run_experiment(
         writer.emit("config", run_id=resolved_id, model=model_info)
         training_config = TrainingConfig(
             steps=None,
-            train_tokens=config.training.tokens,
+            train_tokens=config.routing.value_fit_updates if config.routing.value_fit_enabled else config.training.tokens,
             batch_size=config.training.batch_size,
             sequence_length=config.model.context_length,
             learning_rate=config.training.learning_rate,
@@ -187,6 +187,11 @@ def run_experiment(
         def evaluation(step: int, current_model: nn.Module, metrics: TrainingMetrics) -> None:
             del current_model
             row = asdict(metrics)
+            if config.routing.value_fit_enabled:
+                row.update(objective="router_fixed_bank",throughput_unit="updates/s",context_tokens_per_second=None)
+                latest.update(row)
+                writer.emit("validation",run_id=resolved_id,**row)
+                return  # Router MSE is not language loss; no PPL or token projections.
             if config.architecture == "counterfactual_value_emc":
                 row.update(objective="prefix_endpoint", throughput_unit="endpoint/s",
                            endpoints_per_second=metrics.tokens_per_second,
@@ -300,9 +305,9 @@ def run_experiment(
             "training_result": _json_safe(asdict(result)),
             "headline": {**_headline(asdict(result), diagnostics),
                          "objective": model_info["objective"],
-                         "throughput_unit": "endpoint/s" if isinstance(model, CounterfactualValueEMC) else "tok/s",
-                         "endpoints_per_second": result.tokens_per_second if isinstance(model, CounterfactualValueEMC) else None,
-                         "context_tokens_per_second": result.tokens_per_second * (config.model.context_length if isinstance(model, CounterfactualValueEMC) else 1)},
+                         "throughput_unit": "updates/s" if config.routing.value_fit_enabled else "endpoint/s" if isinstance(model, CounterfactualValueEMC) else "tok/s",
+                         "endpoints_per_second": result.tokens_per_second if isinstance(model, CounterfactualValueEMC) and not config.routing.value_fit_enabled else None,
+                         "context_tokens_per_second": None if config.routing.value_fit_enabled else result.tokens_per_second * (config.model.context_length if isinstance(model, CounterfactualValueEMC) else 1)},
             "warnings": _final_warnings(result, final_latest),
             "geometric_routing": geometric_routing,
             "value_routing": (result.module_diagnostics or {}).get("value_routing"),

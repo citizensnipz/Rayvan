@@ -399,3 +399,65 @@ the initial fixed-reference audit are excluded. It is neither generation tok/s n
 an equivalent all-position supervision rate. Live, history and comparison views
 label target units explicitly and keep context tok/s separate. Existing logs with
 known context length can derive this proxy; missing context yields no invented rate.
+
+
+## Fixed-bank fitting diagnostic
+
+Use this after router seeds perform near the random baseline. The diagnostic asks
+whether the unchanged router can fit a small, stationary table of expert losses.
+It does not retrain experts or establish end-to-end task improvement.
+
+In History, open the **original trained model run**, click **Test router from
+checkpoint**, then enable **Fixed-bank fitting diagnostic**. The toggle sets:
+
+- Frozen experts/shared layers, fixed checkpoint continuation and suffix labels.
+- 64 distinct training prefixes and 64 distinct held-out prefixes, with no exact
+  raw-prefix overlap between the banks. All three trajectory depths are measured:
+  192 states and eight candidate loss values per state in each bank.
+- 1,000 full-bank router updates; audit every 50 updates, including update zero.
+- FP32 and weight decay zero. Keep learning rate 0.0003 and the current need
+  dimension 8. Use router seed 0 initially and the same source/data seed as before.
+
+Only setup executes experts: both banks' states and full suffix targets are
+measured once under the preserved source policy. Subsequent updates execute just
+the router; the setup cost and zero fitting expert-work count are reported separately.
+The cached banks (latents, prefix IDs, targets, expert losses and reference router)
+are saved as `checkpoints/router-fit-bank.pt`. A hash covers prefixes, states,
+targets and loss tables. Banks are deterministic across router seeds on the same
+runtime/device/source checkpoint. The train/held-out split precedes fitting, and
+held-out values do not enter the objective or optimizer.
+
+For each depth t, let Y_t be the fixed expert losses and P their centering operator.
+Each update minimizes the full-bank mean of `||A_phi(H_t)-P Y_t||^2`, with exactly
+the existing need encoder, linear value head and AdamW. Training-bank and held-out
+MSE are evaluated on all bank states. Normalized MSE divides by each bank's
+`mean((P Y_t)^2)`: 1 means no gain over predicting equal competence, near 0 means
+an excellent fit to the measured differences. A zero-denominator case is reported
+as null. The train-mean baseline, fitted only from training labels, is also recorded.
+
+The report includes train/held-out decision regret, normalized MSE, value-head and
+encoder gradient norms, router parameter changes, zero expert update counts and
+bank identity. Encoder gradients can be zero on the first update because the value
+head starts at zero; they should become available after the head moves.
+
+Interpretation:
+
+- Training-bank MSE falls strongly: the router can fit this bank. If held-out error
+  stays high, focus on generalization, coverage and predictability instead.
+- Both errors fall: the old fitting budget/procedure was inadequate under these
+  conditions. This test changes replay, batch size, precision and regularization;
+  it does not isolate which individual change helped.
+- Training-bank MSE remains near its baseline: investigate optimization/gradients,
+  then compare a richer encoder or head on the exact same saved bank. This is not
+  proof that expert differences contain no learnable signal.
+
+The normal endpoint budget, batch multiplier, exploration, probe cap and calibration
+schedule are unused in this mode; `value_fit_updates` controls duration. The live
+x-axis counts **router updates**, throughput is **updates/s**, and generic loss
+fields contain router MSE. Perplexity and context tok/s are null, and language
+scaling projections/final capability generation are disabled. Do not compare these
+losses with language-model cross entropy. Best checkpoint selection uses held-out
+MSE, so reserve a new untouched panel for any later generalization claim. Optimizer
+resume is deliberately unsupported for this diagnostic; repeat from the source
+checkpoint instead. Initial bank measurement can be cancelled between sampling
+batches and trajectory depths, and fitting between updates.

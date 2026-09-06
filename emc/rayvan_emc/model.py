@@ -79,6 +79,9 @@ class EMCConfig:
     value_router_seed: int = 0
     value_calibration_steps: int = 64
     value_calibration_min_probes: int = 64
+    value_fit_enabled: bool = False
+    value_fit_prefixes: int = 64
+    value_fit_updates: int = 1000
     value_fixed_reference: bool = True
     integrator_type: str = "weighted_average"
     integrator_heads: int = 4

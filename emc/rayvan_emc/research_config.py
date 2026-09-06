@@ -69,6 +69,9 @@ class RoutingConfig:
     value_router_seed: int = 0
     value_calibration_steps: int = 64
     value_calibration_min_probes: int = 64
+    value_fit_enabled: bool = False
+    value_fit_prefixes: int = 64
+    value_fit_updates: int = 1000
     value_fixed_reference: bool = True
     value_checkpoint_path: str = ""
     value_reset_router: bool = True
@@ -183,10 +186,14 @@ class ExperimentConfig:
             raise ValueError("routing calibration temperatures must be positive")
         if self.architecture == "counterfactual_value_emc":
             validate_value_settings(self.routing)
+            if self.routing.value_fit_enabled and self.training.precision != "fp32":
+                raise ValueError("Fixed-bank fitting requires FP32 precision")
             if self.training.precision == "fp16":
                 raise ValueError("value EMC requires fp32, bf16 or auto precision")
         if self.model.ssm_backend not in {"auto", "cuda", "parallel_scan", "reference"}:
             raise ValueError("unsupported SSM backend")
+        if self.routing.value_fit_enabled and self.architecture != "counterfactual_value_emc":
+            raise ValueError("Fixed-bank fitting is only available for counterfactual value EMC")
         if self.routing.value_checkpoint_path and self.architecture != "counterfactual_value_emc":
             raise ValueError("checkpoint warm-start is currently supported for value EMC only")
         if self.model.preset not in {"quick", "research", "custom"}:
@@ -361,3 +368,9 @@ def validate_value_settings(config) -> None:
     for name in ("value_router_seed", "value_calibration_steps", "value_calibration_min_probes"):
         if not isinstance(getattr(config, name), int) or getattr(config, name) < 0:
             raise ValueError(f"{name} must be a nonnegative integer")
+
+    for name in ("value_fit_prefixes", "value_fit_updates"):
+        if not isinstance(getattr(config,name),int) or getattr(config,name) <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if config.value_fit_enabled and (config.value_expert_training != "frozen" or not config.value_fixed_reference or config.value_target != "suffix"):
+        raise ValueError("Fixed-bank fitting requires frozen experts, fixed reference and suffix targets")

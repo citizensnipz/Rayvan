@@ -266,6 +266,12 @@ def audit_values(model: CounterfactualValueEMC, inputs: Tensor, targets: Tensor,
 
 def train_value_model(model, corpus, config, *, print_progress=True, evaluation_callback=None,
                       progress_callback=None, progress_callback_interval=1, cancellation_callback=None):
+    if model.config.value_fit_enabled:
+        from .value_fit import train_fixed_bank
+        return train_fixed_bank(model, corpus, config, print_progress=print_progress,
+                                evaluation_callback=evaluation_callback, progress_callback=progress_callback,
+                                progress_callback_interval=progress_callback_interval,
+                                cancellation_callback=cancellation_callback)
     from .training import TrainingCancelledError, TrainingMetrics, TrainingResult, _autocast_context, _live_routing_snapshot
     if progress_callback_interval <= 0:
         raise ValueError("progress_callback_interval must be positive")
