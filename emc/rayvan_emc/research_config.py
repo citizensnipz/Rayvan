@@ -69,6 +69,9 @@ class RoutingConfig:
     value_router_seed: int = 0
     value_calibration_steps: int = 64
     value_calibration_min_probes: int = 64
+    value_head_type: str = "linear"
+    value_head_hidden_dim: int = 32
+    value_fit_bank_path: str = ""
     value_fit_enabled: bool = False
     value_fit_prefixes: int = 64
     value_fit_updates: int = 1000
@@ -349,6 +352,12 @@ def research_schema() -> dict[str, Any]:
 
 
 def validate_value_settings(config) -> None:
+    if config.value_head_type not in {"linear", "mlp"}:
+        raise ValueError("value_head_type must be linear or mlp")
+    if not isinstance(config.value_head_hidden_dim, int) or config.value_head_hidden_dim <= 0:
+        raise ValueError("value_head_hidden_dim must be a positive integer")
+    if config.value_fit_bank_path and not config.value_fit_enabled:
+        raise ValueError("Saved bank reuse requires fixed-bank fitting")
     if config.value_target not in {"suffix", "immediate"}:
         raise ValueError("value_target must be suffix or immediate")
     if config.value_expert_training not in {"controlled", "ordinary", "frozen"}:

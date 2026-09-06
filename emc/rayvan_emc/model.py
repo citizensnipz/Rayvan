@@ -79,6 +79,9 @@ class EMCConfig:
     value_router_seed: int = 0
     value_calibration_steps: int = 64
     value_calibration_min_probes: int = 64
+    value_head_type: str = "linear"
+    value_head_hidden_dim: int = 32
+    value_fit_bank_path: str = ""
     value_fit_enabled: bool = False
     value_fit_prefixes: int = 64
     value_fit_updates: int = 1000

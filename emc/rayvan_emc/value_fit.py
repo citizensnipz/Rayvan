@@ -1,5 +1,6 @@
 """Fixed-measurement router fitting diagnostic; no expert execution while fitting."""
 from dataclasses import asdict, dataclass
+from copy import deepcopy
 from pathlib import Path
 import hashlib
 import math
@@ -106,6 +107,35 @@ def bank_metrics(router, bank, train_means):
                 probe_count=sum(r['probe_count'] for r in rows), target='fixed_bank_suffix')
 
 
+def source_identity(reference, tokenizer, sequence_length):
+    digest = hashlib.sha256()
+    for name, tensor in sorted(reference.state_dict().items()):
+        digest.update(name.encode())
+        digest.update(str(tuple(tensor.shape)).encode())
+        digest.update(tensor.detach().cpu().contiguous().numpy().tobytes())
+    return dict(weights_sha256=digest.hexdigest(), tokenizer=tokenizer.to_config(),
+                sequence_length=sequence_length, horizon=reference.config.resolved_trajectory_steps,
+                expert_names=list(reference.expert_names))
+
+
+def load_bank_payload(data, model, count, length, device):
+    states, losses, targets = data['states'], data['losses'], data['targets']
+    horizon = model.config.resolved_trajectory_steps
+    if not len(states) == len(losses) == len(targets) == horizon:
+        raise ValueError('Saved bank trajectory length differs')
+    prefixes = data['prefixes']
+    if tuple(prefixes.shape) != (count, length):
+        raise ValueError('Saved bank size/context differs; match Fixed prefixes per split and context length')
+    for x, y, target in zip(states, losses, targets):
+        if (tuple(x.shape) != (count, length, model.config.latent_dim)
+                or tuple(y.shape) != (count, model.config.num_modules) or tuple(target.shape) != (count,)):
+            raise ValueError('Saved bank tensor shapes differ from the model')
+        if not torch.isfinite(x).all() or not torch.isfinite(y).all():
+            raise ValueError('Saved bank contains non-finite values')
+    return FitBank(tuple(StateBatch(x.to(device), y.to(device), d) for d, (x, y) in enumerate(zip(states, targets))),
+                   tuple(y.to(device) for y in losses), prefixes.to(device))
+
+
 def train_fixed_bank(model, corpus, config, *, print_progress=True, evaluation_callback=None,
                      progress_callback=None, progress_callback_interval=1, cancellation_callback=None):
     from .training import TrainingMetrics, TrainingResult, TrainingCancelledError
@@ -122,23 +152,39 @@ def train_fixed_bank(model, corpus, config, *, print_progress=True, evaluation_c
     model.to(device).float().eval()
     model.zero_grad(set_to_none=True)
     reference = frozen_snapshot(model)
-    reference.router.load_state_dict(getattr(model, '_value_reference_router', model.router).state_dict())
+    reference.router = deepcopy(getattr(model, '_value_reference_router', model.router))
     reference.router.to(device).eval().requires_grad_(False)
     setup_start = time.perf_counter()
-    print('Router fit: measuring fixed train/held-out banks; experts run only during this setup.', file=sys.stderr, flush=True)
-    x, y, keys = unique_prefixes(corpus, 'train', c.value_fit_prefixes, config.sequence_length,
-                               torch.Generator().manual_seed(config.seed+3101), device, cancelled=cancellation_callback)
-    vx, vy, _ = unique_prefixes(corpus, 'validation', c.value_fit_prefixes, config.sequence_length,
-                               torch.Generator().manual_seed(config.seed+3102), device, keys, cancellation_callback)
-    train = measure_bank(reference, x, y, torch.Generator().manual_seed(config.seed+3103), cancellation_callback)
-    held = measure_bank(reference, vx, vy, torch.Generator().manual_seed(config.seed+3104), cancellation_callback)
+    identity = source_identity(reference, corpus.tokenizer, config.sequence_length)
+    reused = bool(c.value_fit_bank_path)
+    if reused:
+        print('Router fit: loading saved measurement banks; no expert measurements.', file=sys.stderr, flush=True)
+        payload = torch.load(Path(c.value_fit_bank_path).expanduser(), map_location='cpu', weights_only=True)
+        if 'source_identity' not in payload:
+            raise ValueError('This bank predates source validation. Run one new baseline with Saved bank path empty, then reuse its bank.')
+        if payload['source_identity'] != identity or payload['data_seed'] != config.seed:
+            raise ValueError('Saved bank source checkpoint, tokenizer, context, trajectory or data seed differs')
+        train = load_bank_payload(payload['train'], model, c.value_fit_prefixes, config.sequence_length, device)
+        held = load_bank_payload(payload['held_out'], model, c.value_fit_prefixes, config.sequence_length, device)
+        train_keys = set(map(tuple, train.prefixes.cpu().tolist()))
+        held_keys = set(map(tuple, held.prefixes.cpu().tolist()))
+        if len(train_keys) != c.value_fit_prefixes or len(held_keys) != c.value_fit_prefixes or train_keys & held_keys:
+            raise ValueError('Saved bank prefixes must be unique and disjoint')
+    else:
+        print('Router fit: measuring fixed train/held-out banks; experts run only during this setup.', file=sys.stderr, flush=True)
+        x, y, keys = unique_prefixes(corpus, 'train', c.value_fit_prefixes, config.sequence_length,
+                                   torch.Generator().manual_seed(config.seed+3101), device, cancelled=cancellation_callback)
+        vx, vy, _ = unique_prefixes(corpus, 'validation', c.value_fit_prefixes, config.sequence_length,
+                                   torch.Generator().manual_seed(config.seed+3102), device, keys, cancellation_callback)
+        train = measure_bank(reference, x, y, torch.Generator().manual_seed(config.seed+3103), cancellation_callback)
+        held = measure_bank(reference, vx, vy, torch.Generator().manual_seed(config.seed+3104), cancellation_callback)
     means = [center(y).mean(0) for y in train.losses]
     bank_file = None
     if config.checkpoint_directory:
         bank_file = Path(config.checkpoint_directory)/'router-fit-bank.pt'
         bank_file.parent.mkdir(parents=True, exist_ok=True)
         torch.save(dict(train=train.payload(), held_out=held.payload(), reference_router=reference.router.state_dict(),
-                        data_seed=config.seed), bank_file)
+                        data_seed=config.seed, source_identity=identity), bank_file)
     fingerprint = hashlib.sha256()
     for bank in (train, held):
         for tensor in (bank.prefixes, *(s.latent for s in bank.states), *(s.targets for s in bank.states), *bank.losses):
@@ -148,7 +194,9 @@ def train_fixed_bank(model, corpus, config, *, print_progress=True, evaluation_c
                     unique_disjoint_prefixes=True, full_batch=True, precision='fp32',
                     setup_seconds=time.perf_counter()-setup_start,
                     bank_file=str(bank_file) if bank_file else None,
-                    bank_expert_items=2*c.value_fit_prefixes*(c.resolved_trajectory_steps-1 +
+                    bank_reused=reused, need_dimension=c.resolved_routing_geometry_dim, head_type=c.value_head_type,
+                    head_hidden_dim=c.value_head_hidden_dim,
+                    bank_expert_items=0 if reused else 2*c.value_fit_prefixes*(c.resolved_trajectory_steps-1 +
                         c.num_modules*c.resolved_trajectory_steps*(c.resolved_trajectory_steps+1)//2),
                     fitting_expert_items=0)
     del reference

@@ -30,10 +30,15 @@ class ValueNexusRouter(nn.Module):
         self.key = nn.Linear(width, dim)
         self.query = nn.Parameter(torch.randn(dim) / dim**0.5)
         self.encoder = nn.Sequential(nn.Linear(2 * width + 1, width), nn.GELU(), nn.Linear(width, dim))
-        self.value = nn.Linear(dim, config.num_modules)
+        if config.value_head_type == "mlp":
+            self.value = nn.Sequential(nn.Linear(dim, config.value_head_hidden_dim), nn.GELU(),
+                                       nn.Linear(config.value_head_hidden_dim, config.num_modules))
+        else:
+            self.value = nn.Linear(dim, config.num_modules)
+        output = self.value[-1] if isinstance(self.value, nn.Sequential) else self.value
         # No arbitrary expert preference in an uncalibrated value head.
-        nn.init.zeros_(self.value.weight)
-        nn.init.zeros_(self.value.bias)
+        nn.init.zeros_(output.weight)
+        nn.init.zeros_(output.bias)
 
     def need(self, latent: Tensor, remaining: int) -> Tensor:
         if not 1 <= remaining <= self.max_steps:
@@ -64,6 +69,8 @@ class ValueNexusRouter(nn.Module):
         return F.mse_loss(prediction, center(losses.detach().float()))
 
     def metric(self) -> Tensor:
+        if isinstance(self.value, nn.Sequential):
+            raise ValueError("The nonlinear head has no single global Mahalanobis metric")
         coefficients = self.value.weight - self.value.weight.mean(dim=0, keepdim=True)
         return coefficients.T @ coefficients / coefficients.size(0)
 

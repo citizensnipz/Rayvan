@@ -119,3 +119,63 @@ def test_measure_bank_batches_collection_and_suffixes_under_delta_limit():
         module.max_transition_bytes *= 100
     for state, labels in zip(bank.states, bank.losses):
         torch.testing.assert_close(labels, model.counterfactual_losses(state), rtol=1e-5, atol=1e-6)
+
+
+@pytest.mark.parametrize('dimension,head', [(32, 'linear'), (8, 'mlp')])
+def test_router_variants_reuse_identical_bank_without_expert_calls(tmp_path, dimension, head):
+    c = experiment()
+    source = run_experiment(c, runs_directory=tmp_path, run_id='source')
+    source_path = source['training_result']['best_checkpoint']
+    fit_config = replace(c, routing=replace(c.routing, value_expert_training='frozen',
+        value_checkpoint_path=source_path, value_fit_enabled=True, value_fit_prefixes=3, value_fit_updates=3))
+    baseline = run_experiment(fit_config, runs_directory=tmp_path, run_id='baseline')
+    bank = baseline['value_routing']['fixed_bank']
+    variant = replace(fit_config, routing=replace(fit_config.routing, routing_geometry_dim=dimension,
+        value_head_type=head, value_fit_bank_path=bank['bank_file']))
+    with patch.object(CounterfactualValueEMC, 'apply_expert', side_effect=AssertionError('Bank reuse must not run experts')):
+        result = run_experiment(variant, runs_directory=tmp_path, run_id='variant')
+    assert result['status'] == 'completed'
+    fitted = result['value_routing']['fixed_bank']
+    assert fitted['bank_sha256'] == bank['bank_sha256']
+    assert fitted['bank_reused'] and fitted['bank_expert_items'] == 0
+    assert fitted['initial_train']['normalized_mse'] == pytest.approx(1)
+    assert fitted['router_parameter_change_norm'] > 0
+    loaded = load_model_checkpoint(result['training_result']['latest_checkpoint']).model
+    original = load_model_checkpoint(source_path).model
+    assert loaded.config.resolved_routing_geometry_dim == dimension
+    assert loaded.config.value_head_type == head
+    for name, tensor in original.state_dict().items():
+        if not name.startswith('router.'):
+            torch.testing.assert_close(loaded.state_dict()[name], tensor, rtol=0, atol=0)
+    # Measuring anew with the larger/different router must still use the SOURCE continuation.
+    fresh = run_experiment(replace(variant, routing=replace(variant.routing, value_fit_bank_path='')),
+                           runs_directory=tmp_path, run_id='fresh-variant')
+    assert fresh['value_routing']['fixed_bank']['bank_sha256'] == bank['bank_sha256']
+    wrong_bank = torch.load(bank['bank_file'], weights_only=True)
+    wrong_bank['data_seed'] += 1
+    wrong_path = tmp_path/'wrong-bank.pt'
+    torch.save(wrong_bank, wrong_path)
+    with pytest.raises(ValueError, match='data seed differs'):
+        run_experiment(replace(variant, routing=replace(variant.routing, value_fit_bank_path=str(wrong_path))),
+                       runs_directory=tmp_path, run_id='wrong-seed')
+    with pytest.raises(ValueError, match='Reset router'):
+        run_experiment(replace(variant, routing=replace(variant.routing, value_reset_router=False)),
+                       runs_directory=tmp_path, run_id='no-reset')
+
+
+def test_nonlinear_head_centering_and_gradients():
+    c = experiment()
+    model = _build_model(replace(c, routing=replace(c.routing, value_head_type='mlp')), 16)
+    x = torch.randn(4, 3, 8)
+    labels = torch.randn(4, 2)
+    torch.testing.assert_close(model.router(x, 3), torch.zeros(4, 2))
+    opt = torch.optim.AdamW(model.router.parameters(), lr=.01)
+    model.router.calibration_loss(x, 3, labels).backward()
+    assert model.router.value[-1].weight.grad.abs().sum() > 0
+    opt.step(); opt.zero_grad()
+    model.router.calibration_loss(x, 3, labels).backward()
+    assert model.router.value[0].weight.grad.abs().sum() > 0
+    assert model.router.encoder[-1].weight.grad.abs().sum() > 0
+    torch.testing.assert_close(model.router(x, 3).sum(-1), torch.zeros(4), atol=1e-6, rtol=0)
+    with pytest.raises(ValueError, match='no single global'):
+        model.router.metric()

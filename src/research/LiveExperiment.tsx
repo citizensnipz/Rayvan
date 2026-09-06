@@ -103,6 +103,8 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel, o
       <p>Normalized MSE of 1 means no improvement over predicting equal competence. Training-bank error tests fitting; held-out error tests generalization. These are fixed-policy measurements, not full-trajectory language performance.</p>
       <div className="metric-cards"><Metric label="Train normalized MSE" value={compact(fitTrain?.normalized_mse, 4)} /><Metric label="Held-out normalized MSE" value={compact(fitHeld?.normalized_mse, 4)} /><Metric label="Encoder gradient" value={compact(fit?.encoder_gradient_norm, 7)} /><Metric label="Value-head gradient" value={compact(fit?.head_gradient_norm, 7)} /><Metric label="Router parameter change" value={compact(fit?.router_parameter_change_norm, 7)} /></div>
       <p>{String(fit?.prefixes_per_split ?? "—")} unique prefixes / {String(fit?.states_per_split ?? "—")} states per bank. Expert measurement setup: {duration(fit?.setup_seconds)}. No experts execute during fitting.</p>
+      {typeof fit?.bank_file === "string" && <label><span>Saved bank path</span><input readOnly value={fit.bank_file} onFocus={(e) => e.currentTarget.select()} /></label>}
+      <p>Bank fingerprint: <code>{String(fit?.bank_sha256 ?? "—")}</code>. {fit?.bank_reused ? "Loaded existing bank." : "Measured new bank."}</p>
     </section>}
     <section className="chart-grid">
       {fixedFit && <MetricChart xLabel={xLabel} title="Fitting versus generalization" yLabel="MSE / equal-expert MSE" series={[{name:"Training bank",color:"#d8ff75",data:fitSeries("train","normalized_mse")},{name:"Held-out bank",color:"#38c6cc",data:fitSeries("held_out","normalized_mse")}]} />}

@@ -474,3 +474,46 @@ This batching correction changes the order of random draws during state collecti
 relative to the initial unbatched diagnostic. Existing bank hashes may therefore
 change; compare new runs using the same code, source checkpoint, data seed and bank
 size. Router-seed comparisons remain deterministic under those fixed conditions.
+
+### Router capacity comparison on identical banks
+
+Router-only warm starts now permit changing `routing_geometry_dim`,
+`value_head_type` (`linear` or `mlp`) and `value_head_hidden_dim` (default 32).
+Architecture changes require frozen experts and router reset. Expert/shared-layer
+shape checks remain in force. The original checkpoint router is separately
+preserved for collection and counterfactual continuation, even when its shape
+is different from the router being fitted.
+
+For a need vector z, the linear head remains P(Wz+b). The nonlinear head is
+P(W2 GELU(W1 z+b1)+b2), with 32 hidden units by default. P subtracts the expert
+mean. Only the final affine layer is zero-initialized; hidden weights are random,
+so all initial scores are zero while gradients can reach the hidden layer after
+the output layer moves. Both heads minimize the same centered suffix-loss MSE.
+The nonlinear head does not define a single global Mahalanobis metric; its
+`metric()` method explicitly rejects that interpretation.
+
+Run a fresh baseline from the original expert checkpoint with fixed-bank fitting,
+256 prefixes per split, 1000 updates, FP32, learning rate 0.0003, zero weight decay,
+audit interval 50, need dimension 8, Linear head, and an empty Saved bank path.
+Then use that run's `checkpoints/router-fit-bank.pt` as Saved bank path for both:
+
+- Need dimension 32, Linear head.
+- Need dimension 8, Nonlinear (GELU) head, hidden dimension 32.
+
+Keep the ORIGINAL source checkpoint, data seed, router seed, context and bank size
+the same for all variants, and enable Reset router on checkpoint load. Reused
+banks execute no experts and report `bank_reused=true`, `bank_expert_items=0`.
+All three runs must have the same `bank_sha256`. Compare final/latest training
+and held-out normalized MSE and regret, not just the best checkpoint (selected
+by held-out MSE, which can favor the zero-initialized router).
+
+Saved-bank loading checks frozen source weights including the original continuation
+router, tokenizer, horizon, expert order, context, data seed, bank shapes and prefix
+disjointness. Earlier banks lack source-identity metadata and are rejected with
+instructions to generate one new baseline. This prevents silently fitting labels
+from different experts. The new bank is copied into each run's checkpoint folder.
+
+This is a capacity comparison, not a perfectly parameter-matched experiment:
+increasing need dimension also enlarges the attention keys and encoder output,
+and the nonlinear head adds parameters. An improvement identifies a useful variant;
+it does not by itself prove an information-theoretic compression bottleneck.

@@ -299,6 +299,7 @@ def train_value_model(model, corpus, config, *, print_progress=True, evaluation_
     if model.config.value_expert_training == "frozen" and model.config.value_fixed_reference:
         reference = frozen_snapshot(model)
         source = getattr(model, "_value_reference_router", model.router)
+        reference.router = deepcopy(source)
         reference.router.load_state_dict(opts.reference_router_state or source.state_dict())
         reference.router.to(device).eval().requires_grad_(False)
         opts.reference_router_state = {k: v.detach().cpu().clone() for k, v in reference.router.state_dict().items()}

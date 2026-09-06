@@ -356,15 +356,20 @@ def _build_training_model(config, tokenizer):
         raise ValueError("Router-only warm-start requires a counterfactual-value EMC checkpoint")
     if loaded.tokenizer.to_config() != tokenizer.to_config():
         raise ValueError("Checkpoint tokenizer differs from the selected suite; use the original suite")
-    # Prevent silent family swaps, shape overrides and horizon changes.
+    router_changes = (expected.config.resolved_routing_geometry_dim != model.config.resolved_routing_geometry_dim
+                      or expected.config.value_head_type != model.config.value_head_type
+                      or expected.config.value_head_hidden_dim != model.config.value_head_hidden_dim)
+    if router_changes and (config.routing.value_expert_training != "frozen" or not config.routing.value_reset_router):
+        raise ValueError("Router architecture overrides require frozen experts and Reset router on checkpoint load")
+    # Preserve expert shapes and the source continuation router.
     changes = [key for key, value in asdict(expected.config).items()
-               if not key.startswith("value_") and key != "ssm_backend"
+               if not key.startswith("value_") and key not in {"ssm_backend", "routing_geometry_dim"}
                and value != getattr(model.config, key)]
     if changes:
         raise ValueError("Checkpoint/model settings differ: " + ", ".join(changes) +
                          ". Clone the source run configuration before testing its router.")
     model.config = replace(model.config, **{k: v for k, v in asdict(expected.config).items()
-                                          if k.startswith("value_") or k == "ssm_backend"})
+                                          if k.startswith("value_") or k in {"ssm_backend", "routing_geometry_dim"}})
     for expert in model.emc_modules:
         if hasattr(expert, "ssm_backend"):
             expert.ssm_backend = config.model.ssm_backend
