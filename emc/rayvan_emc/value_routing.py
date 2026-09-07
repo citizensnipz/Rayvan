@@ -19,6 +19,28 @@ def center(values: Tensor) -> Tensor:
     return values - values.mean(dim=-1, keepdim=True)
 
 
+def pairwise_advantage_loss(prediction: Tensor, losses: Tensor, temperature: float,
+                            tie_tolerance: float) -> Tensor:
+    """Gap-weighted logistic ranking over every unordered counterfactual pair.
+
+    Positive Y_i-Y_j means i is worse, so Q_i-Q_j should be positive too.
+    No policy probabilities weight the comparisons. Average over B*C(E,2),
+    including masked near ties as zeros, to keep scaling stable across batches.
+    """
+    if prediction.ndim != 2 or prediction.shape != losses.shape:
+        raise ValueError("pairwise predictions and losses must have matching [batch, experts] shapes")
+    if not math.isfinite(temperature) or temperature <= 0 or not math.isfinite(tie_tolerance) or tie_tolerance < 0:
+        raise ValueError("invalid pairwise temperature or tie tolerance")
+    if prediction.size(-1) < 2:
+        return prediction.sum() * 0
+    i, j = torch.triu_indices(prediction.size(-1), prediction.size(-1), offset=1, device=prediction.device)
+    truth = losses.detach().float()
+    gap = truth[:, i] - truth[:, j]
+    weight = torch.where(gap.abs() > tie_tolerance, gap.abs(), 0.)
+    signed_margin = gap.sign() * (prediction.float()[:, i] - prediction.float()[:, j]) / temperature
+    return (weight * F.softplus(-signed_margin)).mean()
+
+
 class ValueNexusRouter(nn.Module):
     """A(s, e) = [P(W f(s, remaining) + b)]_e; smaller is better."""
 
@@ -161,6 +183,9 @@ class ExpertConditionedGeometricRouter(RelationalGeometricRouter):
         self.regret_weight = config.value_geometry_regret_weight
         self.effect_weight = config.value_effect_weight
         self.cost_mse_weight = config.value_cost_mse_weight
+        self.pairwise_weight = config.value_pairwise_weight
+        self.pairwise_temperature = config.value_pairwise_temperature
+        self.pairwise_tie_tolerance = config.value_pairwise_tie_tolerance
         self.policy_temperature = 0.05
         width, attention_width = config.latent_dim, 32
         dim = config.resolved_routing_geometry_dim
@@ -206,6 +231,7 @@ class ExpertConditionedGeometricRouter(RelationalGeometricRouter):
         identities = self.queries[None].expand(z.size(0), -1, -1)
         effect_prediction = self.effect_decoder(torch.cat((z, identities), -1)).float()
         effect_mse = F.mse_loss(effect_prediction, effects.detach().float())
+        pairwise = pairwise_advantage_loss(prediction, truth, self.pairwise_temperature, self.pairwise_tie_tolerance)
         # Exclude disabled objectives from autograd entirely; diagnostics remain
         # available even when the associated loss is not used for learning.
         terms = []
@@ -215,8 +241,10 @@ class ExpertConditionedGeometricRouter(RelationalGeometricRouter):
             terms.append(self.regret_weight * regret)
         if self.effect_weight:
             terms.append(self.effect_weight * effect_mse)
+        if self.pairwise_weight:
+            terms.append(self.pairwise_weight * pairwise)
         total = sum(terms)
-        return total, dict(value_mse=mse, effect_mse=effect_mse, soft_regret=regret)
+        return total, dict(value_mse=mse, effect_mse=effect_mse, soft_regret=regret, pairwise_loss=pairwise)
 
 
 def make_value_router(config: EMCConfig) -> ValueNexusRouter:

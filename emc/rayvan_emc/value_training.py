@@ -246,7 +246,7 @@ def train_block(model: CounterfactualValueEMC, optimizers: ValueOptimizers, inpu
             for item in training_items:
                 groups.setdefault((item[1], item[0].size(1)), []).append(item)
             optimizers.router.zero_grad(set_to_none=True)
-            fit_metrics = dict(value_mse=0., effect_mse=0., soft_regret=0.)
+            fit_metrics = dict(value_mse=0., effect_mse=0., soft_regret=0., pairwise_loss=0.)
             calibration = 0.
             with trainable_only(model, optimizers.router_parameters):
                 for (depth, _), items in groups.items():
@@ -299,10 +299,12 @@ def audit_values(model: CounterfactualValueEMC, inputs: Tensor, targets: Tensor,
     rows = []
     for s in states:
         effect_mse = None
+        pairwise_loss = None
         if isinstance(model.router, ExpertConditionedGeometricRouter):
             losses, effects = snapshot.counterfactual_effects_and_losses(s, model.router)
             _, parts = model.router.objective(s.latent, model.config.resolved_trajectory_steps - s.depth, losses, effects)
             effect_mse = float(parts["effect_mse"])
+            pairwise_loss = float(parts["pairwise_loss"])
         else:
             losses = snapshot.counterfactual_losses(s, target="suffix")
         predicted = model.router(s.latent, model.config.resolved_trajectory_steps - s.depth).float()
@@ -316,7 +318,7 @@ def audit_values(model: CounterfactualValueEMC, inputs: Tensor, targets: Tensor,
         errors = (predicted[:, :, None] - predicted[:, None, :]) - gaps
         shuffled_loss = losses.gather(1, chosen.roll(1)[:, None]).squeeze(1)
         rows.append(dict(depth=s.depth, probe_count=inputs.size(0),
-                         effect_mse=effect_mse,
+                         effect_mse=effect_mse, pairwise_loss=pairwise_loss,
                          predicted_margin_mean=float(margins.mean()) if margins is not None else None,
                          predicted_margin_min=float(margins.min()) if margins is not None else None,
                          predicted_margin_below_1e_3_fraction=float((margins < 1e-3).float().mean()) if margins is not None else None,
@@ -341,6 +343,7 @@ def audit_values(model: CounterfactualValueEMC, inputs: Tensor, targets: Tensor,
                 predicted_margin_mean=(sum(r["predicted_margin_mean"] for r in rows) / len(rows) if rows[0]["predicted_margin_mean"] is not None else None),
                 predicted_margin_min=(min(r["predicted_margin_min"] for r in rows) if rows[0]["predicted_margin_min"] is not None else None),
                 predicted_margin_below_1e_3_fraction=(sum(r["predicted_margin_below_1e_3_fraction"] for r in rows) / len(rows) if rows[0]["predicted_margin_mean"] is not None else None),
+                pairwise_loss=(sum(r["pairwise_loss"] for r in rows) / len(rows) if rows[0]["pairwise_loss"] is not None else None),
                 effect_mse=(sum(r["effect_mse"] for r in rows) / len(rows) if rows[0]["effect_mse"] is not None else None),
                 shuffled_state_regret=(sum(r["shuffled_state_regret"] for r in rows) / len(rows) if inputs.size(0) > 1 else None),
                 target="fixed_reference_suffix" if reference is not None else "held_out_suffix")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import math
 from typing import Any, Mapping
 
 from .architecture import N2_ARCHITECTURES
@@ -77,6 +78,9 @@ class RoutingConfig:
     value_effect_dim: int = 16
     value_effect_weight: float = 0.01
     value_cost_mse_weight: float = 1.0
+    value_pairwise_weight: float = 0.0
+    value_pairwise_temperature: float = 0.05
+    value_pairwise_tie_tolerance: float = 0.001
     value_replay_capacity: int = 1024
     value_replay_batch_size: int = 64
     value_fit_bank_path: str = ""
@@ -372,12 +376,20 @@ def validate_value_settings(config) -> None:
     for name in ("value_effect_dim", "value_replay_capacity", "value_replay_batch_size"):
         if not isinstance(getattr(config, name), int) or getattr(config, name) <= 0:
             raise ValueError(f"{name} must be a positive integer")
+    if not 0 <= config.value_pairwise_weight <= 1:
+        raise ValueError("Pairwise weight must lie in [0, 1]")
+    if not math.isfinite(config.value_pairwise_temperature) or config.value_pairwise_temperature <= 0:
+        raise ValueError("Pairwise temperature must be finite and positive")
+    if not math.isfinite(config.value_pairwise_tie_tolerance) or config.value_pairwise_tie_tolerance < 0:
+        raise ValueError("Pairwise tie tolerance must be finite and nonnegative")
+    if config.value_pairwise_weight and config.value_head_type != "expert_geometric":
+        raise ValueError("Pairwise supervision requires the expert-conditioned geometric head")
     if not 0 <= config.value_cost_mse_weight <= 1:
         raise ValueError("Cost MSE weight must lie in [0, 1]")
     if not 0 <= config.value_effect_weight <= 1:
         raise ValueError("Effect weight must lie in [0, 1]")
     if config.value_head_type == "expert_geometric":
-        if config.value_cost_mse_weight == config.value_effect_weight == config.value_geometry_regret_weight == 0:
+        if config.value_cost_mse_weight == config.value_effect_weight == config.value_geometry_regret_weight == config.value_pairwise_weight == 0:
             raise ValueError("At least one expert-conditioned objective weight must be positive")
         if config.value_expert_training != "frozen" or not config.value_fixed_reference or config.value_target != "suffix":
             raise ValueError("Expert-conditioned routing currently requires frozen experts, fixed reference and suffix targets")
