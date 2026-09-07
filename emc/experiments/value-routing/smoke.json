@@ -1,0 +1,60 @@
+{
+  "schema_version": 3,
+  "name": "value-smoke",
+  "notes": "Budget counts supervised endpoints. Compare held-out suffix regret and final task quality; match total compute separately.",
+  "tags": [],
+  "projection_targets": [
+    8192,
+    16384,
+    50000
+  ],
+  "suite": "capability_10",
+  "architecture": "counterfactual_value_emc",
+  "experts": {
+    "gpt": 0,
+    "ssm": 0,
+    "recurrent": 0,
+    "delta": 8
+  },
+  "routing": {
+    "trajectory_steps": 3,
+    "routing_geometry_dim": 8,
+    "value_target": "suffix",
+    "value_expert_training": "controlled",
+    "value_common_fraction": 0.5,
+    "value_specialist_temperature": 0.25,
+    "value_warmup_steps": 8,
+    "value_development_interval": 1,
+    "value_development_batch_size": 2,
+    "value_exploration_rate": 0.1,
+    "value_probe_rate": 1.0,
+    "value_probe_budget": 1
+  },
+  "model": {
+    "preset": "custom",
+    "fairness_mode": "custom",
+    "latent_dim": 16,
+    "context_length": 256,
+    "attention_heads": 4,
+    "module_hidden_dim": 32,
+    "integrator_heads": 4,
+    "chunk_size": 16,
+    "shared_state_slots": 4,
+    "n1_depth": 3,
+    "tie_embeddings": true
+  },
+  "training": {
+    "tokens": 64,
+    "batch_size": 4,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.01,
+    "seed": 42,
+    "gradient_accumulation": 1,
+    "precision": "fp32",
+    "device": "cuda",
+    "evaluation_interval": 8,
+    "evaluation_batches": 1,
+    "telemetry_interval": 1,
+    "diagnostic_examples_per_capability": 1
+  }
+}

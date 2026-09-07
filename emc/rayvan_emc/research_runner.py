@@ -19,12 +19,14 @@ from torch import nn
 from .architecture import architecture_accounting, build_architectures
 from .baseline import TransformerConfig, TransformerLanguageModel
 from .capability_tasks import CapabilityCorpus, CapabilitySuiteConfig, CapabilityTaskSuite
+from .checkpoint import load_model_checkpoint
 from .capability_tasks import diagnostic_tokenizer
 from .chunked import ChunkedEMCModel
 from .diagnostics import parameter_counts
 from .evaluate import DiagnosticEvaluationConfig, evaluate_suite, write_report
 from .experiments.common import create_emc_model, create_n2_model, load_experiment_corpus
 from .model import EMCConfig, EMCModel, SequentialEMCModel
+from .value_routing import CounterfactualValueEMC
 from .projections import perplexity_projection_payload, projection_payload
 from .research_config import ExperimentConfig
 from .serial import HeterogeneousSerialModel
@@ -109,11 +111,12 @@ def run_experiment(
     try:
         writer.emit("state_changed", run_id=resolved_id, state="initializing")
         corpus = _build_corpus(config)
-        model = _build_model(config, corpus.tokenizer.vocab_size)
+        model = _build_training_model(config, corpus.tokenizer)
         accounting = architecture_accounting(model, sequence_length=config.model.context_length)
         counts = parameter_counts(model)
         model_info = {
             **asdict(accounting),
+            "objective": "router_fixed_bank" if config.routing.value_fit_enabled else "prefix_endpoint" if isinstance(model, CounterfactualValueEMC) else "all_positions",
             "expert_names": list(getattr(model, "expert_names", ())),
             "module_families": list(getattr(model, "module_families", ())),
             "approximate_active_parameters_per_cycle": counts.approximate_active_per_cycle,
@@ -122,7 +125,7 @@ def run_experiment(
         writer.emit("config", run_id=resolved_id, model=model_info)
         training_config = TrainingConfig(
             steps=None,
-            train_tokens=config.training.tokens,
+            train_tokens=config.routing.value_fit_updates if config.routing.value_fit_enabled else config.training.tokens,
             batch_size=config.training.batch_size,
             sequence_length=config.model.context_length,
             learning_rate=config.training.learning_rate,
@@ -152,7 +155,7 @@ def run_experiment(
         def progress(step: int, current_model: nn.Module, values: dict[str, Any]) -> None:
             del current_model
             latest.update(values)
-            if step % config.training.telemetry_interval:
+            if step % config.training.telemetry_interval and not values.get("evaluation_completed"):
                 return
             system = _system_metrics(config.training.device)
             writer.emit("training_step", run_id=resolved_id, **values, system=system)
@@ -184,6 +187,16 @@ def run_experiment(
         def evaluation(step: int, current_model: nn.Module, metrics: TrainingMetrics) -> None:
             del current_model
             row = asdict(metrics)
+            if config.routing.value_fit_enabled:
+                row.update(objective="router_fixed_bank",throughput_unit="updates/s",context_tokens_per_second=None)
+                latest.update(row)
+                writer.emit("validation",run_id=resolved_id,**row)
+                return  # Router MSE is not language loss; no PPL or token projections.
+            if config.architecture == "counterfactual_value_emc":
+                row.update(objective="prefix_endpoint", throughput_unit="endpoint/s",
+                           endpoints_per_second=metrics.tokens_per_second,
+                           context_tokens_per_second=metrics.tokens_per_second * config.model.context_length,
+                           context_length=config.model.context_length)
             latest.update(row)
             writer.emit("validation", run_id=resolved_id, **row)
             measured.append((float(metrics.tokens_processed), float(metrics.validation_loss)))
@@ -228,7 +241,7 @@ def run_experiment(
             cancellation_callback=cancelled,
         )
         diagnostics: dict[str, Any] | None = None
-        if config.suite == "capability_10":
+        if config.suite == "capability_10" and not (isinstance(model, CounterfactualValueEMC) and config.routing.value_expert_training == "frozen"):
             _set_status(run_directory, "diagnostics")
             writer.emit("state_changed", run_id=resolved_id, state="diagnostics")
             diagnostics = evaluate_suite(
@@ -290,9 +303,14 @@ def run_experiment(
             "completed_at": datetime.now(timezone.utc).isoformat(),
             "model": model_info,
             "training_result": _json_safe(asdict(result)),
-            "headline": _headline(asdict(result), diagnostics),
+            "headline": {**_headline(asdict(result), diagnostics),
+                         "objective": model_info["objective"],
+                         "throughput_unit": "updates/s" if config.routing.value_fit_enabled else "endpoint/s" if isinstance(model, CounterfactualValueEMC) else "tok/s",
+                         "endpoints_per_second": result.tokens_per_second if isinstance(model, CounterfactualValueEMC) and not config.routing.value_fit_enabled else None,
+                         "context_tokens_per_second": None if config.routing.value_fit_enabled else result.tokens_per_second * (config.model.context_length if isinstance(model, CounterfactualValueEMC) else 1)},
             "warnings": _final_warnings(result, final_latest),
             "geometric_routing": geometric_routing,
+            "value_routing": (result.module_diagnostics or {}).get("value_routing"),
             "git": metadata["git"],
         }
         _write_json(run_directory / "summary.json", summary)
@@ -323,6 +341,46 @@ def _build_corpus(config: ExperimentConfig):
         train_stories=max(100, min(100_000, config.training.tokens // max(config.model.context_length, 1))),
         validation_stories=1_000,
     )
+
+
+def _build_training_model(config, tokenizer):
+    from copy import deepcopy
+    expected = _build_model(config, tokenizer.vocab_size)
+    if not config.routing.value_checkpoint_path:
+        if config.architecture == "counterfactual_value_emc" and config.routing.value_expert_training == "frozen":
+            raise ValueError("Router-only tests require a trained value-EMC checkpoint path")
+        return expected
+    loaded = load_model_checkpoint(Path(config.routing.value_checkpoint_path).expanduser())
+    model = loaded.model
+    if not isinstance(model, CounterfactualValueEMC):
+        raise ValueError("Router-only warm-start requires a counterfactual-value EMC checkpoint")
+    if loaded.tokenizer.to_config() != tokenizer.to_config():
+        raise ValueError("Checkpoint tokenizer differs from the selected suite; use the original suite")
+    router_changes = (expected.config.resolved_routing_geometry_dim != model.config.resolved_routing_geometry_dim
+                      or expected.config.value_head_type != model.config.value_head_type
+                      or expected.config.value_head_hidden_dim != model.config.value_head_hidden_dim
+                      or expected.config.value_geometry_slots != model.config.value_geometry_slots
+                      or expected.config.value_geometry_prototypes != model.config.value_geometry_prototypes
+                      or expected.config.value_effect_dim != model.config.value_effect_dim)
+    if router_changes and (config.routing.value_expert_training != "frozen" or not config.routing.value_reset_router):
+        raise ValueError("Router architecture overrides require frozen experts and Reset router on checkpoint load")
+    # Preserve expert shapes and the source continuation router.
+    changes = [key for key, value in asdict(expected.config).items()
+               if not key.startswith("value_") and key not in {"ssm_backend", "routing_geometry_dim"}
+               and value != getattr(model.config, key)]
+    if changes:
+        raise ValueError("Checkpoint/model settings differ: " + ", ".join(changes) +
+                         ". Clone the source run configuration before testing its router.")
+    object.__setattr__(model, "_value_reference_config", asdict(model.config))
+    model.config = replace(model.config, **{k: v for k, v in asdict(expected.config).items()
+                                          if k.startswith("value_") or k in {"ssm_backend", "routing_geometry_dim"}})
+    for expert in model.emc_modules:
+        if hasattr(expert, "ssm_backend"):
+            expert.ssm_backend = config.model.ssm_backend
+    object.__setattr__(model, "_value_reference_router", deepcopy(model.router).eval().requires_grad_(False))
+    if config.routing.value_reset_router:
+        model.reset_router(config.routing.value_router_seed)
+    return model
 
 
 def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
@@ -472,8 +530,17 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
                 "delta_ffn_dim": config.model.module_hidden_dim,
             }
         )
+    if config.architecture == "counterfactual_value_emc":
+        values.update({key: value for key, value in asdict(config.routing).items()
+                       if key.startswith("value_") and key in EMCConfig.__dataclass_fields__})
+        values.update(router_type="counterfactual_value", integrator_type="identity_free_gate",
+                      refractory_enabled=False, loss_free_balance_enabled=False, switch_cost=0., persistence_bonus=0.,
+                      counterfactual_calibration_enabled=False)
     torch.manual_seed(config.training.seed)
+    values["ssm_backend"] = config.model.ssm_backend
     emc_config = EMCConfig(**values)
+    if config.architecture == "counterfactual_value_emc":
+        return CounterfactualValueEMC(emc_config)
     if config.architecture == "heterogeneous_serial":
         return HeterogeneousSerialModel(emc_config)
     if stage == "n1_chunked":
@@ -540,6 +607,8 @@ def _system_metrics(device_name: str) -> dict[str, Any]:
 
 
 def _routing_warnings(routing: Mapping[str, Any]) -> list[dict[str, str]]:
+    if "value_routing" in routing:
+        return []  # Traffic concentration alone is not evidence of training starvation.
     utilization = [float(value) for value in routing.get("utilization", [])]
     warnings = []
     dead = [str(index) for index, value in enumerate(utilization) if value == 0]
@@ -673,3 +742,4 @@ def _json_safe(value: Any) -> Any:
 
 def _run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8]
+

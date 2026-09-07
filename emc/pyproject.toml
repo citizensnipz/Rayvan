@@ -11,6 +11,7 @@ dependencies = ["torch>=2.2"]
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+kernels = ["ninja>=1.11"]
 data = ["datasets>=2.20", "transformers>=4.40"]
 
 [project.scripts]
@@ -20,3 +21,11 @@ rayvan-experiment = "rayvan_emc.research:main"
 testpaths = ["tests"]
 addopts = ["-p", "no:asyncio", "--basetemp=.pytest-tmp"]
 pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rayvan_emc", "rayvan_emc.*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+rayvan_emc = ["csrc/*.cpp", "csrc/*.cu"]

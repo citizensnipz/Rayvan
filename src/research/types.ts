@@ -46,6 +46,7 @@ export interface RunSummary {
   headline?: Record<string, unknown>;
   training_result?: Record<string, unknown>;
   geometric_routing?: Record<string, unknown> | null;
+  value_routing?: Record<string, unknown> | null;
   git?: { commit?: string; dirty?: boolean };
   runDirectory?: string;
 }
@@ -70,3 +71,4 @@ export interface Estimate {
   expert_count: number;
   module_computations_per_forward: number;
 }
+

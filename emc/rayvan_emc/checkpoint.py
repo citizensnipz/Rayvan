@@ -130,6 +130,9 @@ def _load_payload(path: str | Path, device: torch.device | str) -> dict[str, Any
 
 
 def _model_type(model: nn.Module) -> str:
+    from .value_routing import CounterfactualValueEMC
+    if isinstance(model, CounterfactualValueEMC):
+        return "emc_counterfactual_value"
     if isinstance(model, N2EMCModel):
         return "n2_emc"
     if isinstance(model, ChunkedEMCModel):
@@ -146,6 +149,9 @@ def _model_type(model: nn.Module) -> str:
 
 
 def _create_model(model_type: str, config: dict[str, Any]) -> nn.Module:
+    if model_type == "emc_counterfactual_value":
+        from .value_routing import CounterfactualValueEMC
+        return CounterfactualValueEMC(EMCConfig(**config))
     if model_type == "n2_emc":
         return N2EMCModel(N2Config(**config))
     if model_type == "emc":
@@ -186,3 +192,4 @@ def _progress_from_payload(payload: dict[str, Any]) -> CheckpointProgress:
         train_generator_state=payload.get("train_generator_state"),
         evaluation_generator_state=payload.get("evaluation_generator_state"),
     )
+

@@ -253,3 +253,11 @@ python -m rayvan_emc.benchmark \
 ```
 
 Add `--profile --output-dir benchmark-results/research --json benchmark-results/research/report.json` for a PyTorch Chrome trace and structured report. The command uses the real forward, balance loss, backward, gradient diagnostics, clipping, and AdamW step over synthetic token batches. It does not save weights, alter model code, or run a corpus-scale training job. Reports cover phase timing, module-family isolation, Integrator/Nexus timing, one-versus-two-cycle cost, routed-compute retention, CUDA allocation, `nvidia-smi` utilization samples, and optional operator/kernel tables.
+
+
+## Counterfactual value routing experiment
+
+The research console now includes **Sequential EMC — Counterfactual Value**.
+See [the equations, testing protocol and console settings](docs/counterfactual-value-routing.md)
+and [ready-to-run configs](experiments/value-routing). This architecture counts
+supervised prefix endpoints and records probe/practice work separately.

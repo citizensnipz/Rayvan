@@ -258,7 +258,10 @@ def evaluate_model_metrics(
                 device=device,
             )
             with _autocast_context(device, precision):
-                output = model(inputs)
+                endpoint = getattr(model, "prefix_endpoint_objective", False)
+                output = model.endpoint(inputs) if endpoint else model(inputs)
+                if endpoint:
+                    targets = targets[:, -1:]
                 logits = output.logits if isinstance(output, EMCOutput) else output
                 losses.append(next_token_loss(logits, targets).item())
             correct += int((logits.argmax(dim=-1) == targets).sum().item())
@@ -359,6 +362,13 @@ def train_model(
     progress_callback_interval: int = 1,
     cancellation_callback: CancellationCallback | None = None,
 ) -> TrainingResult:
+    from .value_routing import CounterfactualValueEMC
+    if isinstance(model, CounterfactualValueEMC):
+        from .value_training import train_value_model
+        return train_value_model(model, corpus, config, print_progress=print_progress,
+                                 evaluation_callback=evaluation_callback, progress_callback=progress_callback,
+                                 progress_callback_interval=progress_callback_interval,
+                                 cancellation_callback=cancellation_callback)
     if progress_callback_interval <= 0:
         raise ValueError("progress_callback_interval must be positive")
     device = torch.device(config.device)
@@ -1146,3 +1156,4 @@ def _autocast_context(device: torch.device, precision: str):
         return nullcontext()
     dtype = torch.float16 if precision == "fp16" else torch.bfloat16
     return torch.autocast(device_type="cuda", dtype=dtype)
+

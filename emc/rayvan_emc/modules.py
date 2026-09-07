@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
 from typing import Any, Literal
 
 import torch
@@ -64,7 +65,7 @@ class EMCModule(EMCModuleBase):
 
 
 class StateSpaceEMCModule(EMCModuleBase):
-    """Pure-PyTorch selective diagonal state-space module.
+    """Selective diagonal state-space module with fused/parallel recurrence.
 
     State recurs only across tokens inside one forward call. It resets for every
     EMC cycle, batch, and inference request; no persistent memory is introduced.
@@ -89,23 +90,24 @@ class StateSpaceEMCModule(EMCModuleBase):
         self.log_decay = nn.Parameter(torch.zeros(width))
         self.output_adapter = nn.Linear(width, config.latent_dim)
         self.kernel_size = config.state_space_kernel_size
+        self.ssm_backend = getattr(config, "ssm_backend", "auto")
+        self.last_backend = "uninitialized"
 
     def forward(self, latent: Tensor) -> Tensor:
         internal = self.input_adapter(self.input_norm(latent))
         convolved = self.causal_convolution(
             F.pad(internal.transpose(1, 2), (self.kernel_size - 1, 0))
         ).transpose(1, 2)
-        decay_rate = F.softplus(self.log_decay).unsqueeze(0)
-        state = convolved.new_zeros(convolved.size(0), convolved.size(-1))
-        outputs: list[Tensor] = []
-        for token_state in convolved.unbind(dim=1):
-            delta = F.softplus(self.delta_projection(token_state))
-            decay = torch.exp(-decay_rate * delta)
-            candidate = torch.tanh(self.input_projection(token_state))
-            state = decay * state + (1.0 - decay) * candidate
-            output = torch.sigmoid(self.gate_projection(token_state)) * state
-            outputs.append(output)
-        return self.output_adapter(torch.stack(outputs, dim=1))
+        from .ssm_scan import affine_scan, resolve_backend
+        self.last_backend = resolve_backend(self.ssm_backend, latent.device)
+        # Project all tokens with GEMMs, instead of three tiny GEMMs per token.
+        delta = F.softplus(self.delta_projection(convolved))
+        candidate = torch.tanh(self.input_projection(convolved))
+        gate = torch.sigmoid(self.gate_projection(convolved))
+        dtype = torch.float64 if convolved.dtype == torch.float64 else torch.float32
+        decay = torch.exp(-F.softplus(self.log_decay).to(dtype) * delta.to(dtype))
+        state = affine_scan(decay, (1 - decay) * candidate.to(dtype), self.last_backend)
+        return self.output_adapter((gate * state).to(convolved.dtype))
 
 
 class RecurrentEMCModule(EMCModuleBase):
@@ -123,7 +125,14 @@ class RecurrentEMCModule(EMCModuleBase):
 
     def forward(self, latent: Tensor) -> Tensor:
         internal = self.input_adapter(self.input_norm(latent))
-        recurrent_output, _ = self.recurrent(internal)
+        # Frozen evaluation suffixes still need derivatives w.r.t. their input.
+        # cuDNN inference forward does not retain the reserve needed by backward.
+        # Select native autograd BEFORE forward only for this differentiable eval
+        # path. Keep evaluation semantics, frozen parameters and ordinary cuDNN
+        # training/no-grad inference unchanged; restore backend flags on exit.
+        differentiable_eval = not self.recurrent.training and torch.is_grad_enabled() and internal.requires_grad
+        with torch.backends.cudnn.flags(enabled=False) if differentiable_eval else nullcontext():
+            recurrent_output, _ = self.recurrent(internal)
         return self.output_adapter(recurrent_output)
 
 
@@ -176,3 +185,4 @@ def create_emc_module(config: Any, family: str) -> EMCModuleBase:
     if family in {"delta", "deltanet"}:
         return DeltaEMCModule(config)
     raise ValueError(f"unknown EMC module family: {family!r}")
+

@@ -39,7 +39,7 @@ def generate_token_ids(
         with torch.inference_mode():
             for _ in range(max_new_tokens):
                 context = generated[-maximum_context:].unsqueeze(0)
-                output = model(context)
+                output = model.endpoint(context) if getattr(model, "prefix_endpoint_objective", False) else model(context)
                 logits = output.logits if isinstance(output, EMCOutput) else output
                 next_logits = logits[0, -1]
                 if greedy:
@@ -105,3 +105,4 @@ def _filter_sampling_logits(
         remove[0] = False
         filtered[sorted_indices[remove]] = -torch.inf
     return filtered
+
