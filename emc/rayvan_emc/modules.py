@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
 from typing import Any, Literal
 
 import torch
@@ -124,7 +125,14 @@ class RecurrentEMCModule(EMCModuleBase):
 
     def forward(self, latent: Tensor) -> Tensor:
         internal = self.input_adapter(self.input_norm(latent))
-        recurrent_output, _ = self.recurrent(internal)
+        # Frozen evaluation suffixes still need derivatives w.r.t. their input.
+        # cuDNN inference forward does not retain the reserve needed by backward.
+        # Select native autograd BEFORE forward only for this differentiable eval
+        # path. Keep evaluation semantics, frozen parameters and ordinary cuDNN
+        # training/no-grad inference unchanged; restore backend flags on exit.
+        differentiable_eval = not self.recurrent.training and torch.is_grad_enabled() and internal.requires_grad
+        with torch.backends.cudnn.flags(enabled=False) if differentiable_eval else nullcontext():
+            recurrent_output, _ = self.recurrent(internal)
         return self.output_adapter(recurrent_output)
 
 
