@@ -84,6 +84,10 @@ class EMCConfig:
     value_geometry_slots: int = 4
     value_geometry_prototypes: int = 4
     value_geometry_regret_weight: float = 0.01
+    value_effect_dim: int = 16
+    value_effect_weight: float = 0.01
+    value_replay_capacity: int = 1024
+    value_replay_batch_size: int = 64
     value_fit_bank_path: str = ""
     value_fit_enabled: bool = False
     value_fit_prefixes: int = 64

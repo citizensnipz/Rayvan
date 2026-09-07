@@ -360,7 +360,8 @@ def _build_training_model(config, tokenizer):
                       or expected.config.value_head_type != model.config.value_head_type
                       or expected.config.value_head_hidden_dim != model.config.value_head_hidden_dim
                       or expected.config.value_geometry_slots != model.config.value_geometry_slots
-                      or expected.config.value_geometry_prototypes != model.config.value_geometry_prototypes)
+                      or expected.config.value_geometry_prototypes != model.config.value_geometry_prototypes
+                      or expected.config.value_effect_dim != model.config.value_effect_dim)
     if router_changes and (config.routing.value_expert_training != "frozen" or not config.routing.value_reset_router):
         raise ValueError("Router architecture overrides require frozen experts and Reset router on checkpoint load")
     # Preserve expert shapes and the source continuation router.
@@ -370,6 +371,7 @@ def _build_training_model(config, tokenizer):
     if changes:
         raise ValueError("Checkpoint/model settings differ: " + ", ".join(changes) +
                          ". Clone the source run configuration before testing its router.")
+    object.__setattr__(model, "_value_reference_config", asdict(model.config))
     model.config = replace(model.config, **{k: v for k, v in asdict(expected.config).items()
                                           if k.startswith("value_") or k in {"ssm_backend", "routing_geometry_dim"}})
     for expert in model.emc_modules:

@@ -13,8 +13,8 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from .checkpoint import load_training_checkpoint, save_training_checkpoint
-from .model import EMCOutput
-from .value_routing import CounterfactualValueEMC, StateBatch, center
+from .model import EMCConfig, EMCOutput
+from .value_routing import CounterfactualValueEMC, StateBatch, center, ExpertConditionedGeometricRouter, make_value_router
 
 
 @contextmanager
@@ -89,6 +89,10 @@ class ValueOptimizers:
         self.version = 0
         self.total_probes = 0
         self.reference_router_state = None
+        self.reference_config = None
+        self.replay = []
+        self.replay_cursor = 0
+        self.replay_generator = torch.Generator().manual_seed(seed + 1701)
         self.loss_sums = torch.zeros(model.config.resolved_trajectory_steps, model.config.num_modules, dtype=torch.float64)
         self.loss_counts = torch.zeros(model.config.resolved_trajectory_steps, dtype=torch.long)
         self.updates = [0] * len(self.experts)
@@ -101,6 +105,8 @@ class ValueOptimizers:
                     experts=[o.state_dict() for o in self.experts], generator=self.generator.get_state(),
                     total_probes=self.total_probes, reference_router_state=self.reference_router_state,
                     loss_sums=self.loss_sums, loss_counts=self.loss_counts,
+                    reference_config=self.reference_config, replay=self.replay, replay_cursor=self.replay_cursor,
+                    replay_generator=self.replay_generator.get_state(),
                     version=self.version, updates=self.updates, items=self.items, costs=self.costs)
 
     def load_state_dict(self, state):
@@ -110,6 +116,11 @@ class ValueOptimizers:
         self.loss_sums = state.get("loss_sums", self.loss_sums).cpu()
         self.loss_counts = state.get("loss_counts", self.loss_counts).cpu()
         self.reference_router_state = state.get("reference_router_state")
+        self.reference_config = state.get("reference_config")
+        self.replay = [(h.cpu(), depth, loss.cpu(), effect.cpu()) for h, depth, loss, effect in state.get("replay", [])]
+        self.replay_cursor = state.get("replay_cursor", 0)
+        if "replay_generator" in state:
+            self.replay_generator.set_state(state["replay_generator"].cpu())
         self.shared.load_state_dict(state["shared"])
         self.router.load_state_dict(state["router"])
         for optimizer, saved in zip(self.experts, state["experts"], strict=True):
@@ -132,6 +143,9 @@ def train_block(model: CounterfactualValueEMC, optimizers: ValueOptimizers, inpu
     c = model.config
     T, E, B = c.resolved_trajectory_steps, c.num_modules, inputs.size(0)
     endpoint_targets = targets[:, -1]
+    conditioned = isinstance(model.router, ExpertConditionedGeometricRouter)
+    if conditioned and reference is None:
+        raise ValueError("Expert-conditioned replay requires a fixed reference snapshot")
     # A fresh snapshot per block: states, labels and all insertion suffixes share
     # one immutable version. No old latents are reused after shared weights move.
     snapshot = reference if reference is not None else frozen_snapshot(model)
@@ -142,10 +156,16 @@ def train_block(model: CounterfactualValueEMC, optimizers: ValueOptimizers, inpu
     optimizers.costs["collection_expert_items"] += B * (T - 1)
     pairs = sample_probe_pairs(B, T, 1.0 if calibrating else c.value_probe_rate, c.value_probe_budget, optimizers.generator)
     probes = []
+    fresh_effects = []
     for request, depth in pairs:
         s = states[depth]
         batch = StateBatch(s.latent[request:request+1], s.targets[request:request+1], depth)
-        labels = snapshot.counterfactual_losses(batch, target=c.value_target)
+        if conditioned:
+            labels, effects = snapshot.counterfactual_effects_and_losses(batch, model.router)
+            fresh_effects.append((batch.latent.detach().float().cpu().clone(), depth,
+                                  labels.detach().float().cpu(), effects.detach().float().cpu()))
+        else:
+            labels = snapshot.counterfactual_losses(batch, target=c.value_target)
         probes.append((batch, labels))
         optimizers.total_probes += 1
         optimizers.loss_sums[depth] += labels.detach().double().cpu().sum(0)
@@ -206,7 +226,46 @@ def train_block(model: CounterfactualValueEMC, optimizers: ValueOptimizers, inpu
     optimizers.costs["shared_expert_items"] += B * T
     model.zero_grad(set_to_none=True)
     calibration = None
-    if probes:
+    fit_metrics = {}
+    if conditioned:
+        # Sample old evidence BEFORE inserting fresh evidence. Independent RNG
+        # leaves prefix/depth collection identical when replay settings change.
+        count = min(len(optimizers.replay), c.value_replay_batch_size)
+        ids = torch.randperm(len(optimizers.replay), generator=optimizers.replay_generator)[:count].tolist()
+        training_items = fresh_effects + [optimizers.replay[i] for i in ids]
+        for item in fresh_effects:
+            if len(optimizers.replay) < c.value_replay_capacity:
+                optimizers.replay.append(item)
+            else:
+                optimizers.replay[optimizers.replay_cursor] = item
+            optimizers.replay_cursor = (optimizers.replay_cursor + 1) % c.value_replay_capacity
+        if training_items:
+            # Different depths and prefix lengths are separate attention batches;
+            # weight by examples, never by the number of groups.
+            groups = {}
+            for item in training_items:
+                groups.setdefault((item[1], item[0].size(1)), []).append(item)
+            optimizers.router.zero_grad(set_to_none=True)
+            fit_metrics = dict(value_mse=0., effect_mse=0., soft_regret=0.)
+            calibration = 0.
+            with trainable_only(model, optimizers.router_parameters):
+                for (depth, _), items in groups.items():
+                    state = torch.cat([item[0] for item in items]).to(inputs.device)
+                    labels = torch.cat([item[2] for item in items]).to(inputs.device)
+                    effects = torch.cat([item[3] for item in items]).to(inputs.device)
+                    objective, parts = model.router.objective(state, T - depth, labels, effects)
+                    weight = len(items) / len(training_items)
+                    if not torch.isfinite(objective.detach()):
+                        raise FloatingPointError("non-finite expert-conditioned objective")
+                    (objective * weight).backward()
+                    calibration += float(objective.detach()) * weight
+                    for key, value in parts.items():
+                        fit_metrics[key] += float(value.detach()) * weight
+                fit_metrics["router_gradient_norm"] = float(nn.utils.clip_grad_norm_(
+                    optimizers.router_parameters, clip, error_if_nonfinite=True))
+                optimizers.router.step()
+            fit_metrics.update(replay_samples=count, fresh_samples=len(fresh_effects), replay_size=len(optimizers.replay))
+    elif probes:
         optimizers.router.zero_grad(set_to_none=True)
         with trainable_only(model, optimizers.router_parameters):
             fit = torch.stack([model.router.calibration_loss(s.latent, T - s.depth, labels) for s, labels in probes]).mean()
@@ -218,7 +277,9 @@ def train_block(model: CounterfactualValueEMC, optimizers: ValueOptimizers, inpu
     label_version = optimizers.version
     optimizers.version += 1
     return dict(output=output, loss=float(loss.detach()), gradient_norm=shared_norm,
-                calibration_mse=calibration, training_probe_count=len(probes), label_snapshot_version=label_version,
+                calibration_mse=fit_metrics.get("value_mse", calibration),
+                router_objective=calibration, expert_conditioned=fit_metrics,
+                training_probe_count=len(probes), label_snapshot_version=label_version,
                 router_phase="calibration" if calibrating else "learning",
                 total_training_probes=optimizers.total_probes, collection_exploration=exploration,
                 fixed_reference=reference is not None,
@@ -237,13 +298,22 @@ def audit_values(model: CounterfactualValueEMC, inputs: Tensor, targets: Tensor,
                                      exploration=1.0 if reference is not None else 0.0)
     rows = []
     for s in states:
-        losses = snapshot.counterfactual_losses(s, target="suffix")
+        effect_mse = None
+        if isinstance(model.router, ExpertConditionedGeometricRouter):
+            losses, effects = snapshot.counterfactual_effects_and_losses(s, model.router)
+            _, parts = model.router.objective(s.latent, model.config.resolved_trajectory_steps - s.depth, losses, effects)
+            effect_mse = float(parts["effect_mse"])
+        else:
+            losses = snapshot.counterfactual_losses(s, target="suffix")
         predicted = model.router(s.latent, model.config.resolved_trajectory_steps - s.depth).float()
         chosen = predicted.argmin(-1)
         chosen_loss = losses.gather(1, chosen[:, None]).squeeze(1)
         gaps = losses[:, :, None] - losses[:, None, :]
         errors = (predicted[:, :, None] - predicted[:, None, :]) - gaps
+        shuffled_loss = losses.gather(1, chosen.roll(1)[:, None]).squeeze(1)
         rows.append(dict(depth=s.depth, probe_count=inputs.size(0),
+                         effect_mse=effect_mse,
+                         shuffled_state_regret=(float((shuffled_loss - losses.min(-1).values).mean()) if inputs.size(0) > 1 else None),
                          regret=float((chosen_loss - losses.min(-1).values).mean()),
                          gap_rmse=float(errors.square().mean().sqrt()),
                          advantage_rmse=float((predicted - center(losses)).square().mean().sqrt()),
@@ -261,6 +331,8 @@ def audit_values(model: CounterfactualValueEMC, inputs: Tensor, targets: Tensor,
                 constant_regret=(sum(r["constant_regret"] for r in rows) / len(rows) if constant_choices is not None else None),
                 uniform_regret=sum(r["uniform_regret"] for r in rows) / len(rows),
                 probe_count=inputs.size(0) * len(rows),
+                effect_mse=(sum(r["effect_mse"] for r in rows) / len(rows) if rows[0]["effect_mse"] is not None else None),
+                shuffled_state_regret=(sum(r["shuffled_state_regret"] for r in rows) / len(rows) if inputs.size(0) > 1 else None),
                 target="fixed_reference_suffix" if reference is not None else "held_out_suffix")
 
 
@@ -299,7 +371,10 @@ def train_value_model(model, corpus, config, *, print_progress=True, evaluation_
     if model.config.value_expert_training == "frozen" and model.config.value_fixed_reference:
         reference = frozen_snapshot(model)
         source = getattr(model, "_value_reference_router", model.router)
-        reference.router = deepcopy(source)
+        source_config = opts.reference_config or getattr(model, "_value_reference_config", asdict(model.config))
+        with torch.random.fork_rng(devices=[]):
+            reference.router = make_value_router(EMCConfig(**source_config)) if opts.reference_config else deepcopy(source)
+        opts.reference_config = source_config
         reference.router.load_state_dict(opts.reference_router_state or source.state_dict())
         reference.router.to(device).eval().requires_grad_(False)
         opts.reference_router_state = {k: v.detach().cpu().clone() for k, v in reference.router.state_dict().items()}

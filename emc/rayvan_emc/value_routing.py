@@ -92,7 +92,8 @@ class CompetenceEnergy(nn.Module):
     def forward(self, z: Tensor) -> Tensor:
         z = F.normalize(z, dim=-1)
         mu = F.normalize(self.prototypes, dim=-1)
-        distance = (z[:, None, None, :] - mu[None]).square().sum(-1)
+        views = z[:, None, None, :] if z.ndim == 2 else z[:, :, None, :]
+        distance = (views - mu[None]).square().sum(-1)
         softmin = -self.temperature * (torch.logsumexp(-distance / self.temperature, dim=-1)
                                        - math.log(mu.size(1)))
         return self.bias + self.scale * softmin
@@ -147,6 +148,73 @@ class RelationalGeometricRouter(ValueNexusRouter):
         raise ValueError("Multiple competence basins have no single global Mahalanobis metric")
 
 
+class ExpertConditionedGeometricRouter(RelationalGeometricRouter):
+    """One state view per candidate; common metric and calibrated cost units.
+
+    Only the router runs at inference. Effect decoder/targets are training-only.
+    Queries differ initially, but collection uses a frozen reference, so this
+    cannot change expert training opportunity or the evidence sampled.
+    """
+    def __init__(self, config: EMCConfig):
+        nn.Module.__init__(self)
+        self.max_steps = config.resolved_trajectory_steps
+        self.regret_weight = config.value_geometry_regret_weight
+        self.effect_weight = config.value_effect_weight
+        self.policy_temperature = 0.05
+        width, attention_width = config.latent_dim, 32
+        dim = config.resolved_routing_geometry_dim
+        self.positions = nn.Embedding(config.max_sequence_length, width)
+        self.input_norm = nn.LayerNorm(width)
+        self.input_projection = nn.Linear(width, attention_width)
+        self.queries = nn.Parameter(torch.randn(config.num_modules, attention_width) / attention_width**0.5)
+        self.condition = nn.Linear(width + 1, attention_width)
+        self.cross_attention = nn.MultiheadAttention(attention_width, 4, batch_first=True, dropout=0.)
+        self.cross_norm = nn.LayerNorm(attention_width)
+        self.encoder = nn.Sequential(nn.Linear(attention_width, attention_width), nn.GELU(), nn.Linear(attention_width, dim))
+        self.value = CompetenceEnergy(config.num_modules, config.value_geometry_prototypes, dim)
+        self.effect_decoder = nn.Sequential(nn.Linear(dim + attention_width, 32), nn.GELU(), nn.Linear(32, config.value_effect_dim))
+        # A fixed structured linear projection of the *integrated* update:
+        # R(delta) = concat(mean_token(delta), last_token(delta)) @ projection.
+        # Separate RNG makes effect targets identical across router seeds.
+        rng = torch.Generator().manual_seed(1729)
+        projection = torch.randn(2 * width, config.value_effect_dim, generator=rng) / (2 * width)**0.5
+        self.register_buffer("effect_projection", projection)
+
+    def need(self, latent: Tensor, remaining: int) -> Tensor:
+        if not 1 <= remaining <= self.max_steps:
+            raise ValueError("remaining steps outside configured horizon")
+        position = self.positions(torch.arange(latent.size(1), device=latent.device))
+        sequence = self.input_projection(self.input_norm(latent + position))
+        horizon = latent.new_full((latent.size(0), 1), remaining / self.max_steps)
+        q = self.queries[None] + self.condition(torch.cat((latent[:, -1], horizon), -1))[:, None]
+        views = self.cross_norm(q + self.cross_attention(q, sequence, sequence, need_weights=False)[0])
+        return F.normalize(self.encoder(views), dim=-1)
+
+    @torch.no_grad()
+    def project_effect(self, before: Tensor, after: Tensor) -> Tensor:
+        delta = after.float() - before.float()
+        return torch.cat((delta.mean(1), delta[:, -1]), -1) @ self.effect_projection.float()
+
+    def objective(self, state: Tensor, remaining: int, losses: Tensor, effects: Tensor):
+        z = self.need(state.detach(), remaining)
+        prediction = center(self.value(z)).float()
+        truth = losses.detach().float()
+        mse = F.mse_loss(prediction, center(truth))
+        regret = (torch.softmax(-prediction / self.policy_temperature, -1) *
+                  (truth - truth.min(-1, keepdim=True).values)).sum(-1).mean()
+        identities = self.queries[None].expand(z.size(0), -1, -1)
+        effect_prediction = self.effect_decoder(torch.cat((z, identities), -1)).float()
+        effect_mse = F.mse_loss(effect_prediction, effects.detach().float())
+        total = mse + self.regret_weight * regret + self.effect_weight * effect_mse
+        return total, dict(value_mse=mse, effect_mse=effect_mse, soft_regret=regret)
+
+
+def make_value_router(config: EMCConfig) -> ValueNexusRouter:
+    router_type = {"geometric": RelationalGeometricRouter,
+                   "expert_geometric": ExpertConditionedGeometricRouter}.get(config.value_head_type, ValueNexusRouter)
+    return router_type(config)
+
+
 @dataclass(frozen=True)
 class StateBatch:
     latent: Tensor
@@ -173,8 +241,7 @@ class CounterfactualValueEMC(SequentialEMCModel):
         # Isolate router randomness from expert initialization and data sampling.
         with torch.random.fork_rng(devices=[]):
             torch.random.default_generator.manual_seed(seed)
-            router = (RelationalGeometricRouter(self.config) if self.config.value_head_type == "geometric"
-                      else ValueNexusRouter(self.config))
+            router = make_value_router(self.config)
         self.router = router.to(device=self.token_embedding.weight.device,
                                 dtype=self.token_embedding.weight.dtype)
 
@@ -218,6 +285,18 @@ class CounterfactualValueEMC(SequentialEMCModel):
                             batch.targets, reduction="none")
             for e in range(self.config.num_modules)
         ], dim=-1)
+
+    @torch.no_grad()
+    def counterfactual_effects_and_losses(self, batch: StateBatch, observer: ExpertConditionedGeometricRouter):
+        """Reuse each first insertion for both targets; no duplicate expert work."""
+        losses, effects = [], []
+        for e in range(self.config.num_modules):
+            selected = torch.full((batch.latent.size(0),), e, device=batch.latent.device, dtype=torch.long)
+            after = self.apply_expert(batch.latent, selected)
+            effects.append(observer.project_effect(batch.latent, after))
+            terminal = self.continue_state(after, batch.depth + 1)
+            losses.append(F.cross_entropy(self.read_endpoint(terminal).float(), batch.targets, reduction="none"))
+        return torch.stack(losses, 1), torch.stack(effects, 1)
 
     @torch.no_grad()
     def collect_states(self, tokens: Tensor, targets: Tensor, *, generator: torch.Generator,
