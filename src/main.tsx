@@ -6,12 +6,13 @@ import "./styles.css";
 import { ExperimentBuilder } from "./research/ExperimentBuilder";
 import { ExperimentHistory } from "./research/ExperimentHistory";
 import { LiveExperiment } from "./research/LiveExperiment";
+import { MathVisualizerPage } from "./research/math/MathVisualizerPage";
 import { RunComparison } from "./research/RunComparison";
 import { cancelExperiment, estimateExperiment, getActiveExperiment, getExperiment, getSchema, listExperiments, startExperiment } from "./research/api";
 import type { Estimate, ExperimentConfig, ResearchEvent, ResearchSchema, RunDetail, RunState, RunSummary } from "./research/types";
 import mark from "./assets/rayvan-logo.png";
 
-type View = "build" | "live" | "history" | "report" | "compare";
+type View = "build" | "live" | "history" | "report" | "compare" | "math";
 
 function App() {
   const [view, setView] = useState<View>("build");
@@ -80,8 +81,8 @@ function App() {
   }, [config]);
 
   const active = Boolean(activeRun && ["initializing", "running", "validation", "diagnostics"].includes(runState));
-  const navItems: Array<[View, string, string]> = [["build", "New experiment", "＋"], ["live", "Live run", "◉"], ["history", "History", "≡"]];
-  const title = useMemo(() => view === "build" ? "Experiment Builder" : view === "live" ? "Live Telemetry" : view === "history" ? "Run Archive" : view === "compare" ? "Comparison" : "Run Report", [view]);
+  const navItems: Array<[View, string, string]> = [["build", "New experiment", "＋"], ["live", "Live run", "◉"], ["history", "History", "≡"], ["math", "Math Visualizer", "∑"]];
+  const title = useMemo(() => view === "math" ? "Math Visualizer" : view === "build" ? "Experiment Builder" : view === "live" ? "Live Telemetry" : view === "history" ? "Run Archive" : view === "compare" ? "Comparison" : "Run Report", [view]);
 
   const launch = async () => {
     if (!config) return;
@@ -112,14 +113,14 @@ function App() {
   return <div className="app">
     <aside className="sidebar">
       <div className="brand"><img src={mark} alt="Rayvan raven logo" /><div><b>Rayvan</b><span>EMC Research</span></div></div>
-      <nav>{navItems.map(([id, label, icon]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><i>{icon}</i><span>{label}</span>{id === "live" && active && <em />}</button>)}</nav>
+      <nav>{navItems.map(([id, label, icon]) => <button key={id} aria-label={label} title={label} className={view === id ? "active" : ""} onClick={() => setView(id)}><i>{icon}</i><span>{label}</span>{id === "live" && active && <em />}</button>)}</nav>
       <div className="sidebar-foot"><span className={`connection ${network === "Node connected" ? "online" : ""}`} />{network}<small>Research Console · Schema v{schema?.schema_version ?? "—"}</small></div>
     </aside>
     <main className="workspace">
       <header className="topbar"><div><span>RESEARCH /</span><b>{title}</b></div><div className="top-actions">{active && <button className="active-run" onClick={() => setView("live")}><i /> {activeRun?.slice(-8)} running</button>}<button className="icon-button" title="Refresh history" onClick={refreshRuns}>↻</button></div></header>
       {error && <div className="error-banner"><b>Action needed</b><span>{error}</span><button onClick={() => setError(undefined)}>×</button></div>}
       <div className="content">
-        {!schema || !config ? <div className="loading"><i /><p>Loading the Python experiment schema…</p></div> : <>
+        {view === "math" ? <MathVisualizerPage /> : !schema || !config ? <div className="loading"><i /><p>Loading the Python experiment schema…</p></div> : <>
           {view === "build" && <ExperimentBuilder schema={schema} config={config} setConfig={setConfig} estimate={estimate} estimating={estimating} active={active} onRun={launch} />}
           {view === "live" && <LiveExperiment events={events} state={runState} runId={activeRun} logs={logs} onCancel={active ? stop : undefined} />}
           {view === "history" && <ExperimentHistory runs={runs} selected={selected} setSelected={setSelected} onOpen={openRun} onCompare={compare} refresh={refreshRuns} />}
