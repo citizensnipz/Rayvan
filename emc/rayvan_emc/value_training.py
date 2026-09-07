@@ -307,12 +307,19 @@ def audit_values(model: CounterfactualValueEMC, inputs: Tensor, targets: Tensor,
             losses = snapshot.counterfactual_losses(s, target="suffix")
         predicted = model.router(s.latent, model.config.resolved_trajectory_steps - s.depth).float()
         chosen = predicted.argmin(-1)
+        # Hard-choice sensitivity: second-lowest minus lowest predicted cost.
+        # A single available candidate has no second-best margin.
+        margins = (predicted.topk(2, dim=-1, largest=False).values.diff(dim=-1).squeeze(-1)
+                   if predicted.size(-1) > 1 else None)
         chosen_loss = losses.gather(1, chosen[:, None]).squeeze(1)
         gaps = losses[:, :, None] - losses[:, None, :]
         errors = (predicted[:, :, None] - predicted[:, None, :]) - gaps
         shuffled_loss = losses.gather(1, chosen.roll(1)[:, None]).squeeze(1)
         rows.append(dict(depth=s.depth, probe_count=inputs.size(0),
                          effect_mse=effect_mse,
+                         predicted_margin_mean=float(margins.mean()) if margins is not None else None,
+                         predicted_margin_min=float(margins.min()) if margins is not None else None,
+                         predicted_margin_below_1e_3_fraction=float((margins < 1e-3).float().mean()) if margins is not None else None,
                          shuffled_state_regret=(float((shuffled_loss - losses.min(-1).values).mean()) if inputs.size(0) > 1 else None),
                          regret=float((chosen_loss - losses.min(-1).values).mean()),
                          gap_rmse=float(errors.square().mean().sqrt()),
@@ -331,6 +338,9 @@ def audit_values(model: CounterfactualValueEMC, inputs: Tensor, targets: Tensor,
                 constant_regret=(sum(r["constant_regret"] for r in rows) / len(rows) if constant_choices is not None else None),
                 uniform_regret=sum(r["uniform_regret"] for r in rows) / len(rows),
                 probe_count=inputs.size(0) * len(rows),
+                predicted_margin_mean=(sum(r["predicted_margin_mean"] for r in rows) / len(rows) if rows[0]["predicted_margin_mean"] is not None else None),
+                predicted_margin_min=(min(r["predicted_margin_min"] for r in rows) if rows[0]["predicted_margin_min"] is not None else None),
+                predicted_margin_below_1e_3_fraction=(sum(r["predicted_margin_below_1e_3_fraction"] for r in rows) / len(rows) if rows[0]["predicted_margin_mean"] is not None else None),
                 effect_mse=(sum(r["effect_mse"] for r in rows) / len(rows) if rows[0]["effect_mse"] is not None else None),
                 shuffled_state_regret=(sum(r["shuffled_state_regret"] for r in rows) / len(rows) if inputs.size(0) > 1 else None),
                 target="fixed_reference_suffix" if reference is not None else "held_out_suffix")

@@ -26,11 +26,11 @@ R has shape (2*latent_width, effect_dim), fixed Gaussian entries scaled by 1/sqr
 
 A training-only decoder predicts d_e from concat(z_e, u_e). The objective is:
 
-    mean((A - center(Y))²)
+    cost_mse_weight * mean((A - center(Y))²)
     + regret_weight * mean(sum_e softmax(-A/0.05)_e * (Y_e - min_j Y_j))
     + effect_weight * mean((D(z_e,u_e) - d_e)²).
 
-Defaults are regret_weight=0.01 and effect_weight=0.01. State, costs and effects are detached targets; gradients train queries, shared encoder, basins, biases and decoder. The effect decoder never runs during normal routing/inference. Setting effect_weight=0 is an ablation, not the recommended initial test.
+Defaults are cost_mse_weight=1, regret_weight=0.01 and effect_weight=0.01. A zero weight removes that objective from autograd while retaining its diagnostic error. At least one weight must be positive. State, costs and effects are detached targets; gradients train queries, shared encoder, basins, biases and decoder. The effect decoder never runs during normal routing/inference. Setting effect_weight=0 is an ablation, not the recommended initial test.
 
 ## Evidence replay and limits
 
@@ -70,3 +70,33 @@ The shuffled-state audit cyclically shifts predictions among held-out states **w
 Training telemetry includes expert_conditioned.value_mse, effect_mse, soft_regret, router_gradient_norm, fresh_samples, replay_samples and replay_size. For this new head calibration_mse is the pure centered-cost MSE; router_objective is the combined objective. Historical geometric-head calibration_mse retains its previous composite meaning.
 
 Useful evidence is sustained held-out regret improvement over the training-selected constant-per-depth baseline, with worse performance when state pairing is shuffled. Better training fit, lower effect error, or more varied routes alone do not establish successful routing. Confirm a promising result with another router seed; evaluate the new router's own full trajectories too, since fixed-reference action values do not guarantee its greedy rollout is better.
+
+
+## Decision-only control
+
+Start a fresh router test from the **same original expert checkpoint**, not the
+latest trained router checkpoint. Select the expert-conditioned geometric head
+first, then set **Cost MSE weight = 0**, **Effect prediction weight = 0**, and
+**Decision regret weight = 1**. Do not change these weights on another head:
+`value_cost_mse_weight` currently applies only to the expert-conditioned objective.
+
+Keep reset router and fixed continuation enabled, experts frozen, suffix targets,
+32 need dimensions, four basins, effect dimension 16, replay capacity 1024 and
+64 replay samples. Use 4096 endpoints, batch 4, multiplier 1, probe probability 1,
+probe cap 4, learning rate 0.0003, weight decay 0, FP32, router seed 0, data seed
+42, calibration blocks/minimum probes 0, evaluation interval 128 and 16 evaluation
+batches. The fixed-bank fitting diagnostic remains off.
+
+This optimizes only soft expected measured regret. Inference still uses argmin;
+MSE and effect errors are diagnostics, not training forces in this control.
+An untrained effect decoder is expected to retain poor effect error. This does
+not establish that hard argmin regret is optimized exactly.
+
+Held-out audits now include `predicted_margin_mean`, `predicted_margin_min`, and
+`predicted_margin_below_1e_3_fraction`, both overall and per depth. The margin is
+second-lowest minus lowest predicted cost, in predicted loss units. A single
+candidate has no second-best margin (null). The 0.001 cutoff is a diagnostic
+reference, not a calibrated confidence threshold. Compare margins alongside
+regret and shuffled-state regret; larger margins alone are not evidence of better
+routing. Checkpoint selection is unchanged: model-best.pt follows ordinary
+validation loss, not fixed-audit routing regret.

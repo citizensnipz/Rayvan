@@ -188,3 +188,49 @@ def test_learns_state_dependent_competence_on_controlled_signal():
     chosen = r.choose(h[64:], 3)
     loss = labels[64:].gather(1, chosen[:, None]).mean()
     assert float(loss - labels[64:].min(-1).values.mean()) < .005
+
+
+def test_decision_only_gradient_matches_expected_regret_and_ignores_effect_targets():
+    r = CounterfactualValueEMC(settings(value_cost_mse_weight=0., value_effect_weight=0.,
+                                       value_geometry_regret_weight=1.)).router
+    h = torch.randn(3, 4, 8, requires_grad=True)
+    labels = torch.tensor([[3., 3.1], [3.1, 3.], [3., 3.05]], requires_grad=True)
+    effects = torch.randn(3, 2, 16, requires_grad=True)
+    actual, parts = r.objective(h, 3, labels, effects)
+    prediction = r(h.detach(), 3).float()
+    truth = labels.detach()
+    expected = (torch.softmax(-prediction/.05, -1) * (truth-truth.min(-1, keepdim=True).values)).sum(-1).mean()
+    torch.testing.assert_close(actual, expected)
+    actual_grad = torch.autograd.grad(actual, r.queries, retain_graph=True)[0]
+    expected_grad = torch.autograd.grad(expected, r.queries)[0]
+    torch.testing.assert_close(actual_grad, expected_grad)
+    other, _ = r.objective(h, 3, labels, effects * 100)
+    torch.testing.assert_close(other, actual)
+    actual.backward()
+    assert all(p.grad is None for p in r.effect_decoder.parameters())
+    assert h.grad is None and labels.grad is None and effects.grad is None
+    assert parts['value_mse'] > 0  # Diagnostics still computed, not optimized.
+
+
+def test_decision_control_config_validation_and_roundtrip():
+    from rayvan_emc.research_config import ExperimentConfig
+    c = experiment()
+    c = replace(c, routing=replace(c.routing, value_head_type='expert_geometric', value_expert_training='frozen',
+                value_cost_mse_weight=0., value_effect_weight=0., value_geometry_regret_weight=1.))
+    assert ExperimentConfig.from_dict(c.to_dict()).routing.value_cost_mse_weight == 0.
+    for weight in (-1., float('nan'), 1.1):
+        with pytest.raises(ValueError, match='Cost MSE weight'):
+            CounterfactualValueEMC(settings(value_cost_mse_weight=weight))
+    with pytest.raises(ValueError, match='At least one'):
+        CounterfactualValueEMC(settings(value_cost_mse_weight=0., value_effect_weight=0., value_geometry_regret_weight=0.))
+
+
+def test_audit_reports_known_top_two_margin():
+    from rayvan_emc.value_training import audit_values
+    model = CounterfactualValueEMC(config(value_expert_training='frozen'))
+    with torch.no_grad():
+        model.router.value.bias.copy_(torch.tensor([0., .0005]))
+    audit = audit_values(model, torch.randint(16, (2, 4)), torch.randint(16, (2, 4)))
+    assert audit['predicted_margin_mean'] == pytest.approx(.0005)
+    assert audit['predicted_margin_min'] == pytest.approx(.0005)
+    assert audit['predicted_margin_below_1e_3_fraction'] == 1.

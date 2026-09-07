@@ -160,6 +160,7 @@ class ExpertConditionedGeometricRouter(RelationalGeometricRouter):
         self.max_steps = config.resolved_trajectory_steps
         self.regret_weight = config.value_geometry_regret_weight
         self.effect_weight = config.value_effect_weight
+        self.cost_mse_weight = config.value_cost_mse_weight
         self.policy_temperature = 0.05
         width, attention_width = config.latent_dim, 32
         dim = config.resolved_routing_geometry_dim
@@ -205,7 +206,16 @@ class ExpertConditionedGeometricRouter(RelationalGeometricRouter):
         identities = self.queries[None].expand(z.size(0), -1, -1)
         effect_prediction = self.effect_decoder(torch.cat((z, identities), -1)).float()
         effect_mse = F.mse_loss(effect_prediction, effects.detach().float())
-        total = mse + self.regret_weight * regret + self.effect_weight * effect_mse
+        # Exclude disabled objectives from autograd entirely; diagnostics remain
+        # available even when the associated loss is not used for learning.
+        terms = []
+        if self.cost_mse_weight:
+            terms.append(self.cost_mse_weight * mse)
+        if self.regret_weight:
+            terms.append(self.regret_weight * regret)
+        if self.effect_weight:
+            terms.append(self.effect_weight * effect_mse)
+        total = sum(terms)
         return total, dict(value_mse=mse, effect_mse=effect_mse, soft_regret=regret)
 
 

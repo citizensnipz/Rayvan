@@ -86,6 +86,7 @@ class EMCConfig:
     value_geometry_regret_weight: float = 0.01
     value_effect_dim: int = 16
     value_effect_weight: float = 0.01
+    value_cost_mse_weight: float = 1.0
     value_replay_capacity: int = 1024
     value_replay_batch_size: int = 64
     value_fit_bank_path: str = ""

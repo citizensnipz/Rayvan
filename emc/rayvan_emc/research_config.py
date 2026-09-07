@@ -76,6 +76,7 @@ class RoutingConfig:
     value_geometry_regret_weight: float = 0.01
     value_effect_dim: int = 16
     value_effect_weight: float = 0.01
+    value_cost_mse_weight: float = 1.0
     value_replay_capacity: int = 1024
     value_replay_batch_size: int = 64
     value_fit_bank_path: str = ""
@@ -371,9 +372,13 @@ def validate_value_settings(config) -> None:
     for name in ("value_effect_dim", "value_replay_capacity", "value_replay_batch_size"):
         if not isinstance(getattr(config, name), int) or getattr(config, name) <= 0:
             raise ValueError(f"{name} must be a positive integer")
+    if not 0 <= config.value_cost_mse_weight <= 1:
+        raise ValueError("Cost MSE weight must lie in [0, 1]")
     if not 0 <= config.value_effect_weight <= 1:
         raise ValueError("Effect weight must lie in [0, 1]")
     if config.value_head_type == "expert_geometric":
+        if config.value_cost_mse_weight == config.value_effect_weight == config.value_geometry_regret_weight == 0:
+            raise ValueError("At least one expert-conditioned objective weight must be positive")
         if config.value_expert_training != "frozen" or not config.value_fixed_reference or config.value_target != "suffix":
             raise ValueError("Expert-conditioned routing currently requires frozen experts, fixed reference and suffix targets")
         if config.value_fit_enabled:
