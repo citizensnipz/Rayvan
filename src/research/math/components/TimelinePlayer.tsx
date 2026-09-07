@@ -8,6 +8,8 @@ export function TimelinePlayer<T>({
   onRemove,
   onGenerate,
   allowPlayback = true,
+  label = "MANUAL SEQUENCE",
+  intervalMs = 750,
 }: {
   frames: readonly Frame<T>[];
   index: number;
@@ -16,18 +18,47 @@ export function TimelinePlayer<T>({
   onRemove?: () => void;
   onGenerate?: () => void;
   allowPlayback?: boolean;
+  label?: string;
+  intervalMs?: number;
 }) {
   const [playing, setPlaying] = useState(false);
   const last = frames.length - 1;
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!media) return;
+    setReducedMotion(media.matches);
+    const update = () => setReducedMotion(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    const stop = () => {
+      if (document.hidden) setPlaying(false);
+    };
+    document.addEventListener("visibilitychange", stop);
+    return () => document.removeEventListener("visibilitychange", stop);
+  }, []);
   useEffect(() => {
     if (!playing || !allowPlayback || last < 1) return;
     if (index >= last) {
       setPlaying(false);
       return;
     }
-    const timer = window.setTimeout(() => onSelect(index + 1), 750);
+    const timer = window.setTimeout(
+      () => onSelect(index + 1),
+      reducedMotion ? Math.max(750, intervalMs) : intervalMs,
+    );
     return () => window.clearTimeout(timer);
-  }, [playing, allowPlayback, index, last, onSelect]);
+  }, [
+    playing,
+    allowPlayback,
+    index,
+    last,
+    onSelect,
+    intervalMs,
+    reducedMotion,
+  ]);
   const select = (n: number) => {
     setPlaying(false);
     onSelect(n);
@@ -35,7 +66,7 @@ export function TimelinePlayer<T>({
   return (
     <section className="math-timeline panel" aria-label="Timeline">
       <div className="math-timeline-top">
-        <span className="eyebrow">MANUAL SEQUENCE</span>
+        <span className="eyebrow">{label}</span>
         <span>
           {frames.length
             ? `Step ${frames[index]?.step ?? index} · frame ${index + 1} / ${frames.length}`
@@ -80,6 +111,9 @@ export function TimelinePlayer<T>({
         </button>
       </div>
       <div className="math-sequence-actions">
+        <button disabled={!frames.length} onClick={() => select(0)}>
+          Reset playback
+        </button>
         {onAppend && (
           <button
             disabled={frames.length >= 24}
@@ -113,7 +147,10 @@ export function TimelinePlayer<T>({
           </button>
         )}
         <small>
-          Edit the selected step with the controls above. Up to 24 steps.
+          {onAppend
+            ? "Edit the selected step with the controls above. Up to 24 steps."
+            : "Every frame is inspectable while paused. Scrub or step to compare."}
+          {reducedMotion ? " Reduced motion: slow, discrete playback." : ""}
         </small>
       </div>
     </section>

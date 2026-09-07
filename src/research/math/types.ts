@@ -14,7 +14,28 @@ export type ConceptId =
   | "gradient"
   | "jacobian"
   | "hessian"
-  | "latent";
+  | "latent"
+  | "operations"
+  | "basis"
+  | "gram"
+  | "basis-change"
+  | "rank"
+  | "descent"
+  | "field"
+  | "manifold"
+  | "curvature"
+  | "embeddings"
+  | "intrinsic"
+  | "neighbours"
+  | "need"
+  | "basins"
+  | "metrics"
+  | "sequential"
+  | "inhibition"
+  | "shape"
+  | "gradient-similarity"
+  | "neighbourhood"
+  | "umap";
 export interface Frame<T> {
   step: number;
   state: T;

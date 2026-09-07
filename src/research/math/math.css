@@ -64,6 +64,80 @@
   padding: 0 4px;
   border-radius: 3px;
 }
+.math-view-switch {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+}
+.math-view-switch button[aria-pressed="true"] {
+  border-color: #718550;
+  color: var(--accent);
+  background: #182219;
+}
+.math-science-note {
+  color: #a8b4c5;
+  font-size: 10px;
+  line-height: 1.6;
+  margin: 0;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.math-3d-wrap {
+  height: 490px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.math-3d-wrap > div:last-child {
+  min-height: 0;
+  flex: 1;
+}
+.math-3d-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px;
+  flex: none;
+}
+.math-3d-toolbar span {
+  font-size: 9px;
+  color: var(--muted);
+}
+.math-3d-label {
+  color: #e8edf5;
+  font:
+    10px "DM Mono",
+    monospace;
+  white-space: nowrap;
+  background: #0b0e13bb;
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+.math-matrix3-inputs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+.math-matrix3-inputs input {
+  padding: 5px;
+  font-size: 11px;
+}
+.math-categories {
+  max-height: calc(100vh - 115px);
+  overflow-y: auto;
+  scrollbar-color: #343d4c transparent;
+}
+@media (max-width: 1050px) {
+  .math-categories {
+    max-height: 220px;
+  }
+}
+@media (max-width: 650px) {
+  .math-3d-wrap {
+    height: 380px;
+  }
+}
 .math-module,
 .math-shell {
   min-width: 0;

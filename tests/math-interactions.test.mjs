@@ -159,6 +159,6 @@ test("unimplemented concepts are clearly marked and disabled", async () => {
     onSelect: () => {},
   });
   const disabled = [...document.querySelectorAll("button:disabled")];
-  assert.equal(disabled.length, 5);
-  assert.ok(disabled.every((n) => n.textContent.includes("Coming later")));
+  assert.equal(disabled.length, 1);
+  assert.ok(disabled.every((n) => n.textContent.includes("Coming Soon")));
 });

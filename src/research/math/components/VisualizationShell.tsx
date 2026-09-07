@@ -34,6 +34,7 @@ export function VisualizationShell({
   interpretation,
   meaning,
   timeline,
+  context = "INTERACTIVE / 2D SANDBOX",
 }: {
   title: string;
   subtitle: string;
@@ -44,12 +45,13 @@ export function VisualizationShell({
   interpretation: ReactNode;
   meaning: string;
   timeline: ReactNode;
+  context?: string;
 }) {
   return (
     <article className="math-shell">
       <div className="view-title">
         <div>
-          <p className="eyebrow">INTERACTIVE / 2D SANDBOX</p>
+          <p className="eyebrow">{context}</p>
           <h1>{title}</h1>
           <p>{subtitle}</p>
         </div>
