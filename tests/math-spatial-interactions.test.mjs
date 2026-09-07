@@ -186,17 +186,88 @@ test("shape matching accepts desired translation and neighbourhood presets alter
   await click("Contraction");
   assert.notEqual(geometry(), before);
 });
-test("representations preserve sample identity while changing projection and structure", async () => {
-  for (const mode of ["intrinsic", "embeddings", "neighbours"]) {
+test("embedding clusters normalize, compare selected samples and discard PC3", async () => {
+  await render(RepresentationLab, { mode: "embeddings" });
+  const initial = geometry(),
+    initialValues = metrics();
+  await fill("Cluster spread", 0.6);
+  assert.notEqual(geometry(), initial);
+  assert.notEqual(metrics(), initialValues);
+  await fill("Reference sample", 20);
+  assert.match(metrics(), /c1-20/);
+  await fill("Timeline frame", 40);
+  assert.match(metrics(), /Vector lengths1 \/ 1/);
+  await select("Embedding display", "pca");
+  assert.match(document.body.textContent, /PC3 discarded/);
+  await click("Reset embeddings");
+  assert.equal(metrics(), initialValues);
+  assert.equal(geometry(), initial);
+});
+test("intrinsic dimension has distinct line, sheet, curved and volume spectra", async () => {
+  await render(RepresentationLab, { mode: "intrinsic" });
+  assert.match(metrics(), /Noiseless generating dimensions2/);
+  const sheet = geometry();
+  await select("Structure", "line");
+  assert.match(metrics(), /Noiseless generating dimensions1/);
+  assert.match(metrics(), /Global linear effective dimension1/);
+  assert.notEqual(geometry(), sheet);
+  await select("Structure", "curved");
+  assert.match(metrics(), /Noiseless generating dimensions2/);
+  assert.notEqual(geometry(), sheet);
+  assert.equal(document.querySelectorAll("meter").length, 3);
+  await select("Structure", "volume");
+  assert.match(metrics(), /Noiseless generating dimensions3/);
+  await fill("Timeline frame", 0);
+  assert.match(metrics(), /Noiseless generating dimensions1/);
+  await click("Reset dimension example");
+  assert.equal(geometry(), sheet);
+});
+test("neighbourhood query, k, metric and projection recompute actual membership", async () => {
+  await render(RepresentationLab, { mode: "neighbours" });
+  const initial = metrics(),
+    initialGeometry = geometry();
+  await fill("Query q x", 1.4);
+  assert.notEqual(metrics(), initial);
+  assert.notEqual(geometry(), initialGeometry);
+  await fill("Nearest neighbours k", 12);
+  assert.equal(
+    document.querySelectorAll(".math-neighbour-ranking li").length,
+    12,
+  );
+  await select("Neighbour search space", "pca");
+  assert.match(document.body.textContent, /PC3 discarded/);
+  assert.doesNotMatch(metrics(), /Neighbour overlap with original 3D12 \/ 12/);
+  await select("Neighbour search space", "raw");
+  await select("Neighbour metric", "cosine");
+  await fill("Query q x", 0);
+  await fill("Query q y", 0);
+  await fill("Query q z", 0);
+  assert.match(metrics(), /Undefined for a zero cosine query/);
+  assert.doesNotMatch(metrics(), /NaN|Infinity/);
+  assert.equal(
+    document.querySelectorAll(".math-neighbour-ranking li").length,
+    0,
+  );
+  await click("Reset neighbourhood");
+  assert.equal(metrics(), initial);
+});
+test("representation entries cannot regress to title-only aliases", async () => {
+  const equations = [],
+    scenes = [],
+    controls = [];
+  for (const mode of ["embeddings", "intrinsic", "neighbours"]) {
     await render(RepresentationLab, { mode });
-    const before = metrics();
-    await select("Structure", "line");
-    assert.notEqual(metrics(), before);
-    await select("Projection method", "pca");
-    await fill("Timeline frame", 20);
-    assert.match(document.body.textContent, /sample 20/);
-    assert.ok(document.querySelector("option[disabled]"));
+    equations.push(document.querySelector(".math-equation").textContent);
+    scenes.push(geometry());
+    controls.push(
+      [...document.querySelectorAll(".math-controls input")]
+        .map((n) => n.getAttribute("aria-label"))
+        .join(),
+    );
   }
+  assert.equal(new Set(equations).size, 3);
+  assert.equal(new Set(scenes).size, 3);
+  assert.equal(new Set(controls).size, 3);
 });
 test("3D latent frames propagate manual deltas and renderer fallback is explicit", async () => {
   await render(LatentLab3D);
