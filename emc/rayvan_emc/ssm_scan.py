@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 import warnings
 import sys
+import subprocess
 
 import torch
 from torch.autograd.function import once_differentiable
@@ -25,7 +26,7 @@ def _cuda_extension():
 def _automatic_extension():
     try:
         return _cuda_extension()
-    except (RuntimeError, OSError, ImportError) as error:
+    except (RuntimeError, OSError, ImportError, subprocess.SubprocessError) as error:
         warnings.warn(f"SSM CUDA extension unavailable; using parallel_scan: {error}", RuntimeWarning)
         return None
 

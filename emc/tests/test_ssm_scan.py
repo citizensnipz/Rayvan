@@ -77,3 +77,28 @@ def test_fused_cuda_forward_backward_nondefault_stream(length):
         expected = torch.autograd.grad((reference * g).sum(), (a, b))
         for x, y in zip(actual, expected):
             torch.testing.assert_close(x, y, atol=3e-6, rtol=3e-5)
+
+
+@pytest.mark.parametrize('failure', ['compiler_missing', 'compiler_timeout'])
+def test_auto_falls_back_when_compiler_detection_subprocess_fails(monkeypatch, failure):
+    import subprocess
+    from rayvan_emc import ssm_scan
+    calls = []
+    def unavailable():
+        calls.append(1)
+        if failure == 'compiler_missing':
+            raise subprocess.CalledProcessError(1, ['where', 'cl'])
+        raise subprocess.TimeoutExpired(['where', 'cl'], 1)
+    monkeypatch.setattr(ssm_scan, '_cuda_extension', unavailable)
+    ssm_scan._automatic_extension.cache_clear()
+    try:
+        with pytest.warns(RuntimeWarning, match='using parallel_scan'):
+            assert ssm_scan.resolve_backend('auto', torch.device('cuda')) == 'parallel_scan'
+        assert ssm_scan.resolve_backend('auto', torch.device('cuda')) == 'parallel_scan'
+        assert len(calls) == 1  # Do not retry compilation at every trajectory step.
+        assert ssm_scan.resolve_backend('parallel_scan', torch.device('cuda')) == 'parallel_scan'
+        assert len(calls) == 1
+        with pytest.raises(subprocess.SubprocessError):
+            ssm_scan.resolve_backend('cuda', torch.device('cuda'))
+    finally:
+        ssm_scan._automatic_extension.cache_clear()
