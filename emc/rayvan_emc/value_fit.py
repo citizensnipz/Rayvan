@@ -137,7 +137,7 @@ def load_bank_payload(data, model, count, length, device):
 
 
 def train_fixed_bank(model, corpus, config, *, print_progress=True, evaluation_callback=None,
-                     progress_callback=None, progress_callback_interval=1, cancellation_callback=None):
+                     progress_callback=None, progress_callback_interval=1, cancellation_callback=None, prepare_only=False):
     from .training import TrainingMetrics, TrainingResult, TrainingCancelledError
     c = model.config
     if c.value_expert_training != 'frozen' or not c.value_fixed_reference or c.value_target != 'suffix':
@@ -201,6 +201,8 @@ def train_fixed_bank(model, corpus, config, *, print_progress=True, evaluation_c
                         c.num_modules*c.resolved_trajectory_steps*(c.resolved_trajectory_steps+1)//2),
                     fitting_expert_items=0)
     del reference
+    if prepare_only:
+        return train, held, metadata
     parameters = list(model.router.parameters())
     optimizer = torch.optim.AdamW(parameters, lr=config.learning_rate, weight_decay=config.weight_decay)
     initial_train = bank_metrics(model.router, train, means)

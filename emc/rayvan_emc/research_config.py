@@ -86,6 +86,7 @@ class RoutingConfig:
     value_replay_batch_size: int = 64
     value_fit_bank_path: str = ""
     value_fit_enabled: bool = False
+    value_spectral_comparison: bool = False
     value_fit_prefixes: int = 64
     value_fit_updates: int = 1000
     value_fixed_reference: bool = True
@@ -183,6 +184,8 @@ class ExperimentConfig:
     def __post_init__(self) -> None:
         from .spectral_config import spectral_config
         spectral_config(self.routing)
+        if self.routing.value_spectral_comparison and (self.architecture != 'counterfactual_value_emc' or not self.routing.value_fit_enabled):
+            raise ValueError('Spectral bank comparison requires counterfactual value architecture and fixed-bank fitting')
         if self.schema_version != SCHEMA_VERSION:
             raise ValueError(f"unsupported experiment schema version: {self.schema_version}")
         if self.suite not in SUITES:

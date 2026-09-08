@@ -230,6 +230,48 @@ def run_experiment(
                 },
             )
 
+        if config.routing.value_spectral_comparison:
+            from .value_fit import train_fixed_bank, load_bank_payload
+            from .spectral_experiment import fit_comparison
+            writer.emit('spectral_progress', phase='Preparing frozen suffix bank', results=[])
+            train, held, bank = train_fixed_bank(model, corpus, training_config,
+                cancellation_callback=cancelled, prepare_only=True)
+            # Cached fitting runs on CPU, independently of the source GPU backend.
+            train = load_bank_payload(train.payload(), model, config.routing.value_fit_prefixes, config.model.context_length, 'cpu')
+            held = load_bank_payload(held.payload(), model, config.routing.value_fit_prefixes, config.model.context_length, 'cpu')
+            from dataclasses import fields
+            from .spectral_config import SpectralConfig
+            spectral = replace(model.config, **{f.name: getattr(config.routing, f.name) for f in fields(SpectralConfig)},
+                               router_type='spectral_geometric', loss_free_balance_enabled=False, refractory_enabled=False)
+            started = time.perf_counter()
+            def spectral_progress(name, completed, total, rows):
+                writer.emit('spectral_progress', phase=name, completed=completed, total=total,
+                            elapsed_seconds=time.perf_counter()-started,
+                            results=[{k:r[k] for k in ('variant','train','held_out','dead_basins') if k in r} for r in rows], bank=bank)
+            previous_threads = torch.get_num_threads()
+            try:
+                torch.set_num_threads(1)
+                results = fit_comparison(train, held, spectral, updates=config.routing.value_fit_updates,
+                    learning_rate=config.training.learning_rate, seed=config.routing.value_router_seed,
+                    output=run_directory/'checkpoints', progress_callback=spectral_progress, cancellation_callback=cancelled)
+            finally:
+                torch.set_num_threads(previous_threads)
+            report = dict(bank=bank, results=results, config=config.to_dict(),
+                          objective='fixed_reference_suffix_preferences', fitting_device='cpu',
+                          source_checkpoint=config.routing.value_checkpoint_path,
+                          caveat='Fixed-state comparison; not an end-to-end trajectory deployment test. Learned baseline is the legacy mean-pooled geometric router, not expert-conditioned attention.')
+            _write_json(run_directory/'spectral-report.json', report)
+            summary = dict(schema_version=3, run_id=resolved_id, status='completed', name=config.name or resolved_id,
+                suite=config.suite, architecture=config.architecture, experts=dict(config.experts), tags=list(config.tags),
+                started_at=started_at, completed_at=datetime.now(timezone.utc).isoformat(), spectral_comparison=report,
+                headline=dict(objective='spectral_fixed_bank', throughput_unit='updates/s',
+                    tokens_processed=13*config.routing.value_fit_updates, runtime_seconds=time.perf_counter()-started,
+                    perplexity=None, context_tokens_per_second=None), git=metadata['git'])
+            _write_json(run_directory/'summary.json', summary)
+            _set_status(run_directory,'completed')
+            writer.emit('run_completed', run_id=resolved_id, summary=summary)
+            return summary
+
         result = train_model(
             model,
             corpus,
@@ -750,4 +792,3 @@ def _json_safe(value: Any) -> Any:
 
 def _run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8]
-

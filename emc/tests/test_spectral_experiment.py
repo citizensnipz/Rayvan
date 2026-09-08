@@ -9,6 +9,47 @@ from rayvan_emc.value_routing import StateBatch
 from test_spectral_routing import config
 
 
+def test_console_local_checkpoint_bank_creation_and_reuse(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from test_value_experiment import experiment
+    from rayvan_emc.research_runner import run_experiment
+    from rayvan_emc.checkpoint import load_model_checkpoint
+    import rayvan_emc.value_fit as vf
+    torch.set_num_threads(1)
+    c = experiment(experts={'gpt': 2, 'ssm': 2, 'recurrent': 2, 'delta': 2})
+    source = run_experiment(c, runs_directory=tmp_path, run_id='source')
+    path = source['training_result']['latest_checkpoint']
+    before = deepcopy(load_model_checkpoint(path).model.state_dict())
+    c = replace(c, routing=replace(c.routing, value_checkpoint_path=path,
+        value_expert_training='frozen', value_fit_enabled=True, value_spectral_comparison=True,
+        value_fit_prefixes=3, value_fit_updates=1))
+    assert type(c).from_dict(c.to_dict()).routing.value_spectral_comparison
+    first = run_experiment(c, runs_directory=tmp_path, run_id='spectral-first')['spectral_comparison']
+    assert len(first['results']) == 13
+    assert first['bank']['fitting_expert_items'] == 0
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Reuse must not execute bank measurements')
+    monkeypatch.setattr(vf, 'measure_bank', forbidden)
+    c = replace(c, routing=replace(c.routing, value_fit_bank_path=first['bank']['bank_file']))
+    second = run_experiment(c, runs_directory=tmp_path, run_id='spectral-reused')['spectral_comparison']
+    assert second['bank']['bank_reused']
+    assert first['bank']['bank_sha256'] == second['bank']['bank_sha256']
+    for a,b in zip(first['results'], second['results']):
+        assert a['held_out'] == b['held_out']
+    after = load_model_checkpoint(path).model.state_dict()
+    assert all(torch.equal(v, after[k]) for k,v in before.items())
+
+
+def test_spectral_comparison_cancellation():
+    import pytest
+    from rayvan_emc.training import TrainingCancelledError
+    x = torch.randn(3,8,8)
+    bank = FitBank((StateBatch(x,torch.zeros(3,dtype=torch.long),0),),
+                   (torch.rand(3,3),),torch.arange(24).reshape(3,8))
+    with pytest.raises(TrainingCancelledError):
+        fit_comparison(bank,bank,config(),cancellation_callback=lambda: True)
+
+
 def test_collision_detects_missing_information():
     descriptors = torch.tensor([[0.,0.],[0.,0.],[5.,5.],[5.,5.]])
     losses = torch.tensor([[0.,1.],[1.,0.],[0.,1.],[1.,0.]])

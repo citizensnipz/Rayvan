@@ -66,6 +66,27 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel, o
     ...projectionSeries,
   ];
 
+  if (detail?.config?.routing.value_spectral_comparison || events.some(e => e.type === "spectral_progress")) {
+    const event = events.filter(e => e.type === "spectral_progress").at(-1);
+    const report = detail?.summary?.spectral_comparison;
+    const rows = (report?.results ?? event?.results ?? []) as Array<{variant: string; train: Record<string, number>; held_out: Record<string, number>; dead_basins?: number}>;
+    const bank = (report?.bank ?? event?.bank ?? {}) as Record<string, unknown>;
+    return <div className="live-view"><section className="panel"><h2>Spectral geometry — frozen-bank comparison</h2>
+      <p>{state} · {String(event?.phase ?? "Preparing local checkpoint and bank")}</p>
+      <p>{String(event?.completed ?? 0)} / {String(event?.total ?? "—")} router updates · {rows.length}/13 variants complete</p>
+      <p>Elapsed fitting: {duration(event?.elapsed_seconds)} · {typeof event?.elapsed_seconds === "number" && event.elapsed_seconds > 0 ? compact(Number(event.completed)/event.elapsed_seconds) : "—"} updates/s (includes descriptor setup and variant audits)</p>
+      {onCancel && ["initializing","running","validation"].includes(state) && <button onClick={onCancel}>Stop safely</button>}
+      <p>Fixed-reference suffix regret, not language loss or perplexity. No experts execute during fitting. Cached fitting runs on CPU; tok/s is not applicable.</p>
+      <p>Bank: {String(bank.bank_file ?? "pending")} · {bank.bank_reused ? "reused" : "measured"}</p>
+      <p>Fingerprint: {String(bank.bank_sha256 ?? "pending")}</p>
+      <p>Compare held-out regret with both uniform and the training-derived constant-per-step baseline. This does not yet test deployment on trajectories chosen by the new router.</p>
+      <div className="table-wrap"><table><thead><tr><th>Variant</th><th>Train regret</th><th>Held-out regret ↓</th><th>Uniform</th><th>Constant/step</th><th>Top-1</th><th>Pairwise</th><th>Unused basins</th></tr></thead><tbody>
+      {rows.map(row => <tr key={row.variant}><td>{row.variant}</td><td>{compact(row.train.routing_regret,5)}</td><td>{compact(row.held_out.routing_regret,5)}</td><td>{compact(row.held_out.uniform_random_regret,5)}</td><td>{compact(row.held_out.constant_per_step_regret,5)}</td><td>{formatPercent(row.held_out.oracle_top1)}</td><td>{formatPercent(row.held_out.pairwise_ranking_accuracy)}</td><td>{row.dead_basins ?? "—"}</td></tr>)}
+      </tbody></table></div><p>Full report, per-step counts, geometry diagnostics and timings are saved in spectral-report.json in this run's directory.</p>
+      <details><summary>Detailed results: per-step routing, basins and descriptor diagnostics</summary><pre>{JSON.stringify(report ?? event?.results ?? [], null, 2)}</pre></details>
+      <details><summary>Run log</summary><pre>{logs.join("\n")}</pre></details>
+      </section></div>;
+  }
   return <div className="live-view">
     <section className="run-header panel">
       <div><p className="eyebrow">{detail ? "Stored run" : "Live experiment"}</p><h2>{detail?.summary?.name ?? runId ?? "Waiting for a run"}</h2><div className="state-line"><span className={`state-dot ${state}`} />{state}<small>{runId}</small></div></div>
@@ -181,4 +202,3 @@ function projectionLines(detail: RunDetail | undefined, events: ResearchEvent[],
     data: [endPoint, ...projected],
   }];
 }
-
