@@ -1,0 +1,113 @@
+import {useEffect,useMemo,useState} from 'react';
+import {invoke} from '@tauri-apps/api/core';
+import {listen} from '@tauri-apps/api/event';
+import * as echarts from 'echarts/core';
+import {ScatterChart} from 'echarts/charts';
+import {EChart} from '../research/charts/EChart';
+echarts.use([ScatterChart]);
+type Obj=Record<string,any>;
+const families=['gpt','ssm','recurrent','delta'];
+const number=(v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v);
+const fmt=(v:unknown)=>number(v)?v.toFixed(4):'—';
+const mean=(a:number[])=>a.reduce((s,x)=>s+x,0)/a.length;
+const quant=(a:number[],q:number)=>{const s=[...a].sort((a,b)=>a-b);return s[Math.floor((s.length-1)*q)];};
+function ranks(a:number[]){const s=[...a].sort((a,b)=>a-b),map=new Map<number,number>();for(let i=0;i<s.length;){let j=i+1;while(j<s.length&&s[j]===s[i])j++;map.set(s[i],(i+j-1)/2);i=j;}return a.map(x=>map.get(x)!);}
+function corr(a:number[],b:number[]){if(a.length<3)return null;const ma=mean(a),mb=mean(b);let ab=0,aa=0,bb=0;a.forEach((v,i)=>{ab+=(v-ma)*(b[i]-mb);aa+=(v-ma)**2;bb+=(b[i]-mb)**2;});return aa*bb>0?ab/Math.sqrt(aa*bb):null;}
+const colors=['#38c6cc','#d8ff75','#8e69ff','#f2d276','#ef7b86'];
+function chart(title:string){return {animation:false,title:{text:title,textStyle:{color:'#e8edf5',fontSize:13}},tooltip:{trigger:'item'},grid:{left:65,right:45,top:50,bottom:65},xAxis:{type:'value',scale:true},yAxis:{type:'value',scale:true},dataZoom:[{type:'inside'}]};}
+
+export function TokenLab({initialConfig}:{initialConfig?:Obj}={}){
+ const [config,setConfig]=useState<Obj|undefined>(initialConfig),[runs,setRuns]=useState<Obj[]>([]),[detail,setDetail]=useState<Obj>(),[progress,setProgress]=useState<Obj>(),[active,setActive]=useState<string>(),[error,setError]=useState(''),[notice,setNotice]=useState(''),[mixed,setMixed]=useState(false);
+ const refresh=()=>invoke<Obj[]>('list_token_labs').then(setRuns);
+ const reopen=async(id:string)=>{const d=await invoke<Obj>('get_token_lab',{runId:id});setDetail(d);setProgress(undefined);if(d.config){setConfig(d.config);setMixed(new Set(d.config.families).size>1);}};
+ useEffect(()=>{let gone=false;const off: Array<()=>void>=[];
+  Promise.all([invoke<Obj>('get_token_lab_schema'),invoke<Obj[]>('list_token_labs'),invoke<Obj|null>('get_active_token_lab')]).then(([s,r,a])=>{if(gone)return;setConfig(s.defaults);setRuns(r);if(a)setActive(a.runId);}).catch(e=>setError(String(e)));
+  for(const [name,handler] of [['token-lab-log',(e:Obj)=>setNotice(String(e.line??''))],['token-lab-event',(e:Obj)=>setProgress(e)],['token-lab-process-exit',(e:Obj)=>{setActive(undefined);void reopen(e.runId).catch(e=>setError(String(e)));void refresh();}]] as const){void listen<Obj>(name,e=>{if(!gone)handler(e.payload);}).then(f=>{if(gone)f();else off.push(f);});}
+  return()=>{gone=true;off.forEach(f=>f());};
+ },[]);
+ const set=(key:string,value:any)=>setConfig(c=>({...c,[key]:value}));
+ const action=async(mode:string)=>{try{setError('');if(mode==='validate'){const r=await invoke<Obj>('validate_token_lab',{config});setNotice(r.warning);}
+  if(mode==='run'){await invoke('validate_token_lab',{config});const r=await invoke<Obj>('start_token_lab',{request:{config}});setActive(r.runId);setDetail(undefined);setProgress(undefined);}
+  if(mode==='stop')await invoke('cancel_token_lab');}catch(e){setError(String(e));}};
+ if(!config)return <section className="panel">{error||'Loading Token Lab…'}</section>;
+ const field=(key:string,label:string,min=1,step=1)=><label key={key}>{label}<input type="number" min={min} step={step} value={config[key]} onChange={e=>set(key,Number(e.target.value))}/></label>;
+ return <div className="token-lab">
+  <section className="panel"><h2>Token Lab · observe, don’t route</h2><p>Fresh standalone experts with a common contextual encoder and readout. This does not load your EMC checkpoint, train a router, or assign expert roles. Avoid running another GPU experiment concurrently.</p>
+   <fieldset disabled={Boolean(active)}><div className="lab-fields">
+    <label>Run name<input value={config.name} onChange={e=>set('name',e.target.value)}/></label>
+    <label>Dataset<select value={config.dataset} onChange={e=>set('dataset',e.target.value)}><option value="tinystories">TinyStories</option><option value="capability_10">10-task capability suite</option></select></label>
+    <label>Topology<select value={config.topology} onChange={e=>set('topology',e.target.value)}><option value="independent">Independent / same-state counterfactual</option><option value="serial">Serial / stage improvements</option></select></label>
+    <label>Composition<select value={mixed?'mixed':'homogeneous'} onChange={e=>{setMixed(e.target.value==='mixed');if(e.target.value==='homogeneous')set('families',Array(config.families.length).fill(config.families[0]));}}><option value="homogeneous">Homogeneous</option><option value="mixed">Mixed ordered experts</option></select></label>
+    <label>Expert count<input type="number" min={1} max={8} value={config.families.length} onChange={e=>set('families',Array.from({length:Math.min(8,Math.max(1,+e.target.value))},(_,i)=>mixed?(config.families[i]??'gpt'):config.families[0]))}/></label>
+    {(mixed?config.families:[config.families[0]]).map((f:string,i:number)=><label key={i}>{mixed?`Expert ${i+1}`:'Expert family'}<select value={f} onChange={e=>set('families',mixed?config.families.map((v:string,j:number)=>i===j?e.target.value:v):config.families.map(()=>e.target.value))}>{families.map(f=><option key={f}>{f}</option>)}</select></label>)}
+    <label>Model preset<select defaultValue="custom" onChange={e=>{const d=Number(e.target.value);if(d)setConfig(c=>({...c,latent_dim:d,hidden_dim:d*2,heads:4}));}}><option value="custom">Custom / current</option><option value="32">Small · 32</option><option value="64">Quick · 64</option><option value="128">Medium · 128</option></select></label>
+    {field('latent_dim','Latent dimension',4,4)}{field('hidden_dim','Expert hidden dimension',4,4)}{field('heads','Attention / Delta heads')}{field('seed','Seed',0)}{field('sequence_length','Maximum prefix length',4)}{field('train_steps','Training optimizer steps',0)}{field('learning_rate','Training learning rate',.000001,.0001)}{field('batch_size','Training batch size')}{field('evaluation_samples','Evaluation candidate locations')}
+    <label>Neighbourhood<select value={config.window} onChange={e=>set('window',+e.target.value)}>{[4,8,16,32].map(v=><option key={v}>{v}</option>)}</select></label>
+    {field('measurement_rate','Location sampling probability',.001,.05)}{field('reference_size','Training reference bank size')}{field('analysis_cap','Analysis location cap (uniform reservoir)')}{field('knn_k','k nearest neighbours')}{field('tie_epsilon','Loss tie tolerance (nats)',0,.001)}
+    <label>Device<select value={config.device} onChange={e=>set('device',e.target.value)}><option>cpu</option><option>cuda</option></select></label>
+    {config.dataset==='tinystories'&&<>{field('train_stories','TinyStories training stories')}{field('validation_stories','TinyStories validation stories')}</>}
+    <label><input type="checkbox" checked disabled/> Core measurements</label>
+    {['spectral_enabled','deep_enabled','save_raw'].map((k,i)=><label key={k}><input type="checkbox" checked={config[k]} onChange={e=>set(k,e.target.checked)}/>{['Spectral measurements','Deep / gradient probes','Save raw observations'][i]}</label>)}
+    {field('spectral_rate','Spectral sampling probability',0,.05)}{field('deep_rate','Gradient sampling probability',0,.01)}
+   </div></fieldset>
+   <p>Training budget: {config.train_steps*config.batch_size} endpoint targets. All experts receive every training example; shared layers receive the mean of baseline and expert/stage losses. Serial stages also receive intermediate supervision. No performance-based allocation.</p>
+   <div className="lab-actions"><button disabled={Boolean(active)} onClick={()=>void action('validate')}>Validate</button><button disabled={Boolean(active)} onClick={()=>void action('run')}>Run Token Lab</button><button disabled={!active} onClick={()=>void action('stop')}>Stop</button><button onClick={()=>void refresh().catch(e=>setError(String(e)))}>Refresh saved runs</button><select aria-label="Reopen saved Token Lab run" value={detail?.runId??''} onChange={e=>void reopen(e.target.value).catch(e=>setError(String(e)))}><option value="">Reopen saved Token Lab run</option>{runs.map(r=><option key={r.run_id} value={r.run_id}>{r.name} · {r.run_id} · {r.status}</option>)}</select></div>
+   {notice&&<p>{notice}</p>}{error&&<p role="alert">{error}</p>}
+  </section>
+  <section className="panel"><h3>Run status</h3><p>{active??detail?.runId??'No run selected'} · {progress?.phase??detail?.summary?.status??detail?.status?.status??'Idle'}</p><p>{progress?.step??0} / {progress?.total??'—'} · {progress?.measured_locations??detail?.summary?.measured_locations??0} locations · {progress?.observations??detail?.summary?.observations??0} expert observations · {fmt(progress?.elapsed_seconds??detail?.summary?.runtime_seconds)} seconds</p><p>Current expert/stage: {progress?.expert_id??'—'} / {progress?.expert_stage??'—'}. Training endpoint targets: {progress?.training_targets??detail?.summary?.training_targets??'—'}. Training context exposures: {progress?.training_context_tokens??detail?.summary?.training_context_tokens??'—'} tokens. Exact-prefix exclusions: {detail?.summary?.duplicate_prefixes_skipped??'—'}.</p><p>End-to-end measured locations/s: {fmt(detail?.summary?.locations_per_second)}. Probe + measurement seconds: {fmt(detail?.summary?.probe_and_measurement_seconds)} (includes expert execution; not isolated overhead).</p>{detail?.status?.error&&<p role="alert">{detail.status.error}</p>}<p>Feature/diagnostic time excluding instrumented expert forward: {fmt(detail?.summary?.feature_and_diagnostic_seconds)} seconds. FFN hook overhead remains counted with expert execution.</p>{detail?.logs&&<details><summary>Logs</summary><pre>{detail.logs}</pre></details>}</section>
+  {detail?.analysis&&<Explorer detail={detail}/>}
+ </div>;
+}
+
+export function Explorer({detail}:{detail:Obj}){
+ const schema:Obj[]=detail.schema??[],all:Obj[]=detail.rows??[],expertIds=Object.keys(detail.analysis.experts);
+ const [x,setX]=useState('effective_rank'),[x2,setX2]=useState('predictive_entropy'),[y,setY]=useState('improvement'),[expert,setExpert]=useState(expertIds[0]??''),[task,setTask]=useState('all'),[stage,setStage]=useState('all'),[pos,setPos]=useState(0),[maxPos,setMaxPos]=useState(512),[quantile,setQuantile]=useState('all'),[pair,setPair]=useState(''),[q,setQ]=useState(.2),[matrixCategory,setMatrixCategory]=useState('Shape'),[matrixMode,setMatrixMode]=useState('spearman'),[sort,setSort]=useState('spearman');
+ const numericSchema=schema.filter(s=>all.some(r=>number(r[s.key])));
+ const base=useMemo(()=>all.filter(r=>(task==='all'||r.task_id===task)&&(stage==='all'||String(r.expert_stage)===stage)&&r.position>=pos&&r.position<=maxPos),[all,task,stage,pos,maxPos]);
+ const points=useMemo(()=>{
+  let rows=base;
+  if(pair){const [a,b]=pair.split(' vs ');const lookup=new Map(base.filter(r=>r.expert_id===b).map(r=>[r.sample_id,r]));rows=base.filter(r=>r.expert_id===a&&lookup.has(r.sample_id)).map(r=>({...r,pair_loss_difference:r.expert_loss-lookup.get(r.sample_id)!.expert_loss}));}
+  else if(expert!=='all')rows=rows.filter(r=>r.expert_id===expert);
+  if(quantile!=='all'&&rows.length){const low=quant(rows.map(r=>r.expert_loss),q),high=quant(rows.map(r=>r.expert_loss),1-q);rows=rows.filter(r=>quantile==='low'?r.expert_loss<=low:r.expert_loss>=high);}
+  return rows;
+ },[base,pair,expert,quantile,q]);
+ const outcome=pair?'pair_loss_difference':y,valid=points.filter(r=>number(r[x])&&number(r[outcome]));
+ const xs=valid.map(r=>r[x]),ys=valid.map(r=>r[outcome]);const pearson=corr(xs,ys),spearman=corr(ranks(xs),ranks(ys));
+ const selector=(value:string,setter:(s:string)=>void)=><select value={value} onChange={e=>setter(e.target.value)}>{[...new Set(numericSchema.map(s=>s.category))].map(cat=><optgroup label={cat} key={cat}>{numericSchema.filter(s=>s.category===cat).map(s=><option value={s.key} key={s.key}>{s.display_name} [{s.role}]</option>)}</optgroup>)}</select>;
+ const scatter=useMemo(()=>{
+  const series:Obj[]=[];const ids=[...new Set(valid.map(r=>r.expert_id))];for(const [i,id] of ids.entries())series.push({type:'scatter',name:id,symbolSize:4,large:true,largeThreshold:2000,itemStyle:{opacity:.35,color:colors[i%colors.length]},data:valid.filter(r=>r.expert_id===id).map(r=>[r[x],r[outcome]])});
+  if(valid.length>3){const mx=mean(xs),my=mean(ys),den=xs.reduce((s,v)=>s+(v-mx)**2,0);if(den){const slope=xs.reduce((s,v,i)=>s+(v-mx)*(ys[i]-my),0)/den;const bounds=[Math.min(...xs),Math.max(...xs)];series.push({type:'line',name:'Linear fit (display subset)',showSymbol:false,data:bounds.map(v=>[v,my+slope*(v-mx)])});}
+   const bins: number[][]=[];for(let i=0;i<5;i++){const lo=quant(xs,i/5),hi=quant(xs,(i+1)/5);const rr=valid.filter(r=>r[x]>=lo&&(i===4?r[x]<=hi:r[x]<hi));if(rr.length>=10)bins.push([mean(rr.map(r=>r[x])),quant(rr.map(r=>r[outcome]),.5)]);}series.push({type:'line',name:'Binned median (n ≥ 10)',data:bins});}
+  return {...chart('Attribute vs performance'),xAxis:{type:'value',name:x,scale:true},yAxis:{type:'value',name:outcome,scale:true},legend:{top:24,textStyle:{color:'#aaa'}},series};
+ },[valid,x,outcome]);
+ const heat=useMemo(()=>{const rr=points.filter(r=>number(r[x])&&number(r[x2])&&number(r[outcome]));const cells: number[][]=[];if(rr.length){const a=rr.map(r=>r[x]),b=rr.map(r=>r[x2]);for(let i=0;i<4;i++)for(let j=0;j<4;j++){const ax=quant(a,i/4),bx=quant(a,(i+1)/4),ay=quant(b,j/4),by=quant(b,(j+1)/4);const group=rr.filter(r=>r[x]>=ax&&(i===3?r[x]<=bx:r[x]<bx)&&r[x2]>=ay&&(j===3?r[x2]<=by:r[x2]<by));if(group.length>=10)cells.push([i,j,mean(group.map(r=>r[outcome])),group.length]);}}
+  return {...chart('Feature interaction · quantile bins'),xAxis:{type:'category',data:['Q1','Q2','Q3','Q4'],name:x},yAxis:{type:'category',data:['Q1','Q2','Q3','Q4'],name:x2},visualMap:{min:cells.length?Math.min(...cells.map(c=>c[2])):0,max:cells.length?Math.max(...cells.map(c=>c[2])):1,calculable:true,orient:'horizontal',bottom:0},series:[{type:'heatmap',data:cells}]};},[points,x,x2,outcome]);
+ const data=detail.analysis.experts[expert==='all'?expertIds[0]:expert]??detail.analysis.experts[expertIds[0]];
+ const associations=pair?detail.analysis.pairs[pair]?.associations:data?.associations[y];
+ const ranked=[...(associations??[])].sort((a,b)=>Math.abs(b[sort]??0)-Math.abs(a[sort]??0));
+ const matrixKeys=[...new Set([x,x2,...numericSchema.filter(s=>s.category===matrixCategory).map(s=>s.key)])].slice(0,30);
+ const correlations=data?.correlations??[];const corrMap=new Map<string,Obj>(correlations.flatMap((c:Obj)=>[[`${c.a}\u0000${c.b}`,c],[`${c.b}\u0000${c.a}`,c]] as Array<[string,Obj]>));const matrix={...chart('Feature redundancy · selected category + axes (up to 30)'),xAxis:{type:'category',data:matrixKeys,axisLabel:{rotate:70,fontSize:8}},yAxis:{type:'category',data:matrixKeys,axisLabel:{fontSize:8}},grid:{left:160,right:35,top:45,bottom:145},visualMap:{min:-1,max:1,orient:'horizontal',bottom:0},series:[{type:'heatmap',data:matrixKeys.flatMap((a,i)=>matrixKeys.flatMap((b,j)=>{const c=corrMap.get(`${a}\u0000${b}`);const v=a===b?1:c?.[matrixMode];return number(v)?[[i,j,v]]:[];}))}]};
+ return <>
+ <section className="panel"><h2>Attribute vs performance explorer</h2><p>Showing up to 10,000 stored display rows. Filtered scatter/trends/heatmaps use this display subset; saved rankings and predictive models use the documented analysis reservoir ({detail.summary.analysis_locations} locations). Raw observations are never display-downsampled. All analyses are exploratory.</p>
+ <div className="lab-fields"><label>X attribute{selector(x,setX)}</label><label>Y outcome<select value={y} onChange={e=>setY(e.target.value)}>{['expert_loss','improvement','relative_advantage','baseline_loss','expert_rank'].map(k=><option key={k}>{k}</option>)}</select></label><label>Expert<select value={expert} onChange={e=>setExpert(e.target.value)}><option value="all">Compare experts</option>{expertIds.map(id=><option key={id}>{id}</option>)}</select></label>
+ <label>Task<select value={task} onChange={e=>setTask(e.target.value)}><option value="all">All tasks</option>{[...new Set(all.map(r=>r.task_id))].map(t=><option key={t}>{t}</option>)}</select></label><label>Stage<select value={stage} onChange={e=>setStage(e.target.value)}><option value="all">All stages</option>{[...new Set(all.map(r=>r.expert_stage))].map(t=><option key={t}>{t}</option>)}</select></label>
+ <label>Position minimum<input type="number" value={pos} onChange={e=>setPos(+e.target.value)}/></label><label>Position maximum<input type="number" value={maxPos} onChange={e=>setMaxPos(+e.target.value)}/></label><label>Loss quantile filter<select value={quantile} onChange={e=>setQuantile(e.target.value)}><option value="all">All</option><option value="low">Lowest loss</option><option value="high">Highest loss</option></select></label><label>Tail fraction<input type="number" min={.05} max={.45} step={.05} value={q} onChange={e=>setQ(Math.min(.45,Math.max(.05,+e.target.value)))}/></label>
+ <label>Same-state expert pair<select value={pair} onChange={e=>setPair(e.target.value)}><option value="">None</option>{Object.keys(detail.analysis.pairs).map(p=><option key={p}>{p}</option>)}</select></label></div>
+ <p>{schema.find(s=>s.key===x)?.definition}. {pair?'Negative L_A − L_B means A wins. No serial counterfactual comparisons.':'Improvement is baseline NLL minus post-expert NLL. Raw loss correlations can reflect common difficulty.'}</p><p>Display subset n={valid.length}; Pearson {fmt(pearson)}; Spearman {fmt(spearman)}. Correlation is not causation. Pooled expert correlations may be confounded; inspect individual experts.</p><EChart option={scatter} replace/>
+ </section>
+ <section className="panel"><h3>Attribute overview · saved analysis</h3><p>Selected expert (first expert when “compare” is selected), unfiltered saved analysis. Task/position filters above apply to display charts only. All outcomes available via Y selector. Pointwise intervals are not corrected for searching many features.</p><label>Sort by<select value={sort} onChange={e=>setSort(e.target.value)}><option>spearman</option><option>pearson</option><option>mi</option><option>binned_eta_squared</option></select></label><div className="lab-table"><table><thead><tr><th>Attribute</th><th>Role</th><th>n</th><th>Pearson</th><th>Spearman</th><th>|ρ|</th><th>95% bootstrap</th><th>Quantile MI</th><th>Binned η²</th></tr></thead><tbody>{ranked.map((a:Obj)=><tr key={a.feature} onClick={()=>setX(a.feature)}><td>{a.feature}</td><td>{schema.find(s=>s.key===a.feature)?.role}</td><td>{a.n}</td><td>{fmt(a.pearson)}</td><td>{fmt(a.spearman)}</td><td>{fmt(number(a.spearman)?Math.abs(a.spearman):null)}</td><td>{a.interval?.map(fmt).join(' … ')??'—'}</td><td>{fmt(a.mi)}</td><td>{fmt(a.binned_eta_squared)}</td></tr>)}</tbody></table></div></section>
+ <section className="panel"><h3>Low / high outcome comparison · display subset</h3><p>Current outcome tails; “high improvement” is good, “high loss” is bad. Equality ties can enlarge groups.</p><TailComparison rows={points} feature={x} outcome={outcome} q={q}/>{pair&&<details><summary>A wins / ties / B wins · saved full analysis sample</summary><pre>{JSON.stringify(detail.analysis.pairs[pair]?.win_groups,null,2)}</pre></details>}</section>
+ <section className="panel"><h3>Feature interactions</h3><label>Second attribute{selector(x2,setX2)}</label><p>Display subset mean selected outcome, cells with n≥10 only. Cell data include count. Quantile bins; exploratory, not independent confirmation.</p><EChart option={heat} replace/></section>
+ <section className="panel"><h3>Correlation / redundancy</h3><label>Feature category<select value={matrixCategory} onChange={e=>setMatrixCategory(e.target.value)}>{[...new Set(numericSchema.map(s=>s.category))].map(c=><option key={c}>{c}</option>)}</select></label><select aria-label="Correlation method" value={matrixMode} onChange={e=>setMatrixMode(e.target.value)}><option>spearman</option><option>pearson</option></select><EChart option={matrix} replace/><details><summary>All feature correlations (saved analysis)</summary><pre>{JSON.stringify(correlations,null,2)}</pre></details></section>
+ <section className="panel"><h3>Held-out multivariate predictive probes</h3><p>Standardized ridge regression; sample-ID grouped 70/30 split within held-out expert observations. Target-derived and post-expert features excluded. A failed linear probe cannot rule out nonlinear information.</p><pre>{JSON.stringify(pair?detail.analysis.pairs[pair]?.ridge:data?.ridge,null,2)}</pre></section>
+ <section className="panel"><h2>Token Lab Report</h2><pre className="lab-report">{detail.report}</pre><details><summary>Exact feature catalogue and availability</summary><pre>{JSON.stringify(schema,null,2)}</pre></details></section>
+ </>;
+}
+
+function TailComparison({rows,feature,outcome,q}:{rows:Obj[];feature:string;outcome:string;q:number}){
+ const valid=rows.filter(r=>number(r[feature])&&number(r[outcome]));if(!valid.length)return <p>No available observations.</p>;
+ const lo=quant(valid.map(r=>r[outcome]),q),hi=quant(valid.map(r=>r[outcome]),1-q);
+ const groups=[valid.filter(r=>r[outcome]<=lo),valid.filter(r=>r[outcome]>lo&&r[outcome]<hi),valid.filter(r=>r[outcome]>=hi)].map(g=>g.map(r=>r[feature]));
+ const std=(a:number[])=>Math.sqrt(mean(a.map(x=>(x-mean(a))**2)));const den=Math.sqrt((std(groups[0])**2+std(groups[2])**2)/2);
+ return <><table><thead><tr><th>Group</th><th>n</th><th>Mean</th><th>Median</th><th>Std</th></tr></thead><tbody>{groups.map((g,i)=><tr key={i}><td>{['Low','Middle','High'][i]}</td><td>{g.length}</td><td>{fmt(mean(g))}</td><td>{fmt(quant(g,.5))}</td><td>{fmt(std(g))}</td></tr>)}</tbody></table><p>Standardized high-minus-low difference: {fmt(den>0?(mean(groups[2])-mean(groups[0]))/den:null)}</p></>;
+}

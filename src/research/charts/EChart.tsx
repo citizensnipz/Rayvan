@@ -7,7 +7,7 @@ import type { EChartsCoreOption } from "echarts/core";
 
 echarts.use([LineChart, BarChart, HeatmapChart, DataZoomComponent, GridComponent, LegendComponent, MarkLineComponent, TitleComponent, ToolboxComponent, TooltipComponent, VisualMapComponent, CanvasRenderer]);
 
-export function EChart({ option, className = "chart" }: { option: EChartsCoreOption; className?: string }) {
+export function EChart({ option, className = "chart", replace = false }: { option: EChartsCoreOption; className?: string; replace?: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   const chart = useRef<echarts.ECharts | undefined>(undefined);
 
@@ -23,8 +23,8 @@ export function EChart({ option, className = "chart" }: { option: EChartsCoreOpt
   }, []);
 
   useEffect(() => {
-    chart.current?.setOption(option, { notMerge: false, lazyUpdate: true });
-  }, [option]);
+    chart.current?.setOption(option, { notMerge: replace, lazyUpdate: true });
+  }, [option, replace]);
 
   return <div ref={host} className={className} />;
 }

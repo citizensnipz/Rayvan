@@ -3,16 +3,18 @@ import { createRoot } from "react-dom/client";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import "./styles.css";
+import "./token-lab/token-lab.css";
 import { ExperimentBuilder } from "./research/ExperimentBuilder";
 import { ExperimentHistory } from "./research/ExperimentHistory";
 import { LiveExperiment } from "./research/LiveExperiment";
 import { MathVisualizerPage } from "./research/math/MathVisualizerPage";
+import { TokenLab } from "./token-lab/TokenLab";
 import { RunComparison } from "./research/RunComparison";
 import { cancelExperiment, estimateExperiment, getActiveExperiment, getExperiment, getSchema, listExperiments, startExperiment } from "./research/api";
 import type { Estimate, ExperimentConfig, ResearchEvent, ResearchSchema, RunDetail, RunState, RunSummary } from "./research/types";
 import mark from "./assets/rayvan-logo.png";
 
-type View = "build" | "live" | "history" | "report" | "compare" | "math";
+type View = "build" | "live" | "history" | "report" | "compare" | "math" | "token-lab";
 
 function App() {
   const [view, setView] = useState<View>("build");
@@ -81,8 +83,8 @@ function App() {
   }, [config]);
 
   const active = Boolean(activeRun && ["initializing", "running", "validation", "diagnostics"].includes(runState));
-  const navItems: Array<[View, string, string]> = [["build", "New experiment", "＋"], ["live", "Live run", "◉"], ["history", "History", "≡"], ["math", "Math Visualizer", "∑"]];
-  const title = useMemo(() => view === "math" ? "Math Visualizer" : view === "build" ? "Experiment Builder" : view === "live" ? "Live Telemetry" : view === "history" ? "Run Archive" : view === "compare" ? "Comparison" : "Run Report", [view]);
+  const navItems: Array<[View, string, string]> = [["build", "New experiment", "＋"], ["live", "Live run", "◉"], ["history", "History", "≡"], ["math", "Math Visualizer", "∑"], ["token-lab", "Token Lab", "⌕"]];
+  const title = useMemo(() => view === "token-lab" ? "Token Lab" : view === "math" ? "Math Visualizer" : view === "build" ? "Experiment Builder" : view === "live" ? "Live Telemetry" : view === "history" ? "Run Archive" : view === "compare" ? "Comparison" : "Run Report", [view]);
 
   const launch = async () => {
     if (!config) return;
@@ -121,7 +123,7 @@ function App() {
       <header className="topbar"><div><span>RESEARCH /</span><b>{title}</b></div><div className="top-actions">{active && <button className="active-run" onClick={() => setView("live")}><i /> {activeRun?.slice(-8)} running</button>}<button className="icon-button" title="Refresh history" onClick={refreshRuns}>↻</button></div></header>
       {error && <div className="error-banner"><b>Action needed</b><span>{error}</span><button onClick={() => setError(undefined)}>×</button></div>}
       <div className="content">
-        {view === "math" ? <MathVisualizerPage /> : !schema || !config ? <div className="loading"><i /><p>Loading the Python experiment schema…</p></div> : <>
+        {view === "token-lab" ? <TokenLab /> : view === "math" ? <MathVisualizerPage /> : !schema || !config ? <div className="loading"><i /><p>Loading the Python experiment schema…</p></div> : <>
           {view === "build" && <ExperimentBuilder schema={schema} config={config} setConfig={setConfig} estimate={estimate} estimating={estimating} active={active} onRun={launch} />}
           {view === "live" && <LiveExperiment events={events} state={runState} runId={activeRun} logs={logs} onCancel={active ? stop : undefined} />}
           {view === "history" && <ExperimentHistory runs={runs} selected={selected} setSelected={setSelected} onOpen={openRun} onCompare={compare} refresh={refreshRuns} />}

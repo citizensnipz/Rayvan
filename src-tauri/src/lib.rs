@@ -4,6 +4,7 @@ pub mod network;
 pub mod runtime;
 pub mod simulation;
 pub mod research;
+pub mod token_lab;
 pub use application::status::NetworkStatus;
 
 use application::status::NetworkStatusStore;
@@ -22,6 +23,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(network_status)
         .manage(research::ExperimentProcessState::default())
+        .manage(token_lab::ExperimentProcessState::default())
         .setup(move |app| {
             let identity_path = app.path().app_local_data_dir()?.join(NODE_ID_FILE_NAME);
             let node_id = NodeIdentityStore::new(identity_path).load_or_create()?;
@@ -45,7 +47,14 @@ pub fn run() {
             research::cancel_experiment,
             research::get_active_experiment,
             research::list_experiments,
-            research::get_experiment
+            research::get_experiment,
+            token_lab::get_token_lab_schema,
+            token_lab::validate_token_lab,
+            token_lab::start_token_lab,
+            token_lab::cancel_token_lab,
+            token_lab::get_active_token_lab,
+            token_lab::list_token_labs,
+            token_lab::get_token_lab
         ])
         .run(tauri::generate_context!())
         .expect("failed to run the Rayvan desktop application");
