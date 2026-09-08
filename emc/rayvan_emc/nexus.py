@@ -24,6 +24,8 @@ class RoutingDecision:
     winning_prototypes: Tensor | None = None
     geometric_winner: Tensor | None = None
     action_margin: Tensor | None = None
+    spectral_descriptor: object | None = None
+    spectral_diagnostics: dict | None = None
 
 
 class GeometricNexusRouter(nn.Module):

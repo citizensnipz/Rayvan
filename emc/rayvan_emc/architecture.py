@@ -90,6 +90,7 @@ def build_architectures(
     n1_depth: int = 3,
 ) -> ArchitectureBuild:
     supported = {
+        "spectral_geometric_emc",
         "homogeneous_serial",
         "heterogeneous_serial",
         "emc",
@@ -164,6 +165,13 @@ def build_architectures(
             all_models[name] = TransformerLanguageModel(transformer_config)
         elif name == "heterogeneous_serial":
             all_models[name] = HeterogeneousSerialModel(legacy_config)
+        elif name == "spectral_geometric_emc":
+            from .spectral_model import SpectralGeometricEMC
+            model = SpectralGeometricEMC(replace(emc_config, router_type="spectral_geometric"))
+            # Exact same expert/shared population despite different router RNG use.
+            shared = {k: v for k, v in emc.state_dict().items() if not k.startswith("router.")}
+            model.load_state_dict(shared, strict=False)
+            all_models[name] = model
         elif name == "emc":
             all_models[name] = emc
         elif name == "sequential_module_aware_emc":
@@ -327,7 +335,9 @@ def architecture_accounting(
         routable = sum(module_counts)
         sequential = model.config.architecture_stage == "n1_sequential"
         architecture = (
-            "counterfactual_value_emc"
+            "spectral_geometric_emc"
+            if sequential and model.config.router_type == "spectral_geometric"
+            else "counterfactual_value_emc"
             if sequential and model.config.router_type == "counterfactual_value"
             else "emc"
             if sequential and model.config.router_type == "geometric"
@@ -342,6 +352,8 @@ def architecture_accounting(
             if sequential else
             "Legacy token-routed EMC estimate includes selected modules, router, Integrator, and output projection for every configured cycle."
         )
+        if model.config.router_type == "spectral_geometric":
+            limitations.append("Parameter-based FLOPs exclude graph construction, eigensolve, local SVDs and counterfactual probes; use measured descriptor/routing latency. All-position execution repeats independent prefixes.")
         if model.config.router_type == "counterfactual_value":
             limitations.append(
                 "Value EMC scores one supervised endpoint per observed prefix. This per-context-token proxy "

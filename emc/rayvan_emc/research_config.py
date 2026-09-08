@@ -12,6 +12,7 @@ from .experiments.common import MODEL_PRESET_DIMENSIONS, N1_STAGES
 SCHEMA_VERSION = 3
 EXPERT_FAMILIES = ("gpt", "ssm", "recurrent", "delta")
 ARCHITECTURES = (
+    "spectral_geometric_emc",
     "counterfactual_value_emc",
     "emc",
     "sequential_module_aware_emc",
@@ -90,6 +91,45 @@ class RoutingConfig:
     value_fixed_reference: bool = True
     value_checkpoint_path: str = ""
     value_reset_router: bool = True
+    spectral_neighbourhood_size: int = 16
+    spectral_knn_k: int = 4
+    spectral_graph_mode: str = 'latent_knn'
+    spectral_sequence_edge_weight: float = 0.05
+    spectral_modes: int = 8
+    spectral_bands: int = 6
+    spectral_log_frequency_min: float = 0.01
+    spectral_log_frequency_max: float = 2.0
+    spectral_filter_width: float = 0.8
+    spectral_zero_threshold: float = 1e-5
+    spectral_eps: float = 1e-8
+    hks_scales: int = 6
+    hks_time_min: float = 0.1
+    hks_time_max: float = 100.0
+    wks_bands: int = 6
+    geometry_pca_components: int = 8
+    geometry_tangent_rank: int = 2
+    geometry_statistics_frozen: bool = False
+    geometry_std_floor: float = 1e-3
+    basins_per_expert: int = 4
+    basin_temperature: float = 0.1
+    spectral_router_temperature: float = 0.25
+    spectral_target_temperature: float = 0.25
+    geometry_score_weight: float = 1.0
+    resonance_score_weight: float = 1.0
+    basin_variance_floor: float = 0.05
+    basin_variance_ceiling: float = 100.0
+    transformation_rank: int = 4
+    transformation_ridge: float = 1e-5
+    transformation_complementarity_threshold: float = 0.9
+    transformation_complementarity_weight: float = 0.0
+    transformation_diagnostics_enabled: bool = True
+    basin_redundancy_weight: float = 0.001
+    basin_redundancy_distance: float = 0.1
+    basin_redundancy_similarity: float = 0.95
+    spectral_route_weight: float = 1.0
+    spectral_regret_weight: float = 0.0
+    geometry_temporal_delta_enabled: bool = False
+
 
 
 @dataclass(frozen=True)
@@ -141,6 +181,8 @@ class ExperimentConfig:
     training: ResearchTrainingConfig = field(default_factory=ResearchTrainingConfig)
 
     def __post_init__(self) -> None:
+        from .spectral_config import spectral_config
+        spectral_config(self.routing)
         if self.schema_version != SCHEMA_VERSION:
             raise ValueError(f"unsupported experiment schema version: {self.schema_version}")
         if self.suite not in SUITES:
@@ -155,7 +197,7 @@ class ExperimentConfig:
         if any(not isinstance(count, int) or count < 0 for count in self.experts.values()):
             raise ValueError("expert counts must be non-negative integers")
         total = sum(self.experts.values())
-        if self.architecture in {"counterfactual_value_emc", "emc", "sequential_module_aware_emc", "legacy_parallel_emc", "heterogeneous_serial", "old_emc"} and total == 0:
+        if self.architecture in {"spectral_geometric_emc", "counterfactual_value_emc", "emc", "sequential_module_aware_emc", "legacy_parallel_emc", "heterogeneous_serial", "old_emc"} and total == 0:
             raise ValueError("the selected architecture requires at least one expert")
         if self.architecture in {"legacy_parallel_emc", "old_emc", *N2_ARCHITECTURES}:
             if self.routing.top_k is None:
@@ -164,7 +206,7 @@ class ExperimentConfig:
                 )
             if self.routing.top_k <= 0 or self.routing.top_k > max(total, 1):
                 raise ValueError("top_k must be between one and the configured expert count")
-        if self.architecture in {"counterfactual_value_emc", "emc", "sequential_module_aware_emc"} and self.routing.top_k is not None:
+        if self.architecture in {"spectral_geometric_emc", "counterfactual_value_emc", "emc", "sequential_module_aware_emc"} and self.routing.top_k is not None:
             raise ValueError(
                 "sequential EMC does not accept top_k; use trajectory_steps or "
                 "select legacy_parallel_emc"
@@ -177,7 +219,7 @@ class ExperimentConfig:
             raise ValueError("refractory_strength cannot be negative")
         if not 0 <= self.routing.refractory_decay <= 1:
             raise ValueError("refractory_decay must be between zero and one")
-        if self.routing.router_type not in {"fixed_index", "module_aware", "geometric", "counterfactual_value"}:
+        if self.routing.router_type not in {"fixed_index", "module_aware", "geometric", "counterfactual_value", "spectral_geometric"}:
             raise ValueError("unsupported router_type")
         if self.routing.integrator_type not in {"weighted_average", "proposal_attention", "acceptance_gate", "identity_free_gate"}:
             raise ValueError("unsupported integrator_type")
@@ -269,7 +311,9 @@ class ExperimentConfig:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         routing = payload["routing"]
-        if self.architecture in {"counterfactual_value_emc", "emc", "sequential_module_aware_emc"}:
+        if self.architecture == "spectral_geometric_emc":
+            routing.update(router_type="spectral_geometric", integrator_type="acceptance_gate")
+        if self.architecture in {"spectral_geometric_emc", "counterfactual_value_emc", "emc", "sequential_module_aware_emc"}:
             for key in (
                 "top_k",
                 "cycles",
@@ -337,6 +381,7 @@ def research_schema() -> dict[str, Any]:
         ],
         "architectures": [
             {"id": "counterfactual_value_emc", "label": "Sequential EMC — Counterfactual Value"},
+            {"id": "spectral_geometric_emc", "label": "Sequential EMC — Spectral Geometry (experimental)"},
             {"id": "emc", "label": "Sequential EMC — Geometric"},
             {"id": "sequential_module_aware_emc", "label": "Sequential EMC — Legacy Module-Aware"},
             {"id": "legacy_parallel_emc", "label": "Legacy Parallel Top-K EMC"},

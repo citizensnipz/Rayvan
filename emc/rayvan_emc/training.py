@@ -504,7 +504,9 @@ def train_model(
                                 counterfactual_targets=targets,
                                 training_step=step,
                             )
-                        output = model(inputs, **forward_options)
+                        # Spectral routing follows the existing observed-prefix endpoint objective.
+                        forward = model.endpoint if getattr(model, "prefix_endpoint_objective", False) else model
+                        output = forward(inputs, **forward_options)
                         if not isinstance(output, EMCOutput):
                             raise RuntimeError(
                                 "trace-enabled EMC forward did not return EMCOutput"
@@ -523,7 +525,8 @@ def train_model(
                     else:
                         logits = model(inputs)
                         balance_loss = logits.new_zeros(())
-                    language_model_loss = next_token_loss(logits, targets)
+                    loss_targets = targets[:, -1:] if getattr(model, "prefix_endpoint_objective", False) else targets
+                    language_model_loss = next_token_loss(logits, loss_targets)
                     weighted_balance = (
                         config.router_balance_coefficient * balance_loss
                     )
