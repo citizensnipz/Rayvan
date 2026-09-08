@@ -1,0 +1,4422 @@
+{
+  "source": "synthetic_copy_smoke; NOT real-data validation",
+  "bank_sha256": "a2238b3a016a6a8cd07c35c8fec18a4eecc24e72708a847d1bbafcbacd4983d3",
+  "seed": 17,
+  "updates": 80,
+  "config": {
+    "latent_dim": 8,
+    "num_modules": 3,
+    "modules_per_cycle": 1,
+    "num_cycles": 2,
+    "trajectory_steps": 2,
+    "refractory_enabled": false,
+    "refractory_strength": 0.15,
+    "refractory_decay": 0.35,
+    "vocab_size": 16,
+    "max_sequence_length": 32,
+    "module_hidden_dim": 16,
+    "attention_heads": 2,
+    "tie_embeddings": false,
+    "module_families": [
+      "gpt",
+      "recurrent",
+      "delta"
+    ],
+    "state_space_dim": null,
+    "state_space_kernel_size": 4,
+    "recurrent_dim": null,
+    "router_type": "spectral_geometric",
+    "router_descriptor_dim": null,
+    "routing_geometry_dim": 8,
+    "competence_prototypes_per_expert": 1,
+    "counterfactual_calibration_enabled": true,
+    "counterfactual_probe_fixed_rate": null,
+    "counterfactual_probe_early_rate": 0.08,
+    "counterfactual_probe_stable_rate": 0.02,
+    "counterfactual_probe_mature_rate": 0.01,
+    "counterfactual_probe_early_steps": 1000,
+    "counterfactual_probe_stable_steps": 10000,
+    "counterfactual_uncertainty_enabled": false,
+    "counterfactual_uncertainty_margin": 0.05,
+    "counterfactual_max_probes_per_forward": 1,
+    "counterfactual_probe_seed": 0,
+    "counterfactual_probe_temperature": 0.25,
+    "geometry_temperature": 0.25,
+    "geometry_calibration_weight": 1.0,
+    "counterfactual_tie_epsilon": 0.001,
+    "value_target": "suffix",
+    "value_expert_training": "controlled",
+    "value_common_fraction": 0.5,
+    "value_specialist_temperature": 0.25,
+    "value_warmup_steps": 100,
+    "value_development_interval": 1,
+    "value_development_batch_size": 4,
+    "value_exploration_rate": 0.1,
+    "value_probe_rate": 0.08,
+    "value_probe_budget": 1,
+    "value_router_seed": 0,
+    "value_calibration_steps": 64,
+    "value_calibration_min_probes": 64,
+    "value_head_type": "linear",
+    "value_head_hidden_dim": 32,
+    "value_geometry_slots": 4,
+    "value_geometry_prototypes": 4,
+    "value_geometry_regret_weight": 0.01,
+    "value_effect_dim": 16,
+    "value_effect_weight": 0.01,
+    "value_cost_mse_weight": 1.0,
+    "value_pairwise_weight": 0.0,
+    "value_pairwise_temperature": 0.05,
+    "value_pairwise_tie_tolerance": 0.001,
+    "value_replay_capacity": 1024,
+    "value_replay_batch_size": 64,
+    "value_fit_bank_path": "",
+    "value_fit_enabled": false,
+    "value_fit_prefixes": 64,
+    "value_fit_updates": 1000,
+    "value_fixed_reference": true,
+    "integrator_type": "identity_free_gate",
+    "integrator_heads": 2,
+    "architecture_stage": "n1_sequential",
+    "chunk_size": 64,
+    "shared_state_slots": 4,
+    "request_pool_size": null,
+    "active_top_k": null,
+    "switch_cost": 0.0,
+    "persistence_bonus": 0.0,
+    "minimum_lease_chunks": 0,
+    "loss_free_balance_enabled": false,
+    "balance_bias_lr": 0.01,
+    "balance_target_utilization": null,
+    "balance_bias_limit": 0.25,
+    "balance_warmup_chunks": 0,
+    "shared_core_enabled": true,
+    "shared_core_hidden_dim": null,
+    "ssm_backend": "auto",
+    "recurrent_backend": "gru",
+    "recurrent_precision": "fp16",
+    "delta_backend": "parallel_delta",
+    "delta_internal_dim": null,
+    "delta_heads": 4,
+    "delta_ffn_dim": null,
+    "delta_max_transition_bytes": 67108864,
+    "spectral_neighbourhood_size": 16,
+    "spectral_knn_k": 4,
+    "spectral_graph_mode": "latent_knn",
+    "spectral_sequence_edge_weight": 0.05,
+    "spectral_modes": 8,
+    "spectral_bands": 6,
+    "spectral_log_frequency_min": 0.01,
+    "spectral_log_frequency_max": 2.0,
+    "spectral_filter_width": 0.8,
+    "spectral_zero_threshold": 1e-05,
+    "spectral_eps": 1e-08,
+    "hks_scales": 6,
+    "hks_time_min": 0.1,
+    "hks_time_max": 100.0,
+    "wks_bands": 6,
+    "geometry_pca_components": 8,
+    "geometry_tangent_rank": 2,
+    "geometry_statistics_frozen": false,
+    "geometry_std_floor": 0.001,
+    "basins_per_expert": 4,
+    "basin_temperature": 0.1,
+    "spectral_router_temperature": 0.25,
+    "spectral_target_temperature": 0.25,
+    "geometry_score_weight": 1.0,
+    "resonance_score_weight": 1.0,
+    "basin_variance_floor": 0.05,
+    "basin_variance_ceiling": 100.0,
+    "transformation_rank": 4,
+    "transformation_ridge": 1e-05,
+    "transformation_complementarity_threshold": 0.9,
+    "transformation_complementarity_weight": 0.0,
+    "transformation_diagnostics_enabled": true,
+    "basin_redundancy_weight": 0.001,
+    "basin_redundancy_distance": 0.1,
+    "basin_redundancy_similarity": 0.95,
+    "spectral_route_weight": 1.0,
+    "spectral_regret_weight": 0.0,
+    "geometry_temporal_delta_enabled": false
+  },
+  "results": [
+    {
+      "variant": "learned_geometric",
+      "parameters": 184,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.01313522458076477,
+            "oracle_top1": 0.7083333134651184,
+            "oracle_top2": 1.0,
+            "pairwise_ranking_accuracy": 0.8450704216957092,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.05569291487336159,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              9,
+              8,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.010954797267913818,
+            "oracle_top1": 0.7916666865348816,
+            "oracle_top2": 0.9583333134651184,
+            "pairwise_ranking_accuracy": 0.8194444179534912,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.052042145282030106,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              6,
+              7,
+              11
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.012045010924339294,
+        "oracle_top1": 0.75,
+        "oracle_top2": 0.9791666567325592,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.05386753007769585,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.8321678184129141
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.08830901980400085,
+            "oracle_top1": 0.2916666567325592,
+            "oracle_top2": 0.5,
+            "pairwise_ranking_accuracy": 0.3888888955116272,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.07879583537578583,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              8,
+              2,
+              14
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.07618699222803116,
+            "oracle_top1": 0.2083333283662796,
+            "oracle_top2": 0.5,
+            "pairwise_ranking_accuracy": 0.4117647111415863,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.0707496926188469,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              6,
+              7,
+              11
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.082248006016016,
+        "oracle_top1": 0.2499999925494194,
+        "oracle_top2": 0.5,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.07477276399731636,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.4000000059604645
+      },
+      "latency_ms_batch1": {
+        "total_routing": 0.33582875003048684
+      }
+    },
+    {
+      "variant": "spectral_only_w8_b4",
+      "parameters": 1572,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.051914382725954056,
+            "oracle_top1": 0.4166666567325592,
+            "oracle_top2": 0.8333333134651184,
+            "pairwise_ranking_accuracy": 0.6056337952613831,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.06257601827383041,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              8,
+              10,
+              6
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.044750917702913284,
+            "oracle_top1": 0.375,
+            "oracle_top2": 0.8333333134651184,
+            "pairwise_ranking_accuracy": 0.6111111044883728,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.059950102120637894,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              7,
+              11,
+              6
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.04833265021443367,
+        "oracle_top1": 0.3958333283662796,
+        "oracle_top2": 0.8333333134651184,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.061263060197234154,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.6083916013057415
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.07166745513677597,
+            "oracle_top1": 0.25,
+            "oracle_top2": 0.5833333134651184,
+            "pairwise_ranking_accuracy": 0.4861111044883728,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06505405157804489,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              13,
+              9,
+              2
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.06549349427223206,
+            "oracle_top1": 0.2083333283662796,
+            "oracle_top2": 0.625,
+            "pairwise_ranking_accuracy": 0.4852941036224365,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.061925068497657776,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              14,
+              9,
+              1
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.06858047470450401,
+        "oracle_top1": 0.2291666641831398,
+        "oracle_top2": 0.6041666567325592,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.06348956003785133,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.4857142754963466
+      },
+      "latency_ms_batch1": {
+        "graph": 0.18608720056363381,
+        "eigendecomposition": 0.1080757996533066,
+        "descriptor": 1.0017707019869704,
+        "scoring": 0.20382680086186156,
+        "total_routing": 1.238536200253293
+      },
+      "basin_occupancy": [
+        [
+          27,
+          0,
+          0,
+          0
+        ],
+        [
+          18,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          0,
+          0
+        ]
+      ],
+      "dead_basins": 9,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.38394686579704285,
+          "nearest_distances": [
+            0.2450195997953415,
+            0.5625123977661133,
+            0.30113667249679565,
+            0.35025086998939514,
+            0.5008317232131958,
+            0.46716731786727905,
+            0.3084460496902466,
+            0.5312334895133972,
+            0.3516231179237366,
+            0.5306940078735352,
+            0.3266879618167877,
+            0.5968562960624695,
+            0.4024174213409424,
+            0.32065054774284363,
+            0.4010070264339447,
+            0.4381199777126312,
+            0.4024174213409424,
+            0.3516231179237366,
+            0.3266879618167877,
+            0.3446522057056427,
+            0.30113667249679565,
+            0.32065054774284363,
+            0.287882924079895,
+            0.2450195997953415
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7083333134651184,
+          "top_k_oracle_overlap": 0.625,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 2,
+              "oracle_disagreement": 1.0
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 5,
+              "oracle_disagreement": 0.4000000059604645
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.3911178410053253,
+          "nearest_distances": [
+            0.2885403633117676,
+            0.46906593441963196,
+            0.3143545687198639,
+            0.3457475006580353,
+            0.5122254490852356,
+            0.48926588892936707,
+            0.31245315074920654,
+            0.48831313848495483,
+            0.3738410472869873,
+            0.4897165596485138,
+            0.3307320177555084,
+            0.5423876047134399,
+            0.415374219417572,
+            0.38509657979011536,
+            0.4328819811344147,
+            0.431686669588089,
+            0.415374219417572,
+            0.3738410472869873,
+            0.3845027685165405,
+            0.3307320177555084,
+            0.3143545687198639,
+            0.34534773230552673,
+            0.2885403633117676,
+            0.31245315074920654
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.75,
+          "top_k_oracle_overlap": 0.6666666865348816,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 22,
+              "oracle_disagreement": 0.7272727489471436
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 2,
+              "oracle_disagreement": 1.0
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 8,
+      "actual_window_sizes": [
+        8,
+        8
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "geometry_only_w8_b4",
+      "parameters": 1572,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.037635575979948044,
+            "oracle_top1": 0.5416666865348816,
+            "oracle_top2": 0.8333333134651184,
+            "pairwise_ranking_accuracy": 0.6478873491287231,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.04786701500415802,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              8,
+              7,
+              9
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.0588432252407074,
+            "oracle_top1": 0.3333333432674408,
+            "oracle_top2": 0.8333333134651184,
+            "pairwise_ranking_accuracy": 0.5694444179534912,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.05163026228547096,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              8,
+              7,
+              9
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.04823940061032772,
+        "oracle_top1": 0.4375000149011612,
+        "oracle_top2": 0.8333333134651184,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.04974863864481449,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.6083916075579769
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.043432194739580154,
+            "oracle_top1": 0.5,
+            "oracle_top2": 0.7083333134651184,
+            "pairwise_ranking_accuracy": 0.5416666865348816,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.058364901691675186,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              14,
+              3,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.05919263884425163,
+            "oracle_top1": 0.3333333432674408,
+            "oracle_top2": 0.75,
+            "pairwise_ranking_accuracy": 0.5441176295280457,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.05665476247668266,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              13,
+              3,
+              8
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.051312416791915894,
+        "oracle_top1": 0.4166666716337204,
+        "oracle_top2": 0.7291666567325592,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.057509832084178925,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.5428571445601327
+      },
+      "latency_ms_batch1": {
+        "graph": 0.19090949863311835,
+        "eigendecomposition": 0.10919360065599903,
+        "descriptor": 1.0095435005496256,
+        "scoring": 0.20829550048802048,
+        "total_routing": 1.253691101737786
+      },
+      "basin_occupancy": [
+        [
+          25,
+          2,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          6,
+          0
+        ],
+        [
+          0,
+          0,
+          15,
+          0
+        ]
+      ],
+      "dead_basins": 8,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.38394686579704285,
+          "nearest_distances": [
+            0.2450195997953415,
+            0.5625123977661133,
+            0.30113667249679565,
+            0.35025086998939514,
+            0.5008317232131958,
+            0.46716731786727905,
+            0.3084460496902466,
+            0.5312334895133972,
+            0.3516231179237366,
+            0.5306940078735352,
+            0.3266879618167877,
+            0.5968562960624695,
+            0.4024174213409424,
+            0.32065054774284363,
+            0.4010070264339447,
+            0.4381199777126312,
+            0.4024174213409424,
+            0.3516231179237366,
+            0.3266879618167877,
+            0.3446522057056427,
+            0.30113667249679565,
+            0.32065054774284363,
+            0.287882924079895,
+            0.2450195997953415
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7083333134651184,
+          "top_k_oracle_overlap": 0.625,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 2,
+              "oracle_disagreement": 1.0
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 5,
+              "oracle_disagreement": 0.4000000059604645
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.3911178410053253,
+          "nearest_distances": [
+            0.2885403633117676,
+            0.46906593441963196,
+            0.3143545687198639,
+            0.3457475006580353,
+            0.5122254490852356,
+            0.48926588892936707,
+            0.31245315074920654,
+            0.48831313848495483,
+            0.3738410472869873,
+            0.4897165596485138,
+            0.3307320177555084,
+            0.5423876047134399,
+            0.415374219417572,
+            0.38509657979011536,
+            0.4328819811344147,
+            0.431686669588089,
+            0.415374219417572,
+            0.3738410472869873,
+            0.3845027685165405,
+            0.3307320177555084,
+            0.3143545687198639,
+            0.34534773230552673,
+            0.2885403633117676,
+            0.31245315074920654
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.75,
+          "top_k_oracle_overlap": 0.6666666865348816,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 22,
+              "oracle_disagreement": 0.7272727489471436
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 2,
+              "oracle_disagreement": 1.0
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 8,
+      "actual_window_sizes": [
+        8,
+        8
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "combined_w8_b1",
+      "parameters": 393,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.018731215968728065,
+            "oracle_top1": 0.6666666865348816,
+            "oracle_top2": 0.875,
+            "pairwise_ranking_accuracy": 0.7042253613471985,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.04864144325256348,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              7,
+              8,
+              9
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.01717531681060791,
+            "oracle_top1": 0.6666666865348816,
+            "oracle_top2": 1.0,
+            "pairwise_ranking_accuracy": 0.7638888955116272,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.04682283103466034,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              7,
+              7,
+              10
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.017953266389667988,
+        "oracle_top1": 0.6666666865348816,
+        "oracle_top2": 0.9375,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.04773213714361191,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.7342657421852326
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.06038300320506096,
+            "oracle_top1": 0.4166666567325592,
+            "oracle_top2": 0.6666666865348816,
+            "pairwise_ranking_accuracy": 0.5416666865348816,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06395988911390305,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              7,
+              6,
+              11
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.05279221013188362,
+            "oracle_top1": 0.4583333432674408,
+            "oracle_top2": 0.6666666865348816,
+            "pairwise_ranking_accuracy": 0.5735294222831726,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06110599637031555,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              7,
+              6,
+              11
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.05658760666847229,
+        "oracle_top1": 0.4375,
+        "oracle_top2": 0.6666666865348816,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.0625329427421093,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.5571428724697658
+      },
+      "latency_ms_batch1": {
+        "graph": 0.22403750190278515,
+        "eigendecomposition": 0.1225313979375642,
+        "descriptor": 1.1879853009304497,
+        "scoring": 0.23648520145798102,
+        "total_routing": 1.4703894994454458
+      },
+      "basin_occupancy": [
+        [
+          14
+        ],
+        [
+          12
+        ],
+        [
+          22
+        ]
+      ],
+      "dead_basins": 0,
+      "basin_redundancy": -0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.38394686579704285,
+          "nearest_distances": [
+            0.2450195997953415,
+            0.5625123977661133,
+            0.30113667249679565,
+            0.35025086998939514,
+            0.5008317232131958,
+            0.46716731786727905,
+            0.3084460496902466,
+            0.5312334895133972,
+            0.3516231179237366,
+            0.5306940078735352,
+            0.3266879618167877,
+            0.5968562960624695,
+            0.4024174213409424,
+            0.32065054774284363,
+            0.4010070264339447,
+            0.4381199777126312,
+            0.4024174213409424,
+            0.3516231179237366,
+            0.3266879618167877,
+            0.3446522057056427,
+            0.30113667249679565,
+            0.32065054774284363,
+            0.287882924079895,
+            0.2450195997953415
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7083333134651184,
+          "top_k_oracle_overlap": 0.625,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 2,
+              "oracle_disagreement": 1.0
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 5,
+              "oracle_disagreement": 0.4000000059604645
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.3911178410053253,
+          "nearest_distances": [
+            0.2885403633117676,
+            0.46906593441963196,
+            0.3143545687198639,
+            0.3457475006580353,
+            0.5122254490852356,
+            0.48926588892936707,
+            0.31245315074920654,
+            0.48831313848495483,
+            0.3738410472869873,
+            0.4897165596485138,
+            0.3307320177555084,
+            0.5423876047134399,
+            0.415374219417572,
+            0.38509657979011536,
+            0.4328819811344147,
+            0.431686669588089,
+            0.415374219417572,
+            0.3738410472869873,
+            0.3845027685165405,
+            0.3307320177555084,
+            0.3143545687198639,
+            0.34534773230552673,
+            0.2885403633117676,
+            0.31245315074920654
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.75,
+          "top_k_oracle_overlap": 0.6666666865348816,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 22,
+              "oracle_disagreement": 0.7272727489471436
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 2,
+              "oracle_disagreement": 1.0
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 8,
+      "actual_window_sizes": [
+        8,
+        8
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "combined_w8_b4",
+      "parameters": 1572,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.037635575979948044,
+            "oracle_top1": 0.5416666865348816,
+            "oracle_top2": 0.8333333134651184,
+            "pairwise_ranking_accuracy": 0.6619718074798584,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.04802551865577698,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              8,
+              7,
+              9
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.058562953025102615,
+            "oracle_top1": 0.375,
+            "oracle_top2": 0.8333333134651184,
+            "pairwise_ranking_accuracy": 0.5833333134651184,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.05141032114624977,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              7,
+              8,
+              9
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.04809926450252533,
+        "oracle_top1": 0.4583333432674408,
+        "oracle_top2": 0.8333333134651184,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.049717919901013374,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.6223776007032061
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.06159493327140808,
+            "oracle_top1": 0.4583333432674408,
+            "oracle_top2": 0.7083333134651184,
+            "pairwise_ranking_accuracy": 0.5277777910232544,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.05929993465542793,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              14,
+              0,
+              10
+            ],
+            "unselected_experts": 1,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.05919263884425163,
+            "oracle_top1": 0.3333333432674408,
+            "oracle_top2": 0.75,
+            "pairwise_ranking_accuracy": 0.5441176295280457,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.05706098675727844,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              13,
+              3,
+              8
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.06039378605782986,
+        "oracle_top1": 0.3958333432674408,
+        "oracle_top2": 0.7291666567325592,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.05818046070635319,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.5357142840112958
+      },
+      "latency_ms_batch1": {
+        "graph": 0.20463329856283963,
+        "eigendecomposition": 0.12220190110383554,
+        "descriptor": 1.0440262994961813,
+        "scoring": 0.2038931990682613,
+        "total_routing": 1.2854279993916862
+      },
+      "basin_occupancy": [
+        [
+          25,
+          2,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          3,
+          0
+        ],
+        [
+          0,
+          0,
+          18,
+          0
+        ]
+      ],
+      "dead_basins": 8,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.38394686579704285,
+          "nearest_distances": [
+            0.2450195997953415,
+            0.5625123977661133,
+            0.30113667249679565,
+            0.35025086998939514,
+            0.5008317232131958,
+            0.46716731786727905,
+            0.3084460496902466,
+            0.5312334895133972,
+            0.3516231179237366,
+            0.5306940078735352,
+            0.3266879618167877,
+            0.5968562960624695,
+            0.4024174213409424,
+            0.32065054774284363,
+            0.4010070264339447,
+            0.4381199777126312,
+            0.4024174213409424,
+            0.3516231179237366,
+            0.3266879618167877,
+            0.3446522057056427,
+            0.30113667249679565,
+            0.32065054774284363,
+            0.287882924079895,
+            0.2450195997953415
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7083333134651184,
+          "top_k_oracle_overlap": 0.625,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 2,
+              "oracle_disagreement": 1.0
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 5,
+              "oracle_disagreement": 0.4000000059604645
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.3911178410053253,
+          "nearest_distances": [
+            0.2885403633117676,
+            0.46906593441963196,
+            0.3143545687198639,
+            0.3457475006580353,
+            0.5122254490852356,
+            0.48926588892936707,
+            0.31245315074920654,
+            0.48831313848495483,
+            0.3738410472869873,
+            0.4897165596485138,
+            0.3307320177555084,
+            0.5423876047134399,
+            0.415374219417572,
+            0.38509657979011536,
+            0.4328819811344147,
+            0.431686669588089,
+            0.415374219417572,
+            0.3738410472869873,
+            0.3845027685165405,
+            0.3307320177555084,
+            0.3143545687198639,
+            0.34534773230552673,
+            0.2885403633117676,
+            0.31245315074920654
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.75,
+          "top_k_oracle_overlap": 0.6666666865348816,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 22,
+              "oracle_disagreement": 0.7272727489471436
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 2,
+              "oracle_disagreement": 1.0
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 8,
+      "actual_window_sizes": [
+        8,
+        8
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "spectral_only_w16_b4",
+      "parameters": 1572,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.042554449290037155,
+            "oracle_top1": 0.5,
+            "oracle_top2": 0.7916666865348816,
+            "pairwise_ranking_accuracy": 0.6619718074798584,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.06245700642466545,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              9,
+              8,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.04494665190577507,
+            "oracle_top1": 0.4166666567325592,
+            "oracle_top2": 0.8333333134651184,
+            "pairwise_ranking_accuracy": 0.625,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.0592312216758728,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              10,
+              7,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.04375055059790611,
+        "oracle_top1": 0.4583333283662796,
+        "oracle_top2": 0.8125,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.06084411405026913,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.6433566316858038
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.07853677123785019,
+            "oracle_top1": 0.1666666716337204,
+            "oracle_top2": 0.6666666865348816,
+            "pairwise_ranking_accuracy": 0.5,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06543626636266708,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              7,
+              12,
+              5
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.08115217089653015,
+            "oracle_top1": 0.1666666716337204,
+            "oracle_top2": 0.5416666865348816,
+            "pairwise_ranking_accuracy": 0.38235294818878174,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06307382136583328,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              9,
+              8,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.07984447106719017,
+        "oracle_top1": 0.1666666716337204,
+        "oracle_top2": 0.6041666865348816,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.06425504386425018,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.44285714626312256
+      },
+      "latency_ms_batch1": {
+        "graph": 0.1886191006633453,
+        "eigendecomposition": 0.12001379946013913,
+        "descriptor": 1.1490966004203074,
+        "scoring": 0.23473540059057996,
+        "total_routing": 1.428640699305106
+      },
+      "basin_occupancy": [
+        [
+          16,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          20,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          12
+        ]
+      ],
+      "dead_basins": 9,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.44675764441490173,
+          "nearest_distances": [
+            0.33458051085472107,
+            0.378650963306427,
+            0.45451122522354126,
+            0.5022520422935486,
+            0.45451122522354126,
+            0.41047734022140503,
+            0.37749361991882324,
+            0.4976055324077606,
+            0.5205998420715332,
+            0.378650963306427,
+            0.3674456775188446,
+            0.628259539604187,
+            0.5295762419700623,
+            0.4115704596042633,
+            0.5433974266052246,
+            0.4735531508922577,
+            0.3674456775188446,
+            0.33458051085472107,
+            0.5157745480537415,
+            0.416517972946167,
+            0.5358825922012329,
+            0.4391847252845764,
+            0.4391847252845764,
+            0.41047734022140503
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7916666865348816,
+          "top_k_oracle_overlap": 0.5833333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.8571428656578064
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.44503259658813477,
+          "nearest_distances": [
+            0.3505842983722687,
+            0.3909774720668793,
+            0.4795173704624176,
+            0.5390641093254089,
+            0.4795173704624176,
+            0.3474454879760742,
+            0.4037244915962219,
+            0.454233855009079,
+            0.5146951675415039,
+            0.3909774720668793,
+            0.39696651697158813,
+            0.6140331625938416,
+            0.5545487999916077,
+            0.3474454879760742,
+            0.5364454984664917,
+            0.5088199973106384,
+            0.39696651697158813,
+            0.3505842983722687,
+            0.5001891255378723,
+            0.42313146591186523,
+            0.47415661811828613,
+            0.4240122139453888,
+            0.4240122139453888,
+            0.37873390316963196
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7916666865348816,
+          "top_k_oracle_overlap": 0.6041666865348816,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.8571428656578064
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 16,
+      "actual_window_sizes": [
+        16,
+        16
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "geometry_only_w16_b4",
+      "parameters": 1572,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.030666083097457886,
+            "oracle_top1": 0.5833333134651184,
+            "oracle_top2": 0.8333333134651184,
+            "pairwise_ranking_accuracy": 0.6901408433914185,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.046571578830480576,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              6,
+              11,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.03699768707156181,
+            "oracle_top1": 0.5,
+            "oracle_top2": 0.8333333134651184,
+            "pairwise_ranking_accuracy": 0.6944444179534912,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.04551130533218384,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              11,
+              6,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.03383188508450985,
+        "oracle_top1": 0.5416666567325592,
+        "oracle_top2": 0.8333333134651184,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.04604144208133221,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.6923076781359586
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.06541326642036438,
+            "oracle_top1": 0.4166666567325592,
+            "oracle_top2": 0.75,
+            "pairwise_ranking_accuracy": 0.5138888955116272,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06974204629659653,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              9,
+              3,
+              12
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.07231993228197098,
+            "oracle_top1": 0.2916666567325592,
+            "oracle_top2": 0.5833333134651184,
+            "pairwise_ranking_accuracy": 0.44117647409439087,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06338412314653397,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              10,
+              4,
+              10
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.06886659935116768,
+        "oracle_top1": 0.3541666567325592,
+        "oracle_top2": 0.6666666567325592,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.06656308472156525,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.4785714336803981
+      },
+      "latency_ms_batch1": {
+        "graph": 0.21059209830127656,
+        "eigendecomposition": 0.15385370134026743,
+        "descriptor": 1.2019633992167655,
+        "scoring": 0.23272550097317435,
+        "total_routing": 1.4703724002174567
+      },
+      "basin_occupancy": [
+        [
+          0,
+          0,
+          3,
+          16
+        ],
+        [
+          2,
+          0,
+          5,
+          0
+        ],
+        [
+          0,
+          2,
+          20,
+          0
+        ]
+      ],
+      "dead_basins": 6,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.44675764441490173,
+          "nearest_distances": [
+            0.33458051085472107,
+            0.378650963306427,
+            0.45451122522354126,
+            0.5022520422935486,
+            0.45451122522354126,
+            0.41047734022140503,
+            0.37749361991882324,
+            0.4976055324077606,
+            0.5205998420715332,
+            0.378650963306427,
+            0.3674456775188446,
+            0.628259539604187,
+            0.5295762419700623,
+            0.4115704596042633,
+            0.5433974266052246,
+            0.4735531508922577,
+            0.3674456775188446,
+            0.33458051085472107,
+            0.5157745480537415,
+            0.416517972946167,
+            0.5358825922012329,
+            0.4391847252845764,
+            0.4391847252845764,
+            0.41047734022140503
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7916666865348816,
+          "top_k_oracle_overlap": 0.5833333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.8571428656578064
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.44503259658813477,
+          "nearest_distances": [
+            0.3505842983722687,
+            0.3909774720668793,
+            0.4795173704624176,
+            0.5390641093254089,
+            0.4795173704624176,
+            0.3474454879760742,
+            0.4037244915962219,
+            0.454233855009079,
+            0.5146951675415039,
+            0.3909774720668793,
+            0.39696651697158813,
+            0.6140331625938416,
+            0.5545487999916077,
+            0.3474454879760742,
+            0.5364454984664917,
+            0.5088199973106384,
+            0.39696651697158813,
+            0.3505842983722687,
+            0.5001891255378723,
+            0.42313146591186523,
+            0.47415661811828613,
+            0.4240122139453888,
+            0.4240122139453888,
+            0.37873390316963196
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7916666865348816,
+          "top_k_oracle_overlap": 0.6041666865348816,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.8571428656578064
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 16,
+      "actual_window_sizes": [
+        16,
+        16
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "combined_w16_b1",
+      "parameters": 393,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.005837907548993826,
+            "oracle_top1": 0.8333333134651184,
+            "oracle_top2": 1.0,
+            "pairwise_ranking_accuracy": 0.8591549396514893,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.052429962903261185,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              8,
+              8,
+              8
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.004218498710542917,
+            "oracle_top1": 0.875,
+            "oracle_top2": 0.9583333134651184,
+            "pairwise_ranking_accuracy": 0.8888888955116272,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.04890060797333717,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              8,
+              8,
+              8
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.005028203129768372,
+        "oracle_top1": 0.8541666567325592,
+        "oracle_top2": 0.9791666567325592,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.05066528543829918,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.874125882462188
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.05281800031661987,
+            "oracle_top1": 0.3333333432674408,
+            "oracle_top2": 0.6666666865348816,
+            "pairwise_ranking_accuracy": 0.5277777910232544,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06374801695346832,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              7,
+              10,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.049808502197265625,
+            "oracle_top1": 0.375,
+            "oracle_top2": 0.6666666865348816,
+            "pairwise_ranking_accuracy": 0.529411792755127,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06023065745830536,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              8,
+              9,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.05131325125694275,
+        "oracle_top1": 0.3541666716337204,
+        "oracle_top2": 0.6666666865348816,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.06198933720588684,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.5285714490073068
+      },
+      "latency_ms_batch1": {
+        "graph": 0.1992288998735603,
+        "eigendecomposition": 0.1216340999235399,
+        "descriptor": 1.1274567994405515,
+        "scoring": 0.18754839984467253,
+        "total_routing": 1.3482225003826898
+      },
+      "basin_occupancy": [
+        [
+          15
+        ],
+        [
+          19
+        ],
+        [
+          14
+        ]
+      ],
+      "dead_basins": 0,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.44675764441490173,
+          "nearest_distances": [
+            0.33458051085472107,
+            0.378650963306427,
+            0.45451122522354126,
+            0.5022520422935486,
+            0.45451122522354126,
+            0.41047734022140503,
+            0.37749361991882324,
+            0.4976055324077606,
+            0.5205998420715332,
+            0.378650963306427,
+            0.3674456775188446,
+            0.628259539604187,
+            0.5295762419700623,
+            0.4115704596042633,
+            0.5433974266052246,
+            0.4735531508922577,
+            0.3674456775188446,
+            0.33458051085472107,
+            0.5157745480537415,
+            0.416517972946167,
+            0.5358825922012329,
+            0.4391847252845764,
+            0.4391847252845764,
+            0.41047734022140503
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7916666865348816,
+          "top_k_oracle_overlap": 0.5833333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.8571428656578064
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.44503259658813477,
+          "nearest_distances": [
+            0.3505842983722687,
+            0.3909774720668793,
+            0.4795173704624176,
+            0.5390641093254089,
+            0.4795173704624176,
+            0.3474454879760742,
+            0.4037244915962219,
+            0.454233855009079,
+            0.5146951675415039,
+            0.3909774720668793,
+            0.39696651697158813,
+            0.6140331625938416,
+            0.5545487999916077,
+            0.3474454879760742,
+            0.5364454984664917,
+            0.5088199973106384,
+            0.39696651697158813,
+            0.3505842983722687,
+            0.5001891255378723,
+            0.42313146591186523,
+            0.47415661811828613,
+            0.4240122139453888,
+            0.4240122139453888,
+            0.37873390316963196
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7916666865348816,
+          "top_k_oracle_overlap": 0.6041666865348816,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.8571428656578064
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 16,
+      "actual_window_sizes": [
+        16,
+        16
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "combined_w16_b4",
+      "parameters": 1572,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.033876556903123856,
+            "oracle_top1": 0.5416666865348816,
+            "oracle_top2": 0.7916666865348816,
+            "pairwise_ranking_accuracy": 0.6619718074798584,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.04667048156261444,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              6,
+              10,
+              8
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.031908709555864334,
+            "oracle_top1": 0.5416666865348816,
+            "oracle_top2": 0.8333333134651184,
+            "pairwise_ranking_accuracy": 0.7083333134651184,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.04585373401641846,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              10,
+              6,
+              8
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.032892633229494095,
+        "oracle_top1": 0.5416666865348816,
+        "oracle_top2": 0.8125,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.04626210778951645,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.685314663640269
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.07272946089506149,
+            "oracle_top1": 0.375,
+            "oracle_top2": 0.75,
+            "pairwise_ranking_accuracy": 0.4861111044883728,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06994638592004776,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              11,
+              2,
+              11
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.07613257318735123,
+            "oracle_top1": 0.2916666567325592,
+            "oracle_top2": 0.5833333134651184,
+            "pairwise_ranking_accuracy": 0.4264705777168274,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06324046850204468,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              11,
+              3,
+              10
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.07443101704120636,
+        "oracle_top1": 0.3333333283662796,
+        "oracle_top2": 0.6666666567325592,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.06659342721104622,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.4571428486279079
+      },
+      "latency_ms_batch1": {
+        "graph": 0.19303799854242243,
+        "eigendecomposition": 0.14984569934313186,
+        "descriptor": 1.1241582986258436,
+        "scoring": 0.21296870036167093,
+        "total_routing": 1.370020300237229
+      },
+      "basin_occupancy": [
+        [
+          0,
+          0,
+          4,
+          18
+        ],
+        [
+          2,
+          0,
+          3,
+          0
+        ],
+        [
+          0,
+          2,
+          19,
+          0
+        ]
+      ],
+      "dead_basins": 6,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.44675764441490173,
+          "nearest_distances": [
+            0.33458051085472107,
+            0.378650963306427,
+            0.45451122522354126,
+            0.5022520422935486,
+            0.45451122522354126,
+            0.41047734022140503,
+            0.37749361991882324,
+            0.4976055324077606,
+            0.5205998420715332,
+            0.378650963306427,
+            0.3674456775188446,
+            0.628259539604187,
+            0.5295762419700623,
+            0.4115704596042633,
+            0.5433974266052246,
+            0.4735531508922577,
+            0.3674456775188446,
+            0.33458051085472107,
+            0.5157745480537415,
+            0.416517972946167,
+            0.5358825922012329,
+            0.4391847252845764,
+            0.4391847252845764,
+            0.41047734022140503
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7916666865348816,
+          "top_k_oracle_overlap": 0.5833333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.8571428656578064
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.44503259658813477,
+          "nearest_distances": [
+            0.3505842983722687,
+            0.3909774720668793,
+            0.4795173704624176,
+            0.5390641093254089,
+            0.4795173704624176,
+            0.3474454879760742,
+            0.4037244915962219,
+            0.454233855009079,
+            0.5146951675415039,
+            0.3909774720668793,
+            0.39696651697158813,
+            0.6140331625938416,
+            0.5545487999916077,
+            0.3474454879760742,
+            0.5364454984664917,
+            0.5088199973106384,
+            0.39696651697158813,
+            0.3505842983722687,
+            0.5001891255378723,
+            0.42313146591186523,
+            0.47415661811828613,
+            0.4240122139453888,
+            0.4240122139453888,
+            0.37873390316963196
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.7916666865348816,
+          "top_k_oracle_overlap": 0.6041666865348816,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.7647058963775635
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.8571428656578064
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 16,
+      "actual_window_sizes": [
+        16,
+        16
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "spectral_only_w32_b4",
+      "parameters": 1572,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.025515755638480186,
+            "oracle_top1": 0.625,
+            "oracle_top2": 0.9583333134651184,
+            "pairwise_ranking_accuracy": 0.7183098793029785,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.06139986589550972,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              11,
+              4,
+              9
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.01995849609375,
+            "oracle_top1": 0.6666666865348816,
+            "oracle_top2": 0.9583333134651184,
+            "pairwise_ranking_accuracy": 0.7777777910232544,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.05856698378920555,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              15,
+              4,
+              5
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.022737125866115093,
+        "oracle_top1": 0.6458333432674408,
+        "oracle_top2": 0.9583333134651184,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.059983424842357635,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.7482517649243762
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.07672557979822159,
+            "oracle_top1": 0.2083333283662796,
+            "oracle_top2": 0.625,
+            "pairwise_ranking_accuracy": 0.4583333432674408,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06652209162712097,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              16,
+              3,
+              5
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.057054150849580765,
+            "oracle_top1": 0.3333333432674408,
+            "oracle_top2": 0.5833333134651184,
+            "pairwise_ranking_accuracy": 0.4852941036224365,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06273486465215683,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              11,
+              3,
+              10
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.06688986532390118,
+        "oracle_top1": 0.2708333358168602,
+        "oracle_top2": 0.6041666567325592,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.0646284781396389,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.47142856972558156
+      },
+      "latency_ms_batch1": {
+        "graph": 0.2072019997285679,
+        "eigendecomposition": 0.19124030150123872,
+        "descriptor": 1.226632299949415,
+        "scoring": 0.2057776007859502,
+        "total_routing": 1.4649621996795759
+      },
+      "basin_occupancy": [
+        [
+          0,
+          0,
+          27,
+          0
+        ],
+        [
+          0,
+          2,
+          0,
+          4
+        ],
+        [
+          0,
+          15,
+          0,
+          0
+        ]
+      ],
+      "dead_basins": 8,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.4760112464427948,
+          "nearest_distances": [
+            0.65323805809021,
+            0.5420407056808472,
+            0.42881566286087036,
+            0.4233134388923645,
+            0.45275965332984924,
+            0.41754916310310364,
+            0.5892478227615356,
+            0.5728386640548706,
+            0.4182106554508209,
+            0.39619722962379456,
+            0.40357160568237305,
+            0.639624297618866,
+            0.4233134388923645,
+            0.431092232465744,
+            0.4572378098964691,
+            0.4460468292236328,
+            0.4542398750782013,
+            0.65323805809021,
+            0.431092232465744,
+            0.4216323494911194,
+            0.45275965332984924,
+            0.5024635195732117,
+            0.41754916310310364,
+            0.39619722962379456
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.625,
+          "top_k_oracle_overlap": 0.7083333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.5882353186607361
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.7142857313156128
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.4624323844909668,
+          "nearest_distances": [
+            0.676041305065155,
+            0.5088500380516052,
+            0.3622940182685852,
+            0.3622940182685852,
+            0.43668195605278015,
+            0.4136294722557068,
+            0.5512540340423584,
+            0.5288781523704529,
+            0.43230506777763367,
+            0.39999228715896606,
+            0.4596165120601654,
+            0.6037144064903259,
+            0.3681098222732544,
+            0.4257356524467468,
+            0.5258920788764954,
+            0.37913134694099426,
+            0.4257356524467468,
+            0.6845818161964417,
+            0.46945473551750183,
+            0.38605815172195435,
+            0.43668195605278015,
+            0.48711737990379333,
+            0.38827016949653625,
+            0.38605815172195435
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.5416666865348816,
+          "top_k_oracle_overlap": 0.7083333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.529411792755127
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.5714285969734192
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 32,
+      "actual_window_sizes": [
+        32,
+        32
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "geometry_only_w32_b4",
+      "parameters": 1572,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.028637925162911415,
+            "oracle_top1": 0.5833333134651184,
+            "oracle_top2": 0.7916666865348816,
+            "pairwise_ranking_accuracy": 0.7183098793029785,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.050185009837150574,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              6,
+              4,
+              14
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.021174252033233643,
+            "oracle_top1": 0.7083333134651184,
+            "oracle_top2": 0.9583333134651184,
+            "pairwise_ranking_accuracy": 0.7777777910232544,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.044265761971473694,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              11,
+              7,
+              6
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.02490608859807253,
+        "oracle_top1": 0.6458333134651184,
+        "oracle_top2": 0.875,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.047225385904312134,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.7482517649243762
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.059232402592897415,
+            "oracle_top1": 0.4583333432674408,
+            "oracle_top2": 0.6666666865348816,
+            "pairwise_ranking_accuracy": 0.5555555820465088,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06068280339241028,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              11,
+              6,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.05134022235870361,
+            "oracle_top1": 0.4583333432674408,
+            "oracle_top2": 0.625,
+            "pairwise_ranking_accuracy": 0.5588235259056091,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.05856421962380409,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              11,
+              5,
+              8
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.055286312475800514,
+        "oracle_top1": 0.4583333432674408,
+        "oracle_top2": 0.6458333432674408,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.059623511508107185,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.5571428690637861
+      },
+      "latency_ms_batch1": {
+        "graph": 0.20045290220878087,
+        "eigendecomposition": 0.1805748004699126,
+        "descriptor": 1.2037408021569718,
+        "scoring": 0.1958378983545117,
+        "total_routing": 1.432022797234822
+      },
+      "basin_occupancy": [
+        [
+          0,
+          0,
+          1,
+          21
+        ],
+        [
+          11,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          15,
+          0
+        ]
+      ],
+      "dead_basins": 8,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.4760112464427948,
+          "nearest_distances": [
+            0.65323805809021,
+            0.5420407056808472,
+            0.42881566286087036,
+            0.4233134388923645,
+            0.45275965332984924,
+            0.41754916310310364,
+            0.5892478227615356,
+            0.5728386640548706,
+            0.4182106554508209,
+            0.39619722962379456,
+            0.40357160568237305,
+            0.639624297618866,
+            0.4233134388923645,
+            0.431092232465744,
+            0.4572378098964691,
+            0.4460468292236328,
+            0.4542398750782013,
+            0.65323805809021,
+            0.431092232465744,
+            0.4216323494911194,
+            0.45275965332984924,
+            0.5024635195732117,
+            0.41754916310310364,
+            0.39619722962379456
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.625,
+          "top_k_oracle_overlap": 0.7083333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.5882353186607361
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.7142857313156128
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.4624323844909668,
+          "nearest_distances": [
+            0.676041305065155,
+            0.5088500380516052,
+            0.3622940182685852,
+            0.3622940182685852,
+            0.43668195605278015,
+            0.4136294722557068,
+            0.5512540340423584,
+            0.5288781523704529,
+            0.43230506777763367,
+            0.39999228715896606,
+            0.4596165120601654,
+            0.6037144064903259,
+            0.3681098222732544,
+            0.4257356524467468,
+            0.5258920788764954,
+            0.37913134694099426,
+            0.4257356524467468,
+            0.6845818161964417,
+            0.46945473551750183,
+            0.38605815172195435,
+            0.43668195605278015,
+            0.48711737990379333,
+            0.38827016949653625,
+            0.38605815172195435
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.5416666865348816,
+          "top_k_oracle_overlap": 0.7083333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.529411792755127
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.5714285969734192
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 32,
+      "actual_window_sizes": [
+        32,
+        32
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "combined_w32_b1",
+      "parameters": 393,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.007628828287124634,
+            "oracle_top1": 0.7083333134651184,
+            "oracle_top2": 0.875,
+            "pairwise_ranking_accuracy": 0.7887324094772339,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.053420037031173706,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              11,
+              6,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.014382352121174335,
+            "oracle_top1": 0.6666666865348816,
+            "oracle_top2": 0.9166666865348816,
+            "pairwise_ranking_accuracy": 0.7361111044883728,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.051705580204725266,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              9,
+              7,
+              8
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.011005590204149485,
+        "oracle_top1": 0.6875,
+        "oracle_top2": 0.8958333432674408,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.052562808617949486,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.7622377664059192
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.07406597584486008,
+            "oracle_top1": 0.1666666716337204,
+            "oracle_top2": 0.5833333134651184,
+            "pairwise_ranking_accuracy": 0.5,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06837549060583115,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              7,
+              12,
+              5
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.07269281148910522,
+            "oracle_top1": 0.3333333432674408,
+            "oracle_top2": 0.625,
+            "pairwise_ranking_accuracy": 0.5147058963775635,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06624121963977814,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              6,
+              8,
+              10
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.07337939366698265,
+        "oracle_top1": 0.2500000074505806,
+        "oracle_top2": 0.6041666567325592,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.06730835512280464,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.5071428639548166
+      },
+      "latency_ms_batch1": {
+        "graph": 0.23405939791700803,
+        "eigendecomposition": 0.18974650083691813,
+        "descriptor": 1.3344774997676723,
+        "scoring": 0.1926921002450399,
+        "total_routing": 1.5707785991253331
+      },
+      "basin_occupancy": [
+        [
+          13
+        ],
+        [
+          20
+        ],
+        [
+          15
+        ]
+      ],
+      "dead_basins": 0,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.4760112464427948,
+          "nearest_distances": [
+            0.65323805809021,
+            0.5420407056808472,
+            0.42881566286087036,
+            0.4233134388923645,
+            0.45275965332984924,
+            0.41754916310310364,
+            0.5892478227615356,
+            0.5728386640548706,
+            0.4182106554508209,
+            0.39619722962379456,
+            0.40357160568237305,
+            0.639624297618866,
+            0.4233134388923645,
+            0.431092232465744,
+            0.4572378098964691,
+            0.4460468292236328,
+            0.4542398750782013,
+            0.65323805809021,
+            0.431092232465744,
+            0.4216323494911194,
+            0.45275965332984924,
+            0.5024635195732117,
+            0.41754916310310364,
+            0.39619722962379456
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.625,
+          "top_k_oracle_overlap": 0.7083333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.5882353186607361
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.7142857313156128
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.4624323844909668,
+          "nearest_distances": [
+            0.676041305065155,
+            0.5088500380516052,
+            0.3622940182685852,
+            0.3622940182685852,
+            0.43668195605278015,
+            0.4136294722557068,
+            0.5512540340423584,
+            0.5288781523704529,
+            0.43230506777763367,
+            0.39999228715896606,
+            0.4596165120601654,
+            0.6037144064903259,
+            0.3681098222732544,
+            0.4257356524467468,
+            0.5258920788764954,
+            0.37913134694099426,
+            0.4257356524467468,
+            0.6845818161964417,
+            0.46945473551750183,
+            0.38605815172195435,
+            0.43668195605278015,
+            0.48711737990379333,
+            0.38827016949653625,
+            0.38605815172195435
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.5416666865348816,
+          "top_k_oracle_overlap": 0.7083333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.529411792755127
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.5714285969734192
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 32,
+      "actual_window_sizes": [
+        32,
+        32
+      ],
+      "window_truncated": false
+    },
+    {
+      "variant": "combined_w32_b4",
+      "parameters": 1572,
+      "train": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.033328115940093994,
+            "oracle_top1": 0.5416666865348816,
+            "oracle_top2": 0.7916666865348816,
+            "pairwise_ranking_accuracy": 0.7183098793029785,
+            "comparable_pairs": 71,
+            "best_second_margin": 0.07261257618665695,
+            "tie_rate": 0.0416666679084301,
+            "expected_regret": 0.050311874598264694,
+            "uniform_random_regret": 0.06451424211263657,
+            "constant_per_step_regret": 0.05244283750653267,
+            "expert_utilization": [
+              6,
+              5,
+              13
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.013865172863006592,
+            "oracle_top1": 0.75,
+            "oracle_top2": 1.0,
+            "pairwise_ranking_accuracy": 0.7916666865348816,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06730703264474869,
+            "tie_rate": 0.0,
+            "expected_regret": 0.04418386518955231,
+            "uniform_random_regret": 0.06158206984400749,
+            "constant_per_step_regret": 0.04908760264515877,
+            "expert_utilization": [
+              11,
+              6,
+              7
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.023596644401550293,
+        "oracle_top1": 0.6458333432674408,
+        "oracle_top2": 0.8958333432674408,
+        "uniform_random_regret": 0.06304815597832203,
+        "constant_per_step_regret": 0.05076522007584572,
+        "expected_regret": 0.0472478698939085,
+        "tie_rate": 0.02083333395421505,
+        "pairwise_ranking_accuracy": 0.7552447752519087
+      },
+      "held_out": {
+        "per_step": [
+          {
+            "depth": 0,
+            "routing_regret": 0.0545496828854084,
+            "oracle_top1": 0.5,
+            "oracle_top2": 0.6666666865348816,
+            "pairwise_ranking_accuracy": 0.5694444179534912,
+            "comparable_pairs": 72,
+            "best_second_margin": 0.06611033529043198,
+            "tie_rate": 0.0,
+            "expected_regret": 0.06047425791621208,
+            "uniform_random_regret": 0.06567735224962234,
+            "constant_per_step_regret": 0.0697743371129036,
+            "expert_utilization": [
+              10,
+              6,
+              8
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          },
+          {
+            "depth": 1,
+            "routing_regret": 0.054968785494565964,
+            "oracle_top1": 0.4166666567325592,
+            "oracle_top2": 0.625,
+            "pairwise_ranking_accuracy": 0.5441176295280457,
+            "comparable_pairs": 68,
+            "best_second_margin": 0.0629398301243782,
+            "tie_rate": 0.0,
+            "expected_regret": 0.058315638452768326,
+            "uniform_random_regret": 0.06250432133674622,
+            "constant_per_step_regret": 0.06086850166320801,
+            "expert_utilization": [
+              10,
+              6,
+              8
+            ],
+            "unselected_experts": 0,
+            "value_prediction_error": null
+          }
+        ],
+        "routing_regret": 0.05475923418998718,
+        "oracle_top1": 0.4583333283662796,
+        "oracle_top2": 0.6458333432674408,
+        "uniform_random_regret": 0.06409083679318428,
+        "constant_per_step_regret": 0.0653214193880558,
+        "expected_regret": 0.059394948184490204,
+        "tie_rate": 0.0,
+        "pairwise_ranking_accuracy": 0.5571428350039891
+      },
+      "latency_ms_batch1": {
+        "graph": 0.21551050085690804,
+        "eigendecomposition": 0.18167359958169982,
+        "descriptor": 1.225153099221643,
+        "scoring": 0.19773489912040532,
+        "total_routing": 1.4554891007719561
+      },
+      "basin_occupancy": [
+        [
+          0,
+          0,
+          0,
+          20
+        ],
+        [
+          12,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          16,
+          0
+        ]
+      ],
+      "dead_basins": 9,
+      "basin_redundancy": 0.0,
+      "descriptor_oracle_disagreement": [
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.4760112464427948,
+          "nearest_distances": [
+            0.65323805809021,
+            0.5420407056808472,
+            0.42881566286087036,
+            0.4233134388923645,
+            0.45275965332984924,
+            0.41754916310310364,
+            0.5892478227615356,
+            0.5728386640548706,
+            0.4182106554508209,
+            0.39619722962379456,
+            0.40357160568237305,
+            0.639624297618866,
+            0.4233134388923645,
+            0.431092232465744,
+            0.4572378098964691,
+            0.4460468292236328,
+            0.4542398750782013,
+            0.65323805809021,
+            0.431092232465744,
+            0.4216323494911194,
+            0.45275965332984924,
+            0.5024635195732117,
+            0.41754916310310364,
+            0.39619722962379456
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.625,
+          "top_k_oracle_overlap": 0.7083333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.5882353186607361
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.7142857313156128
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        },
+        {
+          "samples": 24,
+          "available": true,
+          "mean_nearest_distance": 0.4624323844909668,
+          "nearest_distances": [
+            0.676041305065155,
+            0.5088500380516052,
+            0.3622940182685852,
+            0.3622940182685852,
+            0.43668195605278015,
+            0.4136294722557068,
+            0.5512540340423584,
+            0.5288781523704529,
+            0.43230506777763367,
+            0.39999228715896606,
+            0.4596165120601654,
+            0.6037144064903259,
+            0.3681098222732544,
+            0.4257356524467468,
+            0.5258920788764954,
+            0.37913134694099426,
+            0.4257356524467468,
+            0.6845818161964417,
+            0.46945473551750183,
+            0.38605815172195435,
+            0.43668195605278015,
+            0.48711737990379333,
+            0.38827016949653625,
+            0.38605815172195435
+          ],
+          "near_threshold": 0.05,
+          "near_count": 0,
+          "near_identical_disagreement": null,
+          "overall_nearest_disagreement": 0.5416666865348816,
+          "top_k_oracle_overlap": 0.7083333134651184,
+          "conditional_disagreement": [
+            {
+              "min_distance": 0.0,
+              "max_distance": 0.01,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.01,
+              "max_distance": 0.05,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.05,
+              "max_distance": 0.1,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.1,
+              "max_distance": 0.25,
+              "count": 0,
+              "oracle_disagreement": null
+            },
+            {
+              "min_distance": 0.25,
+              "max_distance": 0.5,
+              "count": 17,
+              "oracle_disagreement": 0.529411792755127
+            },
+            {
+              "min_distance": 0.5,
+              "max_distance": 1.0,
+              "count": 7,
+              "oracle_disagreement": 0.5714285969734192
+            },
+            {
+              "min_distance": 1.0,
+              "max_distance": null,
+              "count": 0,
+              "oracle_disagreement": null
+            }
+          ]
+        }
+      ],
+      "requested_window_size": 32,
+      "actual_window_sizes": [
+        32,
+        32
+      ],
+      "window_truncated": false
+    }
+  ],
+  "conclusion": "INCONCLUSIVE",
+  "caveat": "Small controlled fit; no claim of reliable specialization. Scores are not cost predictions.",
+  "transformation": {
+    "mode": "observational",
+    "feature_names": [
+      "log_stretch_0",
+      "log_stretch_1",
+      "log_stretch_2",
+      "log_stretch_3",
+      "mean_log_stretch",
+      "anisotropic_deformation",
+      "maximum_stretch",
+      "minimum_stretch",
+      "log_volume",
+      "rotation_normalized_trace",
+      "rotation_identity_distance",
+      "shear_like_off_axis_stretch",
+      "tangent_escape",
+      "delta.spectrum.band_0",
+      "delta.spectrum.band_1",
+      "delta.spectrum.band_2",
+      "delta.spectrum.band_3",
+      "delta.spectrum.band_4",
+      "delta.spectrum.band_5",
+      "delta.radial.band_0",
+      "delta.radial.band_1",
+      "delta.radial.band_2",
+      "delta.radial.band_3",
+      "delta.radial.band_4",
+      "delta.radial.band_5",
+      "delta.mean_knn_distance.band_0",
+      "delta.mean_knn_distance.band_1",
+      "delta.mean_knn_distance.band_2",
+      "delta.mean_knn_distance.band_3",
+      "delta.mean_knn_distance.band_4",
+      "delta.mean_knn_distance.band_5",
+      "delta.local_nonflatness.band_0",
+      "delta.local_nonflatness.band_1",
+      "delta.local_nonflatness.band_2",
+      "delta.local_nonflatness.band_3",
+      "delta.local_nonflatness.band_4",
+      "delta.local_nonflatness.band_5",
+      "delta.hks.mean_0",
+      "delta.hks.mean_1",
+      "delta.hks.mean_2",
+      "delta.hks.mean_3",
+      "delta.hks.mean_4",
+      "delta.hks.mean_5",
+      "delta.hks.std_0",
+      "delta.hks.std_1",
+      "delta.hks.std_2",
+      "delta.hks.std_3",
+      "delta.hks.std_4",
+      "delta.hks.std_5",
+      "delta.wks.mean_0",
+      "delta.wks.mean_1",
+      "delta.wks.mean_2",
+      "delta.wks.mean_3",
+      "delta.wks.mean_4",
+      "delta.wks.mean_5",
+      "delta.wks.std_0",
+      "delta.wks.std_1",
+      "delta.wks.std_2",
+      "delta.wks.std_3",
+      "delta.wks.std_4",
+      "delta.wks.std_5",
+      "spectral_delta_norm"
+    ],
+    "per_step": [
+      {
+        "observational_loss": 0.0,
+        "mean_pairwise_similarity": [
+          [
+            1.0,
+            0.28400713205337524,
+            0.08366063982248306
+          ],
+          [
+            0.28400713205337524,
+            1.0,
+            0.22392474114894867
+          ],
+          [
+            0.08366063982248306,
+            0.22392471134662628,
+            1.0
+          ]
+        ],
+        "mean_usefulness_overlap": [
+          [
+            0.11102242022752762,
+            0.1141653060913086,
+            0.10002467781305313
+          ],
+          [
+            0.1141653060913086,
+            0.12910208106040955,
+            0.10919355601072311
+          ],
+          [
+            0.10002467781305313,
+            0.10919355601072311,
+            0.11310840398073196
+          ]
+        ],
+        "mean_signature": [
+          [
+            0.052508145570755005,
+            0.02192385494709015,
+            0.00101271306630224,
+            -0.04244634136557579,
+            0.008249594829976559,
+            0.035292286425828934,
+            1.0539652109146118,
+            0.9587388038635254,
+            0.032998379319906235,
+            0.9996034502983093,
+            0.027268176898360252,
+            0.029604166746139526,
+            0.42949530482292175,
+            1.1589578207349405e-05,
+            0.0002381689118919894,
+            0.001082732924260199,
+            0.0003024982288479805,
+            -0.0005015091155655682,
+            0.0006350437179207802,
+            5.534830506803701e-06,
+            0.00023497531947214156,
+            0.001120024942792952,
+            -0.0009393111686222255,
+            0.0016176849603652954,
+            0.001460705534555018,
+            2.2651140170637518e-05,
+            0.0008109405753202736,
+            0.004880556836724281,
+            0.0005765889654867351,
+            -0.004619568586349487,
+            0.00123741349671036,
+            1.7885435227071866e-05,
+            0.00038039020728319883,
+            0.0005333532462827861,
+            -0.003590972861275077,
+            0.0018393658101558685,
+            0.0037806120235472918,
+            0.0009236317127943039,
+            0.0007791463285684586,
+            0.0006737569347023964,
+            0.000627853733021766,
+            0.00016095458704512566,
+            0.00011068132153013721,
+            0.0012861463474109769,
+            0.0007156081846915185,
+            -0.00012623150541912764,
+            -9.656007023295388e-05,
+            -0.0002487573947291821,
+            -0.0002503649448044598,
+            0.00011053867638111115,
+            0.00011053805792471394,
+            0.00011053782509407029,
+            0.0001105360352084972,
+            0.00011053681373596191,
+            0.00011053596244892105,
+            -0.00012758847151417285,
+            9.861603757599369e-05,
+            0.0002557413245085627,
+            -8.462785626761615e-05,
+            0.00018510186055209488,
+            0.000426875107223168,
+            0.07549972087144852
+          ],
+          [
+            0.02554398961365223,
+            0.008151031099259853,
+            -0.01320597156882286,
+            -0.034773387014865875,
+            -0.0035710849333554506,
+            0.023146500810980797,
+            1.0259021520614624,
+            0.9658815860748291,
+            -0.014284339733421803,
+            0.9997569918632507,
+            0.02083810605108738,
+            0.020356541499495506,
+            0.4323218762874603,
+            -1.0490832210052758e-05,
+            -0.00017230612866114825,
+            -0.00010194993956247345,
+            0.0005716045270673931,
+            7.906928658485413e-05,
+            0.0003691716119647026,
+            6.84104679748998e-06,
+            0.00031243180274032056,
+            0.0023824810050427914,
+            0.005596186965703964,
+            0.001868338673375547,
+            -0.007042529061436653,
+            1.3163677067495883e-05,
+            0.0005104563315398991,
+            0.00255406997166574,
+            -0.00238060113042593,
+            -0.0025686125736683607,
+            0.0026438862551003695,
+            -2.419170186840347e-06,
+            -0.00011183307651663199,
+            -0.0015447732293978333,
+            -0.0072792754508554935,
+            -0.001250342815183103,
+            0.009426743723452091,
+            0.00036360384547151625,
+            0.0002542200090829283,
+            0.00010471387213328853,
+            -1.8272859961143695e-05,
+            -5.523286290554097e-06,
+            4.591272954712622e-05,
+            -0.00033653699210844934,
+            -0.00033041471033357084,
+            -8.312859426951036e-05,
+            3.228553759981878e-05,
+            1.0115695658896584e-05,
+            1.9000881366082467e-05,
+            4.594734127749689e-05,
+            4.5946257159812376e-05,
+            4.594610072672367e-05,
+            4.594540223479271e-05,
+            4.5948196202516556e-05,
+            4.5948272600071505e-05,
+            -8.124485611915588e-05,
+            4.547256321529858e-05,
+            0.00013849668903276324,
+            -0.0001993871555896476,
+            -6.893168756505474e-05,
+            3.378302790224552e-05,
+            0.07481905072927475
+          ],
+          [
+            0.017399387434124947,
+            0.0041033122688531876,
+            -0.00483405077829957,
+            -0.018679039552807808,
+            -0.0005025978316552937,
+            0.013469806872308254,
+            1.0175777673721313,
+            0.9815168976783752,
+            -0.002010391326621175,
+            0.9999222755432129,
+            0.01203011255711317,
+            0.010860959999263287,
+            0.4316490888595581,
+            1.2031359801767394e-05,
+            0.00025989519781433046,
+            0.0005912418127991259,
+            -0.0004214135406073183,
+            -0.00035224916064180434,
+            -0.00022036705922801048,
+            2.1416200979729183e-05,
+            0.0006089994567446411,
+            0.0024257334880530834,
+            -0.0009512603282928467,
+            -0.0019620172679424286,
+            -0.0003147559764329344,
+            2.2669262762065046e-05,
+            0.0005623624892905354,
+            0.0014577669790014625,
+            -0.0034661460667848587,
+            -0.0019209099700674415,
+            0.0025297279935330153,
+            4.456311728517903e-07,
+            -9.661642980063334e-05,
+            -0.0014913243940100074,
+            -0.0009455441613681614,
+            0.004632887896150351,
+            -0.0011556539684534073,
+            -3.955140709877014e-05,
+            3.964577990700491e-05,
+            0.00018615151930134743,
+            0.00027693636366166174,
+            5.9075577155454084e-05,
+            -8.070142939686775e-06,
+            -0.0013955198228359222,
+            -0.0011232070391997695,
+            -0.00048457086086273193,
+            0.00012069362128386274,
+            -8.669642852510151e-07,
+            -1.7722059055813588e-05,
+            -8.179184987966437e-06,
+            -8.179806172847748e-06,
+            -8.179806172847748e-06,
+            -8.178020834748168e-06,
+            -8.177012205123901e-06,
+            -8.17693489807425e-06,
+            -0.0003613059234339744,
+            -0.0002318458427907899,
+            -6.59195939078927e-06,
+            0.00020185769244562835,
+            -0.00014188388013280928,
+            -0.00020794013107661158,
+            0.058633435517549515
+          ]
+        ]
+      },
+      {
+        "observational_loss": 0.0,
+        "mean_pairwise_similarity": [
+          [
+            1.0,
+            0.19007261097431183,
+            0.0892966166138649
+          ],
+          [
+            0.1900726556777954,
+            1.0,
+            0.3305879533290863
+          ],
+          [
+            0.0892966166138649,
+            0.3305879533290863,
+            1.0
+          ]
+        ],
+        "mean_usefulness_overlap": [
+          [
+            0.11529115587472916,
+            0.11564767360687256,
+            0.10152693837881088
+          ],
+          [
+            0.11564767360687256,
+            0.12561649084091187,
+            0.10717358440160751
+          ],
+          [
+            0.10152693837881088,
+            0.10717358440160751,
+            0.11039596796035767
+          ]
+        ],
+        "mean_signature": [
+          [
+            0.05286261439323425,
+            0.022185204550623894,
+            0.0015064723556861281,
+            -0.03609515354037285,
+            0.010114782489836216,
+            0.03304581716656685,
+            1.0543428659439087,
+            0.9647777676582336,
+            0.040459129959344864,
+            0.9996051788330078,
+            0.02720239944756031,
+            0.027645165100693703,
+            0.42817559838294983,
+            2.4069047867669724e-05,
+            0.0004132665926590562,
+            0.000801541842520237,
+            -0.001080163405276835,
+            -0.0002694701252039522,
+            0.0005250880494713783,
+            -3.0211825219339516e-07,
+            -5.2466264605754986e-05,
+            -0.00011316502786939964,
+            0.001363516435958445,
+            -2.1979212760925293e-05,
+            -0.0004684900341089815,
+            2.4257167751784436e-05,
+            0.00039535228279419243,
+            0.0015073976246640086,
+            0.0005532214418053627,
+            -0.0027643516659736633,
+            0.0005934468354098499,
+            1.0427903362142388e-05,
+            9.739344386616722e-05,
+            -0.00013671877968590707,
+            0.0045112851075828075,
+            0.004677531775087118,
+            -0.0064211320132017136,
+            0.00019428941595833749,
+            0.00011676239228108898,
+            0.00010199379175901413,
+            0.00042539043352007866,
+            0.00013548826973419636,
+            2.6068339138873853e-05,
+            0.0013591389870271087,
+            0.0010229325853288174,
+            0.00018125820497516543,
+            0.00015741067181807011,
+            -4.716403782367706e-05,
+            -7.946634286781773e-05,
+            2.590132316981908e-05,
+            2.5900080800056458e-05,
+            2.5901710614562035e-05,
+            2.5898218154907227e-05,
+            2.5899304091581143e-05,
+            2.5898762032738887e-05,
+            6.869062781333923e-05,
+            0.00018324617121834308,
+            0.0002605074841994792,
+            0.0002998843847308308,
+            0.00029377095052041113,
+            0.00016864757344592363,
+            0.08011654764413834
+          ],
+          [
+            0.026001259684562683,
+            0.009047483094036579,
+            -0.011493265628814697,
+            -0.03355022892355919,
+            -0.0024986881762742996,
+            0.02273455075919628,
+            1.026366114616394,
+            0.9670693874359131,
+            -0.009994752705097198,
+            0.9997676014900208,
+            0.020325586199760437,
+            0.01956970803439617,
+            0.4316163957118988,
+            -1.2818585673812777e-05,
+            -0.0003681377274915576,
+            -0.0015976931899785995,
+            6.277827924350277e-05,
+            0.001028775586746633,
+            -0.00044779074960388243,
+            -1.0842394658538979e-05,
+            -0.0004088430723641068,
+            -0.001721027190797031,
+            0.003642042400315404,
+            0.002279150066897273,
+            -0.005049738567322493,
+            5.630596206174232e-06,
+            2.473325002938509e-05,
+            0.00016882999625522643,
+            0.004642697982490063,
+            0.0008336665923707187,
+            -0.006652006879448891,
+            -1.2140250873926561e-05,
+            -0.0004059996863361448,
+            -0.0005956224631518126,
+            0.006909016985446215,
+            -3.402680158615112e-05,
+            -0.0069490037858486176,
+            -0.0007151607424020767,
+            -0.0006555287982337177,
+            -0.0007271319627761841,
+            -0.0008188043721020222,
+            -0.00015995542344171554,
+            -8.339054329553619e-05,
+            -0.0009128476376645267,
+            -0.00046876780106686056,
+            0.00024682353250682354,
+            -5.7700712204677984e-05,
+            0.00016753542877268046,
+            0.0001721113658277318,
+            -8.342818910023198e-05,
+            -8.34273305372335e-05,
+            -8.342764340341091e-05,
+            -8.343059016624466e-05,
+            -8.343105582753196e-05,
+            -8.343183435499668e-05,
+            0.00013624368875753134,
+            -4.948283822159283e-05,
+            -0.00020383222727105021,
+            6.26130131422542e-05,
+            -0.00018600060138851404,
+            -0.0003465722838882357,
+            0.0674477219581604
+          ],
+          [
+            0.01749214343726635,
+            0.003601150820031762,
+            -0.005411460530012846,
+            -0.01883152313530445,
+            -0.0007874215370975435,
+            0.013554506003856659,
+            1.017670750617981,
+            0.9813697338104248,
+            -0.003149686148390174,
+            0.9999231696128845,
+            0.011839966289699078,
+            0.010918072424829006,
+            0.4319930374622345,
+            4.899750820186455e-06,
+            3.643145828391425e-05,
+            -0.0006011412478983402,
+            -0.0011989502236247063,
+            0.0003932993859052658,
+            9.228692942997441e-05,
+            -3.049347242267686e-06,
+            -0.00019100389908999205,
+            -0.0010293062077835202,
+            0.0014787381514906883,
+            0.0002458853123243898,
+            -0.0025393839459866285,
+            -9.822574611462187e-06,
+            -0.000364664796506986,
+            -0.0008727767853997648,
+            0.004121795762330294,
+            -0.0003729934396687895,
+            -0.0042184810154139996,
+            -4.070098839292768e-06,
+            -0.00019092042930424213,
+            -0.00024974558618851006,
+            0.007893000729382038,
+            0.0037762250285595655,
+            -0.0108302878215909,
+            -0.0007118470966815948,
+            -0.0007064491510391235,
+            -0.0006993034039624035,
+            -0.00035363234928809106,
+            -5.588346903095953e-05,
+            -7.945625111460686e-05,
+            -0.0007006001542322338,
+            -0.0003708638541866094,
+            0.0001724446628941223,
+            0.00011813527817139402,
+            0.00017622276209294796,
+            0.00015180140326265246,
+            -7.957235357025638e-05,
+            -7.957150228321552e-05,
+            -7.957126945257187e-05,
+            -7.957344496389851e-05,
+            -7.95725136413239e-05,
+            -7.957321213325486e-05,
+            5.507127571036108e-05,
+            5.299858094076626e-05,
+            8.808080019662157e-05,
+            0.00034960676566697657,
+            -0.00013167878205422312,
+            -0.00029236008413136005,
+            0.06299865990877151
+          ]
+        ]
+      }
+    ],
+    "normalization": "training-only population statistics"
+  }
+}

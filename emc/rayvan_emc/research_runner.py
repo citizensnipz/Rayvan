@@ -536,9 +536,17 @@ def _build_model(config: ExperimentConfig, vocab_size: int) -> nn.Module:
         values.update(router_type="counterfactual_value", integrator_type="identity_free_gate",
                       refractory_enabled=False, loss_free_balance_enabled=False, switch_cost=0., persistence_bonus=0.,
                       counterfactual_calibration_enabled=False)
+    if config.architecture == "spectral_geometric_emc":
+        from dataclasses import fields
+        from .spectral_config import SpectralConfig
+        values.update({f.name: getattr(config.routing, f.name) for f in fields(SpectralConfig)})
+        values.update(router_type="spectral_geometric", integrator_type="acceptance_gate")
     torch.manual_seed(config.training.seed)
     values["ssm_backend"] = config.model.ssm_backend
     emc_config = EMCConfig(**values)
+    if config.architecture == "spectral_geometric_emc":
+        from .spectral_model import SpectralGeometricEMC
+        return SpectralGeometricEMC(emc_config)
     if config.architecture == "counterfactual_value_emc":
         return CounterfactualValueEMC(emc_config)
     if config.architecture == "heterogeneous_serial":

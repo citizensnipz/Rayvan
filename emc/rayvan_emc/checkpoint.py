@@ -130,6 +130,9 @@ def _load_payload(path: str | Path, device: torch.device | str) -> dict[str, Any
 
 
 def _model_type(model: nn.Module) -> str:
+    from .spectral_model import SpectralGeometricEMC
+    if isinstance(model, SpectralGeometricEMC):
+        return "emc_spectral_geometric"
     from .value_routing import CounterfactualValueEMC
     if isinstance(model, CounterfactualValueEMC):
         return "emc_counterfactual_value"
@@ -149,6 +152,9 @@ def _model_type(model: nn.Module) -> str:
 
 
 def _create_model(model_type: str, config: dict[str, Any]) -> nn.Module:
+    if model_type == "emc_spectral_geometric":
+        from .spectral_model import SpectralGeometricEMC
+        return SpectralGeometricEMC(EMCConfig(**config))
     if model_type == "emc_counterfactual_value":
         from .value_routing import CounterfactualValueEMC
         return CounterfactualValueEMC(EMCConfig(**config))

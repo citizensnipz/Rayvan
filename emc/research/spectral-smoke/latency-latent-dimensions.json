@@ -1,0 +1,86 @@
+{
+  "device": "cpu",
+  "threads": 1,
+  "torch_version": "2.14.0+cu130",
+  "cuda_available": false,
+  "results": [
+    {
+      "latent_dim": 32,
+      "window": 8,
+      "experts": 6,
+      "parameters": 3144,
+      "latency_ms": {
+        "graph": 0.23542480121250264,
+        "eigendecomposition": 0.13277919933898374,
+        "descriptor": 1.1504989997774828,
+        "scoring": 0.23043339970172383,
+        "total_routing": 1.4151007992040832
+      }
+    },
+    {
+      "latent_dim": 32,
+      "window": 16,
+      "experts": 6,
+      "parameters": 3144,
+      "latency_ms": {
+        "graph": 0.2026322006713599,
+        "eigendecomposition": 0.11349509804858826,
+        "descriptor": 1.300067001284333,
+        "scoring": 0.21095170013722964,
+        "total_routing": 1.545605199498823
+      }
+    },
+    {
+      "latent_dim": 32,
+      "window": 32,
+      "experts": 6,
+      "parameters": 3144,
+      "latency_ms": {
+        "graph": 0.21969410081510432,
+        "eigendecomposition": 0.19617159996414557,
+        "descriptor": 2.0328303005953785,
+        "scoring": 0.21717149938922375,
+        "total_routing": 2.287555399379926
+      }
+    },
+    {
+      "latent_dim": 256,
+      "window": 8,
+      "experts": 6,
+      "parameters": 3144,
+      "latency_ms": {
+        "graph": 0.20427400013431907,
+        "eigendecomposition": 0.09426890028407797,
+        "descriptor": 1.1093188011727761,
+        "scoring": 0.19517920081852935,
+        "total_routing": 1.3364519996684976
+      }
+    },
+    {
+      "latent_dim": 256,
+      "window": 16,
+      "experts": 6,
+      "parameters": 3144,
+      "latency_ms": {
+        "graph": 0.27193870046176016,
+        "eigendecomposition": 0.1376715983496979,
+        "descriptor": 2.3448585998266935,
+        "scoring": 0.2433098001347389,
+        "total_routing": 2.633252300438471
+      }
+    },
+    {
+      "latent_dim": 256,
+      "window": 32,
+      "experts": 6,
+      "parameters": 3144,
+      "latency_ms": {
+        "graph": 0.48950460040941834,
+        "eigendecomposition": 0.24049839994404465,
+        "descriptor": 7.9768378993321685,
+        "scoring": 0.27216400048928335,
+        "total_routing": 8.30035660037538
+      }
+    }
+  ]
+}

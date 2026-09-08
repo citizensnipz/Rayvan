@@ -1,0 +1,14 @@
+{
+  "base_commit": "746f27f6c605145f76f8de13d82710047c3d9c9c",
+  "exact_baseline_reproduction": true,
+  "hashes": {
+    "geometric": {
+      "state_sha256": "62d3f0fe96de8aff2b8e35528ca7b64f3a193d433beab1229672e70b03887582",
+      "logits_sha256": "2749a334ca8740569749d8506ec1b876cea87c58ee6179ed769fc04bd5dcd446"
+    },
+    "counterfactual_value": {
+      "state_sha256": "3ad5a86aefd4368c6e52e5608556c5d4dbbc1f9520069cc608cc0f104ea33ec6",
+      "logits_sha256": "d483fc859883b6f410b1ba5decb3fc9badfdd90cd99481cc736d45039de3ce4e"
+    }
+  }
+}
