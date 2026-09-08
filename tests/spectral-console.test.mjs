@@ -39,6 +39,16 @@ test('UI activates sequential test, preserves local paths and submits actual set
  assert.equal(current.routing.value_spectral_live_updates,100);
  assert.equal(current.routing.value_spectral_online_lr,.001);
  assert.equal(current.training.evaluation_interval,20);
+ const snapshotToggle=[...document.querySelectorAll('label')].find(n=>n.textContent.includes('Snapshot-batch spectral learning')).querySelector('input');
+ await act(()=>snapshotToggle.click());
+ assert.equal(current.routing.value_spectral_snapshot,true);
+ assert.equal(current.routing.value_spectral_snapshot_states,20);
+ assert.equal(current.routing.value_spectral_snapshot_updates,20);
+ assert.equal(current.routing.value_spectral_live_updates,1000);
+ assert.equal(current.training.evaluation_interval,100);
+ for(const label of ['Counterfactual states per snapshot','Fit updates per snapshot']) assert.ok([...document.querySelectorAll('label')].some(n=>n.textContent===label));
+ assert.equal(current.routing.value_checkpoint_path,initial.routing.value_checkpoint_path);
+ assert.match(document.body.textContent,/Planned probes: 1000/);
  await act(()=>document.querySelector('.launch').click());
  assert.equal(submitted,current); // no spurious million-token confirmation
 });

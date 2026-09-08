@@ -183,41 +183,66 @@ def run_spectral_live(model, corpus, config, train, held, bank, output, emit, ca
     generator = torch.Generator().manual_seed(config.training.seed+9101)
     probe_rng = torch.Generator().manual_seed(c.value_router_seed+9102)
     batch = expert_batch_limit(model,config.model.context_length,config.training.batch_size)
-    for update in range(1,c.value_spectral_live_updates+1):
+    probes = 0
+    round_number = 0
+    update = 0
+    while update < c.value_spectral_live_updates:
         check_cancel(cancelled)
-        observer.load_state_dict(router.state_dict()); observer.eval()
-        x,y,_ = unique_prefixes(corpus,'train',batch,config.model.context_length,generator,device,exclude,cancelled)
-        depth = int(torch.randint(model.config.resolved_trajectory_steps,(),generator=probe_rng))
-        request = int(torch.randint(batch,(),generator=probe_rng))
-        with torch.no_grad():
-            state = model.embed(x)
-            # Reach the sampled position using this iteration's spectral policy.
-            for t in range(depth):
-                check_cancel(cancelled)
-                d = observer.describe(state)
-                selected = observer.score_descriptor(d)[0].argmax(-1)
-                state = model.apply_expert(state,selected)
-            state = state[request:request+1]
-            labels = suffix_targets(model,observer,state,y[request:request+1,-1],depth,cancelled)
-            d = observer.describe(state)
-            descriptor = Descriptor(d.q.cpu(),d.g.cpu(),{})
-        optimizer.zero_grad(set_to_none=True)
-        scores = router.score_descriptor(descriptor)[0]
-        loss = routing_objective(scores,labels.cpu(),router.c)+router.c.basin_redundancy_weight*router.redundancy_loss()
-        if not torch.isfinite(loss): raise FloatingPointError('Nonfinite spectral online loss')
-        loss.backward(); torch.nn.utils.clip_grad_norm_(router.parameters(),1.,error_if_nonfinite=True); optimizer.step()
-        online_items += batch
-        step = c.value_fit_updates+update
-        emit('spectral_live_progress',phase='sequential policy learning',step=step,total=total,
-             training_objective=float(loss.detach()),online_endpoints=online_items)
-        if update % config.training.evaluation_interval==0 or update==c.value_spectral_live_updates:
-            last_live = audit(step,'sequential policy learning',float(loss.detach()))
+        round_number += 1
+        # Separate target snapshot: audit() may refresh observer, never this copy.
+        snapshot = deepcopy(observer)
+        snapshot.load_state_dict(router.state_dict())
+        snapshot.eval().requires_grad_(False)
+        states_per_round = c.value_spectral_snapshot_states if c.value_spectral_snapshot else 1
+        fits_per_round = c.value_spectral_snapshot_updates if c.value_spectral_snapshot else 1
+        descriptors, targets = [], []
+        for item in range(states_per_round):
+            check_cancel(cancelled)
+            x,y,_ = unique_prefixes(corpus,'train',batch,config.model.context_length,generator,device,exclude,cancelled)
+            depth = int(torch.randint(model.config.resolved_trajectory_steps,(),generator=probe_rng))
+            request = int(torch.randint(batch,(),generator=probe_rng))
+            with torch.no_grad():
+                state = model.embed(x)
+                for t in range(depth):
+                    check_cancel(cancelled)
+                    d = snapshot.describe(state)
+                    selected = snapshot.score_descriptor(d)[0].argmax(-1)
+                    state = model.apply_expert(state,selected)
+                state = state[request:request+1]
+                labels = suffix_targets(model,snapshot,state,y[request:request+1,-1],depth,cancelled)
+                d = snapshot.describe(state)
+                descriptors.append(Descriptor(d.q.cpu(),d.g.cpu(),{}))
+                targets.append(labels.cpu())
+            probes += 1
+            online_items += batch
+            emit('spectral_live_progress',phase='collecting snapshot evidence',
+                 step=c.value_fit_updates+update,total=total,snapshot_round=round_number,
+                 collected_states=item+1,collection_states=states_per_round,online_probes=probes)
+        descriptor = Descriptor(torch.cat([d.q for d in descriptors]),torch.cat([d.g for d in descriptors]),{})
+        labels = torch.cat(targets)
+        # Full-batch fitting. Evidence is discarded at the next snapshot refresh.
+        for fit in range(min(fits_per_round,c.value_spectral_live_updates-update)):
+            check_cancel(cancelled)
+            optimizer.zero_grad(set_to_none=True)
+            scores = router.score_descriptor(descriptor)[0]
+            loss = routing_objective(scores,labels,router.c)+router.c.basin_redundancy_weight*router.redundancy_loss()
+            if not torch.isfinite(loss): raise FloatingPointError('Nonfinite spectral online loss')
+            loss.backward(); torch.nn.utils.clip_grad_norm_(router.parameters(),1.,error_if_nonfinite=True); optimizer.step()
+            update += 1
+            step = c.value_fit_updates+update
+            emit('spectral_live_progress',phase='sequential policy learning',step=step,total=total,
+                 training_objective=float(loss.detach()),online_endpoints=online_items,
+                 snapshot_round=round_number,round_fit_update=fit+1,online_probes=probes)
+            if update % config.training.evaluation_interval==0 or update==c.value_spectral_live_updates:
+                last_live = audit(step,'sequential policy learning',float(loss.detach()))
     return dict(bank=bank,history=history,final=last_live,original=original,constant=fixed,
         constant_experts=constant,expert_names=list(model.expert_names),panel_sha256=panel_hash,
         evaluation_prefixes=c.value_spectral_eval_prefixes,config=asdict(spectral),
         source_checkpoint=c.value_checkpoint_path,reference_weights_sha256=reference_hash.hexdigest(),
-        online_updates=c.value_spectral_live_updates,online_probes=c.value_spectral_live_updates,
+        online_updates=c.value_spectral_live_updates,online_probes=probes,
+        snapshot_batch_enabled=c.value_spectral_snapshot,snapshot_rounds=round_number,
+        snapshot_states=states_per_round,snapshot_fit_updates=fits_per_round,
         online_learning_rate=c.value_spectral_online_lr,warmup_learning_rate=config.training.learning_rate,
         online_endpoints=online_items,expert_updates=0,normalization='training bank only; frozen',
-        objective='Bank KL warmup then fresh current-spectral-policy suffix KL; experts and shared layers frozen',
+        objective='Bank KL warmup then snapshot-spectral-policy suffix KL; full-batch fits per refresh; experts and shared layers frozen',
         caveat='Evaluation panel is repeatedly monitored, not used for gradients or best-checkpoint selection. Prefix equality is excluded; nearby packed-text contexts may still overlap. Paired intervals are descriptive, not proof of significance.')

@@ -20,6 +20,7 @@ export function SpectralLivePanel({ events, report, state, onCancel, onRouterTes
   return <div className="live-view">
     <section className="panel"><h2>Spectral router — sequential learning</h2>
       <p>{state} · {String(progress?.phase ?? last?.phase ?? "Preparing local checkpoint")}</p>
+      {(progress?.snapshot_round != null || Boolean(report?.snapshot_batch_enabled)) && <p>Snapshot round {String(progress?.snapshot_round ?? report?.snapshot_rounds ?? "—")} · counterfactual probes {String(progress?.online_probes ?? report?.online_probes ?? "—")}. {progress?.phase === "collecting snapshot evidence" ? `Collecting ${String(progress.collected_states)} / ${String(progress.collection_states)} states before fitting.` : "Evidence is fixed within each fit batch; the spectral policy is refreshed between batches."}</p>}
       <p>{step} / {total || "—"} router updates. Bank warmup ends at update {String(last?.warmup_updates ?? "—")}; subsequent updates use fresh policy-dependent suffix evidence.</p>
       {onCancel && ["initializing","running","validation"].includes(state) && <button className="danger" onClick={onCancel}>Stop safely</button>}
       {onRouterTest && <button onClick={onRouterTest}>Configure another test from original checkpoint</button>}
@@ -47,7 +48,7 @@ export function SpectralLivePanel({ events, report, state, onCancel, onRouterTes
     <section className="panel"><h3>Greedy evaluation routes by trajectory step</h3>
       <div className="table-wrap"><table><thead><tr><th>Step</th>{(counts[0] ?? []).map((_,e) => <th key={e}>{names[e] ?? `Expert ${e+1}`}</th>)}</tr></thead>
         <tbody>{counts.map((row,t) => <tr key={t}><td>{t+1}</td>{row.map((n,e) => <td key={e}>{n}</td>)}</tr>)}</tbody></table></div>
-      <p>Counts describe choices, not proof of specialization. Bank regret uses the original continuation policy. Final trajectory loss executes the spectral policy for all steps. Online suffix labels follow the current spectral policy and change between updates.</p>
+      <p>Counts describe choices, not proof of specialization. Bank regret uses the original continuation policy, not the complete new policy. Final trajectory loss executes the spectral policy for all steps. Online suffix labels use a spectral snapshot: refreshed every update in legacy mode, or between batches in snapshot-batch mode. Low KL is not winner accuracy.</p>
       <p>No held-out best-checkpoint selection. Repeated monitoring and correlated text prefixes mean the displayed interval is descriptive. Throughput is not generation tok/s.</p>
       <details><summary>Detailed report and per-prefix outcomes</summary><pre>{JSON.stringify(report ?? last ?? {},null,2)}</pre></details>
       <details><summary>Run logs</summary><pre>{logs.join("\n")}</pre></details>

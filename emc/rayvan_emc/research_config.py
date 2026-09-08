@@ -90,6 +90,9 @@ class RoutingConfig:
     value_spectral_live: bool = False
     value_spectral_live_updates: int = 100
     value_spectral_online_lr: float = 0.001
+    value_spectral_snapshot: bool = False
+    value_spectral_snapshot_states: int = 20
+    value_spectral_snapshot_updates: int = 20
     value_spectral_eval_prefixes: int = 128
     value_spectral_window: int = 8
     value_spectral_basins: int = 1
@@ -201,7 +204,7 @@ class ExperimentConfig:
                 raise ValueError('Live spectral test requires FP32 and zero weight decay')
             if not math.isfinite(self.routing.value_spectral_online_lr) or self.routing.value_spectral_online_lr <= 0:
                 raise ValueError('Sequential learning rate must be finite and positive')
-            for name in ('value_spectral_live_updates','value_spectral_eval_prefixes','value_spectral_window','value_spectral_basins'):
+            for name in ('value_spectral_live_updates','value_spectral_eval_prefixes','value_spectral_window','value_spectral_basins','value_spectral_snapshot_states','value_spectral_snapshot_updates'):
                 value = getattr(self.routing, name)
                 if type(value) is not int or value <= 0:
                     raise ValueError(f'{name} must be a positive integer')
