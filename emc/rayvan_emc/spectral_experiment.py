@@ -100,7 +100,8 @@ def profile_router(router, latent, repeats=10):
     return {k:sum(r[k] for r in rows)/len(rows)*1000 for k in rows[0]}
 
 
-def fit_comparison(train, held, config, *, updates=100, learning_rate=.01, seed=17, output=None):
+def fit_comparison(train, held, config, *, updates=100, learning_rate=.01, seed=17, output=None,
+                   progress_callback=None, cancellation_callback=None):
     torch.manual_seed(seed)
     c = spectral_config(config)
     means=[y.mean(0) for y in train.losses]
@@ -132,13 +133,18 @@ def fit_comparison(train, held, config, *, updates=100, learning_rate=.01, seed=
             config_used=variant
         optimizer=torch.optim.AdamW(router.parameters(),lr=learning_rate,weight_decay=0)
         router.train()
-        for _ in range(updates):
+        for update in range(updates):
+            if cancellation_callback and cancellation_callback():
+                from .training import TrainingCancelledError
+                raise TrainingCancelledError('Spectral comparison cancelled between updates')
             optimizer.zero_grad(set_to_none=True)
             loss=objective(scoring(train_input))
             if not torch.isfinite(loss): raise FloatingPointError('nonfinite bank fit')
             loss.backward()
             torch.nn.utils.clip_grad_norm_(router.parameters(),1.,error_if_nonfinite=True)
             optimizer.step()
+            if progress_callback and (update == 0 or (update+1) % 10 == 0 or update+1 == updates):
+                progress_callback(name, len(results)*updates+update+1, len(variants)*updates, results)
         router.eval()
         with torch.no_grad():
             report=dict(variant=name, parameters=sum(p.numel() for p in router.parameters()),
@@ -168,6 +174,8 @@ def fit_comparison(train, held, config, *, updates=100, learning_rate=.01, seed=
         if output:
             torch.save(dict(router=router.state_dict(),config=asdict(config_used),variant=name),Path(output)/(name+'.pt'))
         results.append(report)
+        if progress_callback:
+            progress_callback(name, len(results)*updates, len(variants)*updates, results)
     return results
 
 
