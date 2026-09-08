@@ -87,6 +87,12 @@ class RoutingConfig:
     value_fit_bank_path: str = ""
     value_fit_enabled: bool = False
     value_spectral_comparison: bool = False
+    value_spectral_live: bool = False
+    value_spectral_live_updates: int = 100
+    value_spectral_online_lr: float = 0.001
+    value_spectral_eval_prefixes: int = 128
+    value_spectral_window: int = 8
+    value_spectral_basins: int = 1
     value_fit_prefixes: int = 64
     value_fit_updates: int = 1000
     value_fixed_reference: bool = True
@@ -184,6 +190,21 @@ class ExperimentConfig:
     def __post_init__(self) -> None:
         from .spectral_config import spectral_config
         spectral_config(self.routing)
+        if self.routing.value_spectral_live:
+            if (self.architecture != 'counterfactual_value_emc' or not self.routing.value_fit_enabled
+                    or self.routing.value_spectral_comparison or not self.routing.value_reset_router
+                    or self.routing.value_head_type != 'linear'):
+                raise ValueError('Live spectral test requires value architecture, fixed bank, reset and linear reference placeholder; disable the 13-variant comparison')
+            if not self.routing.value_checkpoint_path.strip():
+                raise ValueError('Select the original local heterogeneous model checkpoint')
+            if self.training.precision != 'fp32' or self.training.weight_decay != 0:
+                raise ValueError('Live spectral test requires FP32 and zero weight decay')
+            if not math.isfinite(self.routing.value_spectral_online_lr) or self.routing.value_spectral_online_lr <= 0:
+                raise ValueError('Sequential learning rate must be finite and positive')
+            for name in ('value_spectral_live_updates','value_spectral_eval_prefixes','value_spectral_window','value_spectral_basins'):
+                value = getattr(self.routing, name)
+                if type(value) is not int or value <= 0:
+                    raise ValueError(f'{name} must be a positive integer')
         if self.routing.value_spectral_comparison and (self.architecture != 'counterfactual_value_emc' or not self.routing.value_fit_enabled):
             raise ValueError('Spectral bank comparison requires counterfactual value architecture and fixed-bank fitting')
         if self.schema_version != SCHEMA_VERSION:

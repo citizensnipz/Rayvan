@@ -230,6 +230,33 @@ def run_experiment(
                 },
             )
 
+        if config.routing.value_spectral_live:
+            from .value_fit import train_fixed_bank
+            from .spectral_live import run_spectral_live
+            writer.emit('spectral_live_progress',phase='Preparing frozen source bank',step=0,
+                        total=config.routing.value_fit_updates+config.routing.value_spectral_live_updates)
+            train, held, bank = train_fixed_bank(model,corpus,training_config,
+                cancellation_callback=cancelled,prepare_only=True)
+            previous_threads = torch.get_num_threads()
+            try:
+                torch.set_num_threads(1)
+                report = run_spectral_live(model,corpus,config,train,held,bank,run_directory/'checkpoints',
+                    lambda kind, **values: writer.emit(kind,run_id=resolved_id,**values),cancelled)
+            finally:
+                torch.set_num_threads(previous_threads)
+            _write_json(run_directory/'spectral-live-report.json',report)
+            final = report['history'][-1]
+            summary = dict(schema_version=3,run_id=resolved_id,status='completed',name=config.name or resolved_id,
+                suite=config.suite,architecture=config.architecture,experts=dict(config.experts),tags=list(config.tags),
+                started_at=started_at,completed_at=datetime.now(timezone.utc).isoformat(),spectral_live=report,
+                headline=dict(objective='spectral_live',validation_loss=final['trajectory_loss'],perplexity=None,
+                    tokens_processed=final['step'],throughput_unit='updates/s',runtime_seconds=final['elapsed_seconds']),
+                git=metadata['git'])
+            _write_json(run_directory/'summary.json',summary)
+            _set_status(run_directory,'completed')
+            writer.emit('run_completed',run_id=resolved_id,summary=summary)
+            return summary
+
         if config.routing.value_spectral_comparison:
             from .value_fit import train_fixed_bank, load_bank_payload
             from .spectral_experiment import fit_comparison

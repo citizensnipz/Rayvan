@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { SpectralLivePanel } from "./SpectralLivePanel";
 import { ExpertHeatmap } from "./charts/ExpertHeatmap";
 import { MetricChart, type MetricSeries } from "./charts/MetricChart";
 import { CounterfactualAccuracy, CounterfactualMatrix, ExpertWinRate, GeometricMargin, GeometryByStep, RefractoryEffect, RoutingOverview, RoutingRegret, TrajectoryByStep, TransitionMatrix } from "./charts/RoutingOverview";
@@ -66,6 +67,9 @@ export function LiveExperiment({ events, state, runId, logs, detail, onCancel, o
     ...projectionSeries,
   ];
 
+  if (detail?.config?.routing.value_spectral_live || events.some(e => e.type === "spectral_live_progress")) {
+    return <SpectralLivePanel events={events} report={detail?.summary?.spectral_live} state={state} onCancel={onCancel} onRouterTest={onRouterTest} logs={logs} />;
+  }
   if (detail?.config?.routing.value_spectral_comparison || events.some(e => e.type === "spectral_progress")) {
     const event = events.filter(e => e.type === "spectral_progress").at(-1);
     const report = detail?.summary?.spectral_comparison;

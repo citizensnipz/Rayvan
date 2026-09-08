@@ -18,7 +18,7 @@ export function ExperimentHistory({ runs, selected, setSelected, onOpen, onCompa
     <div className="filter-row"><label><span>Suite</span><select id="history-suite" onChange={filterTable}><option value="">All suites</option>{filters.suites.map((value) => <option key={value}>{value}</option>)}</select></label><label><span>Architecture</span><select id="history-architecture" onChange={filterTable}><option value="">All architectures</option>{filters.architectures.map((value) => <option key={value}>{value}</option>)}</select></label><label><span>Status</span><select id="history-status" onChange={filterTable}><option value="">All states</option>{["completed", "failed", "cancelled", "interrupted"].map((value) => <option key={value}>{value}</option>)}</select></label><label><span>Minimum targets</span><input id="history-tokens" type="number" min="0" placeholder="Any" onInput={filterTable} /></label><label><span>From date</span><input id="history-date" type="date" onInput={filterTable} /></label><label className="search"><span>Search name / tag</span><input id="history-search" onInput={filterTable} placeholder="Filter runs…" /></label></div>
     <div className="table-wrap"><table id="history-table"><thead><tr><th /><th>Date / run</th><th>Suite</th><th>Architecture</th><th>Targets</th><th>Val loss</th><th>Perplexity</th><th>Target throughput</th><th>Context tok/s</th><th>Runtime</th><th>State</th><th>Commit</th></tr></thead><tbody>{runs.map((run) => {
       const headline = run.headline ?? {};
-      const fixedFit = headline.objective === "router_fixed_bank";
+      const fixedFit = headline.objective === "router_fixed_bank" || headline.objective === "spectral_live";
       const endpoint = run.architecture === "counterfactual_value_emc";
       return <tr key={run.run_id} data-suite={run.suite} data-architecture={run.architecture} data-status={run.status} data-tokens={typeof headline.tokens_processed === "number" ? headline.tokens_processed : 0} data-date={run.started_at ? new Date(run.started_at).getTime() : 0} data-search={`${run.name} ${(run.tags ?? []).join(" ")}`.toLowerCase()} onDoubleClick={() => onOpen(run.run_id)}>
         <td><input aria-label={`Select ${run.name}`} type="checkbox" checked={selected.has(run.run_id)} onChange={(event) => { const next = new Set(selected); event.target.checked ? next.add(run.run_id) : next.delete(run.run_id); setSelected(next); }} /></td>
@@ -43,4 +43,3 @@ function filterTable() {
   });
 }
 function formatDuration(value: unknown) { if (typeof value !== "number") return "—"; return value < 60 ? `${value.toFixed(1)}s` : `${Math.floor(value / 60)}m`; }
-

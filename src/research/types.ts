@@ -48,6 +48,7 @@ export interface RunSummary {
   geometric_routing?: Record<string, unknown> | null;
   value_routing?: Record<string, unknown> | null;
   spectral_comparison?: Record<string, unknown>;
+  spectral_live?: Record<string, unknown>;
   git?: { commit?: string; dirty?: boolean };
   runDirectory?: string;
 }

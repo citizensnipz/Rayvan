@@ -16,7 +16,7 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
   const suite = schema.suites.find((item) => item.id === config.suite)!;
   const expertCount = Object.values(config.experts).reduce((sum, value) => sum + value, 0);
   const valueRouting = config.architecture === "counterfactual_value_emc";
-  const gpuHeavy = Number(config.training.tokens) >= 500_000;
+  const gpuHeavy = !config.routing.value_fit_enabled && Number(config.training.tokens) >= 500_000;
   const usesExperts = ["counterfactual_value_emc", "emc", "sequential_module_aware_emc", "legacy_parallel_emc", "heterogeneous_serial", "old_emc"].includes(config.architecture);
   const setRoot = (field: keyof ExperimentConfig, value: unknown) => setConfig({ ...config, [field]: value });
   const setNested = (group: "routing" | "model" | "training", field: string, value: unknown) => setConfig({ ...config, [group]: { ...config[group], [field]: value } });
@@ -25,6 +25,7 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
   const expertConditioned = valueRouting && config.routing.value_head_type === "expert_geometric";
   const fixedFit = routerOnly && Boolean(config.routing.value_fit_enabled);
   const spectralFit = valueRouting && Boolean(config.routing.value_spectral_comparison);
+  const spectralLive = valueRouting && Boolean(config.routing.value_spectral_live);
   const canRun = !active && !estimating && expertCount > 0 && (!routerOnly || Boolean(String(config.routing.value_checkpoint_path ?? "").trim()));
   const architectureLabel = schema.architectures.find((item) => item.id === config.architecture)?.label ?? config.architecture;
   const presetName = useMemo(() => Object.entries(schema.presets).find(([, preset]) => preset.tokens === Number(config.training.tokens))?.[0], [schema, config.training.tokens]);
@@ -53,7 +54,7 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
         value_fixed_reference: true, value_reset_router: true, value_checkpoint_path: "", value_fit_enabled: false, value_head_type: "linear", value_pairwise_weight: 0, value_fit_bank_path: "",
       });
     }
-    if (architecture !== "counterfactual_value_emc") { routing.value_checkpoint_path = ""; routing.value_fit_enabled = false; routing.value_fit_bank_path = ""; routing.value_spectral_comparison = false; }
+    if (architecture !== "counterfactual_value_emc") { routing.value_checkpoint_path = ""; routing.value_fit_enabled = false; routing.value_fit_bank_path = ""; routing.value_spectral_comparison = false; routing.value_spectral_live = false; }
     if (architecture === "emc" || architecture === "sequential_module_aware_emc") delete routing.top_k;
     if (architecture === "emc") {
       delete routing.top_k;
@@ -111,8 +112,21 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
 
       <div className="section-heading"><span>04</span><div><h2>Routing & integration</h2><p>Only controls implemented by the selected backend are shown.</p></div></div>
       {valueRouting && <>
+        <label className="toggle"><input type="checkbox" checked={spectralLive} onChange={(e) => setConfig({ ...config,
+          routing: { ...config.routing, value_spectral_live: e.target.checked, ...(e.target.checked ? {
+            value_spectral_comparison: false, value_expert_training: "frozen", value_fit_enabled: true,
+            value_fixed_reference: true, value_reset_router: true, value_target: "suffix", value_head_type: "linear",
+            value_pairwise_weight: 0, value_fit_prefixes: 256, value_fit_updates: 100,
+            value_spectral_live_updates: 100, value_spectral_online_lr: 0.001, value_spectral_eval_prefixes: 128,
+            value_spectral_window: 8, value_spectral_basins: 1, value_router_seed: 17
+          } : {}) }, training: { ...config.training, ...(e.target.checked ? {
+            precision: "fp32", weight_decay: 0, learning_rate: 0.01, evaluation_interval: 20, batch_size: 4
+          } : {}) }
+        })} /><span>Spectral geometry — sequential learning + live trajectory charts</span></label>
+        {spectralLive && <p>One combined spectral + geometry router controls all trajectory steps, recomputing shape after every expert update. First it learns from your bank, then fresh training prefixes generate counterfactual suffix targets under the current spectral policy. Experts, embeddings, Integrator and readout stay frozen. A fresh fixed evaluation panel compares final loss with your original router and a training-derived constant-per-step policy. No evaluation labels train the router.</p>}
         <label className="toggle"><input type="checkbox" checked={Boolean(config.routing.value_spectral_comparison)} onChange={(e) => setConfig({ ...config,
           routing: { ...config.routing, value_spectral_comparison: e.target.checked, ...(e.target.checked ? {
+            value_spectral_live: false,
             value_expert_training: "frozen", value_fit_enabled: true, value_fixed_reference: true, value_reset_router: true,
             value_target: "suffix", value_head_type: "linear", value_pairwise_weight: 0, value_fit_prefixes: 256, value_fit_updates: 100
           } : {}) }, training: { ...config.training, ...(e.target.checked ? { precision: "fp32", weight_decay: 0, learning_rate: 0.01 } : {}) }
@@ -120,13 +134,13 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
         {Boolean(config.routing.value_spectral_comparison) && <p>Creates a bank from your local source checkpoint, or validates and reuses Saved bank path below. Experts and shared layers stay frozen. Windows 8/16/32, spectral-only, geometry-only and combined basins are compared on identical suffix losses. Fitting uses CPU with cached descriptors; the selected device is used for bank measurement. Learning rate and Router seed below apply to all variants. No synthetic data is used. The baseline is legacy mean-pooled geometric routing, not the recent expert-conditioned router.</p>}
         <label><span>Source checkpoint path {routerOnly ? "(required)" : "(optional warm-start)"}</span><input value={String(config.routing.value_checkpoint_path ?? "")} placeholder="Full local path to checkpoints/model-best.pt" onChange={(e) => setNested("routing", "value_checkpoint_path", e.target.value)} /></label>
         <p>From History, open a saved value-EMC run and select “Test router from checkpoint” to copy its model settings. Each router test starts with fresh optimizer state. Keep the model/data seed fixed when changing the router seed.</p>
-        {routerOnly && <p>Experts, Integrator, embeddings and readout stay frozen. With fixed continuation enabled, randomized collection and counterfactual labels are independent of the new router. Final capability-generation diagnostics are skipped; held-out router audits still run.</p>}
+        {routerOnly && !spectralLive && <p>Experts, Integrator, embeddings and readout stay frozen. With fixed continuation enabled, randomized collection and counterfactual labels are independent of the new router. Final capability-generation diagnostics are skipped; held-out router audits still run.</p>}
       </>}
-      {routerOnly && !expertConditioned && !spectralFit && <label className="toggle"><input type="checkbox" checked={fixedFit} onChange={(e) => enableFixedFit(e.target.checked)} /><span>Fixed-bank fitting diagnostic</span></label>}
-      {fixedFit && <><p>Measure both banks once, then repeatedly fit the same training states using full-bank FP32 updates. Experts stay frozen. The normal endpoint budget, batch multiplier, exploration, calibration and probe schedules are unused in this mode. Audit cadence still applies. Keep the source checkpoint fixed; compare need dimensions and prediction heads using the same saved bank.</p><div className="field-grid two">
+      {routerOnly && !expertConditioned && !spectralFit && !spectralLive && <label className="toggle"><input type="checkbox" checked={fixedFit} onChange={(e) => enableFixedFit(e.target.checked)} /><span>Fixed-bank fitting diagnostic</span></label>}
+      {fixedFit && <>{!spectralLive && <p>Measure both banks once, then repeatedly fit the same training states using full-bank FP32 updates. Experts stay frozen. The normal endpoint budget, batch multiplier, exploration, calibration and probe schedules are unused in this mode. Audit cadence still applies. Keep the source checkpoint fixed; compare need dimensions and prediction heads using the same saved bank.</p>}<div className="field-grid two">
         <NumberField label="Fixed prefixes per split" value={Number(config.routing.value_fit_prefixes ?? 64)} min={1} onChange={(v) => setNested("routing", "value_fit_prefixes", v)} />
-        <NumberField label="Router fitting updates" value={Number(config.routing.value_fit_updates ?? 1000)} min={1} onChange={(v) => setNested("routing", "value_fit_updates", v)} />
-      </div><label><span>Saved bank path (optional)</span><input value={String(config.routing.value_fit_bank_path ?? "")} placeholder="Leave empty to measure; otherwise use checkpoints/router-fit-bank.pt" onChange={(e) => setNested("routing", "value_fit_bank_path", e.target.value)} /></label><p>Reuse a bank generated by this version with the same source checkpoint, data seed and prefixes per split. Reuse runs no expert measurements.</p></>}
+        <NumberField label={spectralLive ? "Bank warmup updates" : "Router fitting updates"} value={Number(config.routing.value_fit_updates ?? 1000)} min={1} onChange={(v) => setNested("routing", "value_fit_updates", v)} />
+      </div><label><span>Saved bank path (optional)</span><input value={String(config.routing.value_fit_bank_path ?? "")} placeholder="Leave empty to measure; otherwise use checkpoints/router-fit-bank.pt" onChange={(e) => setNested("routing", "value_fit_bank_path", e.target.value)} /></label><p>Reuse requires the same source checkpoint, data seed and prefixes per split. It skips bank measurements.{spectralLive && " Sequential training and trajectory evaluations still execute experts."}</p></>}
       <div className="field-grid three">
         {(config.architecture === "legacy_parallel_emc" || config.architecture === "old_emc" || config.architecture.startsWith("n2_")) && <NumberField label="Top-K" value={Number(config.routing.top_k ?? 2)} min={1} max={Math.max(expertCount, 1)} onChange={(value) => setNested("routing", "top_k", value)} />}
         {config.architecture === "old_emc" && <NumberField label="EMC cycles" value={Number(config.routing.cycles)} min={1} onChange={(value) => setNested("routing", "cycles", value)} />}
@@ -135,7 +149,16 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
           <NumberField label="Router seed" value={Number(config.routing.value_router_seed)} min={0} onChange={v => setNested("routing","value_router_seed",v)} />
           <p>Trajectory steps: {String(config.routing.trajectory_steps)} (copied from source). Frozen experts, fixed suffix continuation and router reset are enabled. Each fitting update count applies to each of 13 variants. Spectral initialization is deterministic; another router seed alone may produce identical spectral fits.</p>
         </>}
-        {valueRouting && !spectralFit && <>
+        {spectralLive && <>
+          <NumberField label="Neighbourhood window (tokens)" value={Number(config.routing.value_spectral_window ?? 8)} min={1} onChange={v => setNested("routing","value_spectral_window",v)} />
+          <NumberField label="Basins per expert" value={Number(config.routing.value_spectral_basins ?? 1)} min={1} onChange={v => setNested("routing","value_spectral_basins",v)} />
+          <NumberField label="Sequential learning updates" value={Number(config.routing.value_spectral_live_updates ?? 100)} min={1} onChange={v => setNested("routing","value_spectral_live_updates",v)} />
+          <NumberField label="Sequential learning rate" value={Number(config.routing.value_spectral_online_lr ?? 0.001)} min={0.000001} step={0.0001} onChange={v => setNested("routing","value_spectral_online_lr",v)} />
+          <NumberField label="Fresh evaluation prefixes" value={Number(config.routing.value_spectral_eval_prefixes ?? 128)} min={2} onChange={v => setNested("routing","value_spectral_eval_prefixes",v)} />
+          <NumberField label="Router seed" value={Number(config.routing.value_router_seed ?? 17)} min={0} onChange={v => setNested("routing","value_router_seed",v)} />
+          <p>Trajectory steps: {String(config.routing.trajectory_steps)}, copied from source. KL preference supervision; no cost MSE, balance penalty or refractory inhibition. One uniformly sampled request/depth is probed per online update, comparing all experts. Normal token budget is unused. Validation interval controls learning-chart audits in both phases.</p>
+        </>}
+        {valueRouting && !spectralFit && !spectralLive && <>
           <label><span>Nexus</span><strong>Centered downstream values</strong></label>
           <label><span>Integrator</span><strong>Identity-free acceptance (starts at 0.5)</strong></label>
           <label><span>Inference</span><strong>Sequential greedy; repeats allowed</strong></label>
@@ -225,28 +248,32 @@ export function ExperimentBuilder({ schema, config, setConfig, estimate, estimat
       </div>
 
       <div className="section-heading"><span>06</span><div><h2>Training</h2><p>Presets populate one editable ExperimentConfig.</p></div></div>
-      {valueRouting && <p>One supervised endpoint per observed prefix. Context, probes and practice add compute and are counted separately. Budget curves use endpoint targets; compare total wall time and expert work across controls. The batch multiplier enlarges the state pool in memory.</p>}
-      <div className="preset-row">{Object.entries(schema.presets).map(([id, preset]) => <button key={id} type="button" className={presetName === id ? "active" : ""} onClick={() => setNested("training", "tokens", preset.tokens)}>{preset.label}</button>)}</div>
+      {valueRouting && !spectralLive && <p>One supervised endpoint per observed prefix. Context, probes and practice add compute and are counted separately. Budget curves use endpoint targets; compare total wall time and expert work across controls. The batch multiplier enlarges the state pool in memory.</p>}
+      {spectralLive && <p>Duration is Bank warmup updates + Sequential learning updates. Validation cadence is in router updates; evaluation size is Fresh evaluation prefixes above. Batch size controls fresh training-state collection (safely capped for expert execution).</p>}
+      {!spectralLive && <div className="preset-row">{Object.entries(schema.presets).map(([id, preset]) => <button key={id} type="button" className={presetName === id ? "active" : ""} onClick={() => setNested("training", "tokens", preset.tokens)}>{preset.label}</button>)}</div>}
       <div className="field-grid three">
-        <NumberField label={valueRouting ? "Supervised endpoint budget" : "Training tokens"} value={Number(config.training.tokens)} min={1} step={1000} onChange={(value) => setNested("training", "tokens", value)} />
+        {!spectralLive && <NumberField label={valueRouting ? "Supervised endpoint budget" : "Training tokens"} value={Number(config.training.tokens)} min={1} step={1000} onChange={(value) => setNested("training", "tokens", value)} />}
         <NumberField label="Batch size" value={Number(config.training.batch_size)} min={1} onChange={(value) => setNested("training", "batch_size", value)} />
-        <NumberField label={valueRouting ? "State-pool batch multiplier" : "Gradient accumulation"} value={Number(config.training.gradient_accumulation)} min={1} onChange={(value) => setNested("training", "gradient_accumulation", value)} />
-        <NumberField label="Learning rate" value={Number(config.training.learning_rate)} min={0.000001} step={0.0001} onChange={(value) => setNested("training", "learning_rate", value)} />
+        {!spectralLive && <NumberField label={valueRouting ? "State-pool batch multiplier" : "Gradient accumulation"} value={Number(config.training.gradient_accumulation)} min={1} onChange={(value) => setNested("training", "gradient_accumulation", value)} />}
+        <NumberField label={spectralLive ? "Bank warmup learning rate" : "Learning rate"} value={Number(config.training.learning_rate)} min={0.000001} step={0.0001} onChange={(value) => setNested("training", "learning_rate", value)} />
         <NumberField label="Weight decay" value={Number(config.training.weight_decay)} min={0} step={0.01} onChange={(value) => setNested("training", "weight_decay", value)} />
         <NumberField label="Model / data seed" value={Number(config.training.seed)} min={0} onChange={(value) => setNested("training", "seed", value)} />
         <label><span>Precision</span><select value={String(config.training.precision)} onChange={(event) => setNested("training", "precision", event.target.value)}><option value="auto">Auto</option><option value="bf16">BF16</option>{!valueRouting && <option value="fp16">FP16</option>}<option value="fp32">FP32</option></select></label>
         <label><span>Device</span><select value={String(config.training.device)} onChange={(event) => setNested("training", "device", event.target.value)}><option value="cuda">CUDA GPU</option><option value="cpu">CPU</option></select></label>
         <NumberField label="Validation cadence (steps)" value={Number(config.training.evaluation_interval)} min={1} onChange={(value) => setNested("training", "evaluation_interval", value)} />
-        <NumberField label="Validation batches" value={Number(config.training.evaluation_batches ?? 4)} min={1} onChange={(value) => setNested("training", "evaluation_batches", value)} />
-        <NumberField label="Telemetry cadence (steps)" value={Number(config.training.telemetry_interval ?? 1)} min={1} onChange={(value) => setNested("training", "telemetry_interval", value)} />
-        {config.suite === "capability_10" && <NumberField label="Diagnostic examples per capability" value={Number(config.training.diagnostic_examples_per_capability ?? 20)} min={1} onChange={(value) => setNested("training", "diagnostic_examples_per_capability", value)} />}
-        <label><span>Projection targets <em>{valueRouting ? "endpoints" : "tokens"}, comma separated</em></span><input value={config.projection_targets.join(", ")} onChange={(event) => setRoot("projection_targets", event.target.value.split(",").map((value) => Number(value.trim())).filter((value) => Number.isFinite(value) && value > 0))} /></label>
+        {!spectralLive && <NumberField label="Validation batches" value={Number(config.training.evaluation_batches ?? 4)} min={1} onChange={(value) => setNested("training", "evaluation_batches", value)} />}
+        {!spectralLive && <NumberField label="Telemetry cadence (steps)" value={Number(config.training.telemetry_interval ?? 1)} min={1} onChange={(value) => setNested("training", "telemetry_interval", value)} />}
+        {!spectralLive && config.suite === "capability_10" && <NumberField label="Diagnostic examples per capability" value={Number(config.training.diagnostic_examples_per_capability ?? 20)} min={1} onChange={(value) => setNested("training", "diagnostic_examples_per_capability", value)} />}
+        {!spectralLive && <label><span>Projection targets <em>{valueRouting ? "endpoints" : "tokens"}, comma separated</em></span><input value={config.projection_targets.join(", ")} onChange={(event) => setRoot("projection_targets", event.target.value.split(",").map((value) => Number(value.trim())).filter((value) => Number.isFinite(value) && value > 0))} /></label>}
       </div>
     </section>
 
     <aside className="launch-card">
       <p className="eyebrow">Preflight</p><h2>{config.name || "Untitled experiment"}</h2>
-      <dl><div><dt>Suite</dt><dd>{suite.label}</dd></div><div><dt>Architecture</dt><dd>{architectureLabel}</dd></div><div><dt>{fixedFit ? "Router updates" : valueRouting ? "Endpoint budget" : "Token budget"}</dt><dd>{Number(fixedFit ? config.routing.value_fit_updates : config.training.tokens).toLocaleString()}</dd></div><div><dt>Experts</dt><dd>{expertCount}</dd></div><div><dt>{["counterfactual_value_emc", "emc", "sequential_module_aware_emc"].includes(config.architecture) ? "Trajectory" : "Active Top-K"}</dt><dd>{["counterfactual_value_emc", "emc", "sequential_module_aware_emc"].includes(config.architecture) ? `${String(config.routing.trajectory_steps)} sequential steps` : String(config.routing.top_k ?? "—")}</dd></div><div><dt>Total params</dt><dd>{estimating ? "Calculating…" : formatNumber(estimate?.total_parameters)}</dd></div><div><dt>Active params</dt><dd>{formatNumber(estimate?.approximate_active_parameters)}</dd></div><div><dt>{valueRouting ? "FLOPs / context token (proxy)" : "FLOPs / token"}</dt><dd>{formatNumber(estimate?.approximate_flops_per_token)}</dd></div></dl>
+      {spectralLive && <p>Total: {Number(config.routing.value_fit_updates)+Number(config.routing.value_spectral_live_updates)} router updates ({String(config.routing.value_fit_updates)} bank + {String(config.routing.value_spectral_live_updates)} sequential).</p>}
+      <dl><div><dt>Suite</dt><dd>{suite.label}</dd></div><div><dt>Architecture</dt><dd>{architectureLabel}</dd></div>
+        <div><dt>{fixedFit ? "Router updates" : valueRouting ? "Endpoint budget" : "Token budget"}</dt><dd>{(Number(fixedFit ? config.routing.value_fit_updates : config.training.tokens)+(spectralLive ? Number(config.routing.value_spectral_live_updates) : 0)).toLocaleString()}</dd></div>
+        <div><dt>Experts</dt><dd>{expertCount}</dd></div><div><dt>{["counterfactual_value_emc", "emc", "sequential_module_aware_emc"].includes(config.architecture) ? "Trajectory" : "Active Top-K"}</dt><dd>{["counterfactual_value_emc", "emc", "sequential_module_aware_emc"].includes(config.architecture) ? `${String(config.routing.trajectory_steps)} sequential steps` : String(config.routing.top_k ?? "—")}</dd></div><div><dt>Total params</dt><dd>{estimating ? "Calculating…" : formatNumber(estimate?.total_parameters)}</dd></div><div><dt>Active params</dt><dd>{formatNumber(estimate?.approximate_active_parameters)}</dd></div><div><dt>{valueRouting ? "FLOPs / context token (proxy)" : "FLOPs / token"}</dt><dd>{formatNumber(estimate?.approximate_flops_per_token)}</dd></div></dl>
       {reviewing && <div className="run-warning"><b>Large-run review</b><p>This will execute {Number(config.training.tokens).toLocaleString()} {valueRouting ? "endpoints" : "tokens"} on {String(config.training.device).toUpperCase()}. Verify the configuration above, then confirm.</p></div>}
       <button className="primary launch" disabled={!canRun} onClick={requestRun}>{active ? "GPU run active" : reviewing ? "Confirm & launch" : "Run experiment"}</button>
       {reviewing && <button className="text-button" onClick={() => setReviewing(false)}>Back to editing</button>}

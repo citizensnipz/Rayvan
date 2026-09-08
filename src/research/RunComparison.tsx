@@ -17,7 +17,7 @@ export function RunComparison({ runs }: { runs: RunDetail[] }) {
   const mixedObjectives = new Set(runs.map((run) => fixedFit(run) ? "router_fixed_bank" : endpoint(run) ? "prefix_endpoint" : "all_positions")).size > 1;
   const [axis, setAxis] = useState<"tokens" | "time">("time");
   const seriesFor = (type: string, field: string) => runs.map((run, index) => ({
-    name: `${run.summary?.name ?? run.runId}${fixedFit(run) ? " (router MSE)" : ""}`,
+    name: `${run.summary?.name ?? run.runId}${run.config?.routing.value_spectral_live ? " (spectral trajectory)" : fixedFit(run) ? " (router fit)" : ""}`,
     color: colors[index % colors.length],
     data: run.events.filter((event) => event.type === type).map((event) => [axis === "tokens" ? Number(event.tokens_processed) : Number(event.elapsed_seconds), field === "context_tokens_per_second" ? contextRate(run, event) : typeof event[field] === "number" ? event[field] as number : null] as [number, number | null]),
   }));
@@ -42,4 +42,3 @@ export function RunComparison({ runs }: { runs: RunDetail[] }) {
 
 function fmt(value: unknown, digits = 3) { return typeof value === "number" ? Intl.NumberFormat("en", { maximumFractionDigits: digits }).format(value) : "—"; }
 function bytes(value: unknown) { return typeof value === "number" ? `${(value / 2 ** 30).toFixed(2)} GiB` : "—"; }
-

@@ -6,12 +6,13 @@ import "./styles.css";
 import { ExperimentBuilder } from "./research/ExperimentBuilder";
 import { ExperimentHistory } from "./research/ExperimentHistory";
 import { LiveExperiment } from "./research/LiveExperiment";
+import { MathVisualizerPage } from "./research/math/MathVisualizerPage";
 import { RunComparison } from "./research/RunComparison";
 import { cancelExperiment, estimateExperiment, getActiveExperiment, getExperiment, getSchema, listExperiments, startExperiment } from "./research/api";
 import type { Estimate, ExperimentConfig, ResearchEvent, ResearchSchema, RunDetail, RunState, RunSummary } from "./research/types";
 import mark from "./assets/rayvan-logo.png";
 
-type View = "build" | "live" | "history" | "report" | "compare";
+type View = "build" | "live" | "history" | "report" | "compare" | "math";
 
 function App() {
   const [view, setView] = useState<View>("build");
@@ -80,8 +81,8 @@ function App() {
   }, [config]);
 
   const active = Boolean(activeRun && ["initializing", "running", "validation", "diagnostics"].includes(runState));
-  const navItems: Array<[View, string, string]> = [["build", "New experiment", "＋"], ["live", "Live run", "◉"], ["history", "History", "≡"]];
-  const title = useMemo(() => view === "build" ? "Experiment Builder" : view === "live" ? "Live Telemetry" : view === "history" ? "Run Archive" : view === "compare" ? "Comparison" : "Run Report", [view]);
+  const navItems: Array<[View, string, string]> = [["build", "New experiment", "＋"], ["live", "Live run", "◉"], ["history", "History", "≡"], ["math", "Math Visualizer", "∑"]];
+  const title = useMemo(() => view === "math" ? "Math Visualizer" : view === "build" ? "Experiment Builder" : view === "live" ? "Live Telemetry" : view === "history" ? "Run Archive" : view === "compare" ? "Comparison" : "Run Report", [view]);
 
   const launch = async () => {
     if (!config) return;
@@ -93,12 +94,13 @@ function App() {
   const openRun = async (runId: string) => { try { const loaded = await getExperiment(runId); setDetail(loaded); setRunState((loaded.summary?.status ?? "interrupted") as RunState); setView("report"); } catch (reason) { setError(message(reason)); } };
   const testRouter = () => {
     if (!detail?.config || detail.config.architecture !== "counterfactual_value_emc") return;
-    const checkpoint = detail.summary?.training_result?.best_checkpoint
+    const checkpoint = (detail.config.routing.value_spectral_live || detail.config.routing.value_spectral_comparison ? detail.config.routing.value_checkpoint_path : undefined)
+      ?? detail.summary?.training_result?.best_checkpoint
       ?? `${detail.runDirectory}/checkpoints/model-best.pt`;
     setConfig({ ...detail.config, name: `${detail.config.name || detail.runId} · router seed 0`,
       routing: { ...schema?.defaults.routing, ...detail.config.routing,
         value_expert_training: "frozen", value_checkpoint_path: String(checkpoint),
-        value_reset_router: true, value_fixed_reference: true, value_router_seed: 0, value_fit_enabled: false, value_fit_bank_path: "", value_spectral_comparison: false,
+        value_reset_router: true, value_fixed_reference: true, value_router_seed: 0, value_fit_enabled: false, value_fit_bank_path: "", value_spectral_comparison: false, value_spectral_live: false,
         value_calibration_steps: 64, value_calibration_min_probes: 64,
         value_probe_rate: 1, value_probe_budget: 4, value_target: "suffix" },
       model: { ...detail.config.model, ssm_backend: "auto" },
@@ -112,14 +114,14 @@ function App() {
   return <div className="app">
     <aside className="sidebar">
       <div className="brand"><img src={mark} alt="Rayvan raven logo" /><div><b>Rayvan</b><span>EMC Research</span></div></div>
-      <nav>{navItems.map(([id, label, icon]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><i>{icon}</i><span>{label}</span>{id === "live" && active && <em />}</button>)}</nav>
+      <nav>{navItems.map(([id, label, icon]) => <button key={id} aria-label={label} title={label} className={view === id ? "active" : ""} onClick={() => setView(id)}><i>{icon}</i><span>{label}</span>{id === "live" && active && <em />}</button>)}</nav>
       <div className="sidebar-foot"><span className={`connection ${network === "Node connected" ? "online" : ""}`} />{network}<small>Research Console · Schema v{schema?.schema_version ?? "—"}</small></div>
     </aside>
     <main className="workspace">
       <header className="topbar"><div><span>RESEARCH /</span><b>{title}</b></div><div className="top-actions">{active && <button className="active-run" onClick={() => setView("live")}><i /> {activeRun?.slice(-8)} running</button>}<button className="icon-button" title="Refresh history" onClick={refreshRuns}>↻</button></div></header>
       {error && <div className="error-banner"><b>Action needed</b><span>{error}</span><button onClick={() => setError(undefined)}>×</button></div>}
       <div className="content">
-        {!schema || !config ? <div className="loading"><i /><p>Loading the Python experiment schema…</p></div> : <>
+        {view === "math" ? <MathVisualizerPage /> : !schema || !config ? <div className="loading"><i /><p>Loading the Python experiment schema…</p></div> : <>
           {view === "build" && <ExperimentBuilder schema={schema} config={config} setConfig={setConfig} estimate={estimate} estimating={estimating} active={active} onRun={launch} />}
           {view === "live" && <LiveExperiment events={events} state={runState} runId={activeRun} logs={logs} onCancel={active ? stop : undefined} />}
           {view === "history" && <ExperimentHistory runs={runs} selected={selected} setSelected={setSelected} onOpen={openRun} onCompare={compare} refresh={refreshRuns} />}
