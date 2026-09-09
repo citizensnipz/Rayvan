@@ -5,6 +5,7 @@ import * as echarts from 'echarts/core';
 import {ScatterChart} from 'echarts/charts';
 import {EChart} from '../research/charts/EChart';
 import {CalibrationSetup,CalibrationResults} from './Calibration';
+import {DiscoverySetup,DiscoveryResults} from './FeatureDiscovery';
 echarts.use([ScatterChart]);
 type Obj=Record<string,any>;
 const families=['gpt','ssm','recurrent','delta'];
@@ -30,6 +31,7 @@ export function TokenLab({initialConfig}:{initialConfig?:Obj}={}){
  const action=async(mode:string)=>{try{setError('');if(mode==='validate'){const r=await invoke<Obj>('validate_token_lab',{config});setNotice(r.warning);}
   if(mode==='run'){await invoke('validate_token_lab',{config});const r=await invoke<Obj>('start_token_lab',{request:{config}});setActive(r.runId);setDetail(undefined);setProgress(undefined);}
   if(mode==='stop')await invoke('cancel_token_lab');}catch(e){setError(String(e));}};
+ const discovery=async(request:Obj)=>{try{setError('');await invoke('validate_token_lab',{config:request});const r=await invoke<Obj>('start_token_lab',{request:{config:request}});setActive(r.runId);setDetail(undefined);setProgress(undefined);}catch(e){setError(String(e));}};
  if(!config)return <section className="panel">{error||'Loading Token Lab…'}</section>;
  const calibration=config.experiment_mode==='forced_specialization';
  const field=(key:string,label:string,min=1,step=1)=><label key={key}>{label}<input type="number" min={min} step={step} value={config[key]} onChange={e=>set(key,Number(e.target.value))}/></label>;
@@ -58,8 +60,10 @@ export function TokenLab({initialConfig}:{initialConfig?:Obj}={}){
    {notice&&<p>{notice}</p>}{error&&<p role="alert">{error}</p>}
   </section>
   <section className="panel"><h3>Run status</h3><p>{active??detail?.runId??'No run selected'} · {progress?.phase??detail?.summary?.status??detail?.status?.status??'Idle'}</p><p>{progress?.step??0} / {progress?.total??'—'} · {progress?.measured_locations??detail?.summary?.measured_locations??0} locations · {progress?.observations??detail?.summary?.observations??0} expert observations · {fmt(progress?.elapsed_seconds??detail?.summary?.runtime_seconds)} seconds</p><p>Current expert/stage: {progress?.expert_id??'—'} / {progress?.expert_stage??'—'}. Training endpoint targets: {progress?.training_targets??detail?.summary?.training_targets??'—'}. Training context exposures: {progress?.training_context_tokens??detail?.summary?.training_context_tokens??'—'} tokens. Exact-prefix exclusions: {detail?.summary?.duplicate_prefixes_skipped??'—'}.</p><p>End-to-end measured locations/s: {fmt(detail?.summary?.locations_per_second)}. Probe + measurement seconds: {fmt(detail?.summary?.probe_and_measurement_seconds)} (includes expert execution; not isolated overhead).</p>{detail?.status?.error&&<p role="alert">{detail.status.error}</p>}<p>Feature/diagnostic time excluding instrumented expert forward: {fmt(detail?.summary?.feature_and_diagnostic_seconds)} seconds. FFN hook overhead remains counted with expert execution.</p>{detail?.logs&&<details><summary>Logs</summary><pre>{detail.logs}</pre></details>}</section>
+  {detail?.summary?.status==='completed'&&<DiscoverySetup key={'discovery-'+detail.runId} detail={detail} active={Boolean(active)} onRun={r=>void discovery(r)}/>}
+  {detail?.analysis?.discovery&&<DiscoveryResults key={detail.runId} detail={detail}/>}
   {detail?.analysis?.calibration&&<CalibrationResults key={detail.runId} detail={detail} runs={runs}/>}
-  {detail?.analysis&&(detail.analysis.calibration?<details><summary>Secondary standard explorer and full report · includes outcomes and task labels</summary><Explorer key={detail.runId} detail={detail}/></details>:<Explorer key={detail.runId} detail={detail}/>)}
+  {detail?.analysis&&!detail.analysis.discovery&&(detail.analysis.calibration?<details><summary>Secondary standard explorer and full report · includes outcomes and task labels</summary><Explorer key={detail.runId} detail={detail}/></details>:<Explorer key={detail.runId} detail={detail}/>)}
  </div>;
 }
 

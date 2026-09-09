@@ -299,7 +299,14 @@ def run(c,root,run_id):
 def main():
     p=argparse.ArgumentParser();p.add_argument('command',choices=['schema','estimate','validate','run']);p.add_argument('config',nargs='?');p.add_argument('--runs-dir',default='token-lab-runs');p.add_argument('--run-id',default=str(int(time.time())));args=p.parse_args()
     if args.command=='schema':print(json.dumps(dict(defaults=asdict(LabConfig()),families=['gpt','ssm','recurrent','delta'],tasks=list(CAPABILITIES))));return
-    c=LabConfig(**json.loads(Path(args.config).read_text(encoding='utf-8'))).validate()
+    request=json.loads(Path(args.config).read_text(encoding='utf-8'))
+    if request.get('analysis_only'):
+        from .token_lab_discovery import validate,run_saved
+        validate(request)
+        if args.command in ['estimate','validate']:
+            print(json.dumps(dict(valid=True,warning='Saved-observation analysis only; no training or expert execution.')));return
+        run_saved(request,args.runs_dir,args.run_id);return
+    c=LabConfig(**request).validate()
     if args.command in ['estimate','validate']:print(json.dumps(dict(valid=True,config=asdict(c),warning='Fresh standalone training, not your EMC checkpoint. Every expert receives equal training opportunities.')));return
     run(c,args.runs_dir,args.run_id)
 
