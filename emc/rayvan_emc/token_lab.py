@@ -48,8 +48,23 @@ class LabConfig:
     tie_epsilon:float=.001
     train_stories:int=1000
     validation_stories:int=500
+    experiment_mode:str='standard'
+    common_base_source:str='pretrain'
+    common_checkpoint:str=''
+    specialist_checkpoint:str=''
+    common_pretrain_steps:int=1000
+    specialization_strength:float=1.
+    specialization_profile:str='two_way'
+    task_weights:dict=None
+    identical_stream:bool=True
+    calibration_samples_per_task:int=50
+    success_quantile:float=.2
 
     def validate(self):
+        if self.experiment_mode not in ['standard','forced_specialization']:raise ValueError('Unknown experiment mode')
+        if self.experiment_mode=='forced_specialization':
+            from .token_lab_calibration import validate_calibration
+            validate_calibration(self)
         if self.dataset not in ['tinystories','capability_10']:raise ValueError('Unsupported dataset')
         if self.topology not in ['independent','serial']:raise ValueError('Unsupported topology')
         if not 1<=len(self.families)<=8 or any(f not in ['gpt','ssm','recurrent','delta'] for f in self.families):raise ValueError('Choose 1–8 supported experts')
@@ -142,8 +157,15 @@ def run(c,root,run_id):
             frequency_source='TinyStories train split' if c.dataset=='tinystories' else '1000 train-split capability examples, indices 0..999',
             frequency_sha256=hashlib.sha256(ds.counts.numpy().tobytes()).hexdigest())
         write(root/'metadata.json',metadata)
+        calibration=None
+        if c.experiment_mode=='forced_specialization':
+            from .token_lab_calibration import CalibrationDataset,train_specialists
+            ds=CalibrationDataset(c,ds)
+            calibration,training_targets,training_context=train_specialists(c,model,ds,root,excluded_prefixes,check,emit)
+            metadata['training_protocol']='controlled cloned specialists; frozen shared machinery; answer-endpoint supervision; see specialization.json'
+            write(root/'metadata.json',metadata)
         opt=torch.optim.AdamW(model.parameters(),lr=c.learning_rate,weight_decay=0)
-        for step in range(c.train_steps):
+        for step in range(c.train_steps if calibration is None else 0):
             check();model.train();opt.zero_grad(set_to_none=True);total=0.
             for b in range(c.batch_size):
                 check();x,target,meta=ds.sample('train',step*c.batch_size+b);excluded_prefixes.add(meta['prefix_sha256']);x=x.to(c.device);y=torch.tensor([target],device=c.device);h=model.embed(x)
@@ -154,7 +176,11 @@ def run(c,root,run_id):
             nn.utils.clip_grad_norm_(model.parameters(),1.,error_if_nonfinite=True);opt.step()
             if step%10==0 or step+1==c.train_steps:emit('training',step=step+1,total=c.train_steps,loss=total,training_targets=training_targets,training_context_tokens=training_context)
         model.eval().requires_grad_(False);model.zero_grad(set_to_none=True)
-        torch.save(dict(config=asdict(c),model=model.state_dict(),tokenizer=ds.tokenizer.to_config()),root/'model.pt')
+        torch.save(dict(config=asdict(c),model=model.state_dict(),tokenizer=ds.tokenizer.to_config(),excluded_prefixes=sorted(excluded_prefixes)),root/'model.pt')
+        if calibration is not None:
+            from .token_lab_calibration import sanity_check
+            calibration['sanity']=sanity_check(c,model,ds,excluded_prefixes,check,emit)
+            write(root/'specialization.json',calibration)
         def observe(split,index,reference=False):
             nonlocal feature_seconds,expert_seconds,duplicate_skips
             check();x,target,meta=ds.sample(split,index);x=x.to(c.device)
@@ -190,7 +216,10 @@ def run(c,root,run_id):
                     position_normalized=meta['position']/c.sequence_length,token_count=int(ds.counts[token]),token_frequency=freq,log_token_frequency=math.log(freq),rarity=-math.log(freq),token_char_length=len(ds.tokenizer.decode([token])),tie_epsilon=c.tie_epsilon)
                 rows.append(row);hidden.append(h);losses.append(post['baseline_loss']);baselines.append(pred['baseline_loss']);feature_seconds+=time.perf_counter()-t0
             outs=mf.outcomes(baselines,losses,c.topology=='independent',c.tie_epsilon)
-            for row,out in zip(rows,outs):row.update(out)
+            for row,out in zip(rows,outs):
+                row.update(out)
+                row['relative_improvement']=row['improvement']/(abs(row['baseline_loss'])+mf.EPS)
+                row['successful']=float(row['improvement']>0)
             return rows,hidden
         # Same deterministic reference inputs for every expert; no evaluation references.
         reference=[]
@@ -229,6 +258,12 @@ def run(c,root,run_id):
             if raw:raw.close()
         emit('analysis');rows=[r for group in reservoir for r in group]
         analysis=analyze(rows,c.seed,lambda:(root/'cancel.requested').exists());check()
+        if calibration is not None:
+            from .token_lab_calibration_analysis import calibration_analysis
+            calibration['sampling_rejections']=dict(short_examples=ds.short_rejections,overlapping_prefixes=ds.overlap_rejections)
+            write(root/'specialization.json',calibration)
+            analysis['calibration']=calibration_analysis(rows,c,calibration,check)
+            write(root/'calibration-analysis.json',analysis['calibration'])
         summary=dict(run_id=run_id,name=c.name,status='completed',experiment_type='token_lab',schema_version=1,started_at=metadata['started_at'],
             observations=observations,measured_locations=measured,duplicate_prefixes_skipped=duplicate_skips,analysis_locations=len(reservoir),analysis_sampling='uniform whole-location reservoir after exact-prefix exclusions; inclusion=min(1,analysis_cap/measured_locations)',
             raw_saved=c.save_raw,display_rows=min(10000,len(rows)),overall_full_stream=[dict(expert_id=f'{i+1}:{c.families[i]}',n=s['n'],mean_loss=s['loss']/s['n'] if s['n'] else None,mean_improvement=s['improvement']/s['n'] if s['n'] else None) for i,s in enumerate(sums)],
@@ -236,7 +271,25 @@ def run(c,root,run_id):
             instrumented_expert_seconds=expert_seconds,feature_and_diagnostic_seconds=max(0.,feature_seconds-expert_seconds),
             measurement_overhead='feature_and_diagnostic_seconds excludes instrumented expert forward; FFN hook overhead remains in expert seconds. Includes reference and evaluation measurement, not an uninstrumented wall-clock A/B benchmark.',locations_per_second=measured/max(time.perf_counter()-started,1e-8))
         write(root/'analysis.json',analysis);write(root/'display.json',rows[:10000]);write(root/'summary.json',summary)
-        (root/'report.md').write_text(report(asdict(c),summary,analysis),encoding='utf-8');write(root/'status.json',dict(status='completed'));emit('complete')
+        report_text=report(asdict(c),summary,analysis)
+        if calibration is not None:
+            from .token_lab_calibration_analysis import calibration_report
+            from .token_lab_calibration_analysis import sweep_record
+            summary['calibration']=sweep_record(c,calibration,analysis['calibration'])
+            sweep=[]
+            for path in root.parent.glob('*/summary.json'):
+                check()
+                if path.parent==root:continue
+                try:other=json.loads(path.read_text(encoding='utf-8'))
+                except (ValueError,OSError):continue
+                if other.get('status')=='completed' and other.get('calibration',{}).get('comparison_key')==summary['calibration']['comparison_key']:
+                    sweep.append(dict(run_id=other['run_id'],**other['calibration']))
+            sweep.append(dict(run_id=run_id,**summary['calibration']));sweep.sort(key=lambda r:r['strength'])
+            analysis['calibration']['strength_sweep']=sweep
+            write(root/'analysis.json',analysis);write(root/'calibration-analysis.json',analysis['calibration'])
+            write(root/'summary.json',summary)
+            report_text=calibration_report(c,calibration,analysis['calibration'])+'\n\n# Secondary standard Token Lab analysis (not blind)\n\n'+report_text
+        (root/'report.md').write_text(report_text,encoding='utf-8');write(root/'status.json',dict(status='completed'));emit('complete')
         write(root/'status.json',dict(status='completed'))
         return summary
     except BaseException as exc:
@@ -245,7 +298,7 @@ def run(c,root,run_id):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('command',choices=['schema','estimate','validate','run']);p.add_argument('config',nargs='?');p.add_argument('--runs-dir',default='token-lab-runs');p.add_argument('--run-id',default=str(int(time.time())));args=p.parse_args()
-    if args.command=='schema':print(json.dumps(dict(defaults=asdict(LabConfig()),families=['gpt','ssm','recurrent','delta'])));return
+    if args.command=='schema':print(json.dumps(dict(defaults=asdict(LabConfig()),families=['gpt','ssm','recurrent','delta'],tasks=list(CAPABILITIES))));return
     c=LabConfig(**json.loads(Path(args.config).read_text(encoding='utf-8'))).validate()
     if args.command in ['estimate','validate']:print(json.dumps(dict(valid=True,config=asdict(c),warning='Fresh standalone training, not your EMC checkpoint. Every expert receives equal training opportunities.')));return
     run(c,args.runs_dir,args.run_id)

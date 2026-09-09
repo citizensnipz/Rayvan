@@ -10,8 +10,26 @@ test('Token Lab exposes standalone setup and measurement controls',()=>{
  for(const text of ['Token Lab','Independent / same-state counterfactual','Serial / stage improvements','Counter','Deep / gradient probes','Save raw observations','Training reference bank size','Reopen saved Token Lab run','TinyStories']){
   if(text!=='Counter')assert.ok(html.includes(text),text);
  }
- assert.ok(html.includes('does not load your EMC checkpoint'));
+ assert.ok(html.includes('No EMC router'));
  assert.ok(html.includes('100'));
+});
+
+test('calibration setup exposes weights, controls and checkpoint reuse',async()=>{
+ const {CalibrationSetup}=await import('../src/token-lab/Calibration.tsx');
+ const tasks=['arithmetic','symbolic','working_memory'];
+ const config={families:['gpt','gpt'],specialization_profile:'custom',task_weights:{0:{arithmetic:1,symbolic:1,working_memory:0},1:{arithmetic:0,symbolic:0,working_memory:1}}};
+ const html=renderToStaticMarkup(React.createElement(CalibrationSetup,{config,setConfig:()=>{},tasks}));
+ for(const s of ['Common base source','Specialization strength','Identical minibatch stream','Rerun saved specialists','arithmetic expert 1 weight','Success top fraction'])assert.ok(html.includes(s),s);
+});
+
+test('calibration label reveal is hidden by default',async()=>{
+ const {CalibrationResults}=await import('../src/token-lab/Calibration.tsx');
+ const detail={summary:{},rows:[],analysis:{calibration:{blind_features:['effective_rank'],experts:{'1:gpt':{held_out_associations:[],probes:{},target_free_probes:{}}},reveal:{'1:gpt':{task_matrix:{secret_task:{mean_improvement:1}},conclusion:'SECRET_REVEAL'}}}}};
+ const html=renderToStaticMarkup(React.createElement(CalibrationResults,{detail,runs:[]}));
+ assert.ok(html.includes('Reveal calibration labels'));
+ assert.ok(html.includes('Strength sweep'));
+ assert.ok(!html.includes('SECRET_REVEAL'));
+ assert.ok(!html.includes('secret_task'));
 });
 
 test('saved explorer renders charts, report, pair selector and analysis without rerun',()=>{

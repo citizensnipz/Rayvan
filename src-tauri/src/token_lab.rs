@@ -249,6 +249,7 @@ pub fn get_token_lab(app: AppHandle, run_id: String) -> Result<Value, String> {
         "summary": read_optional_json(&directory.join("summary.json")),
         "status": read_optional_json(&directory.join("status.json")),
         "analysis": read_optional_json(&directory.join("analysis.json")),
+        "specialization": read_optional_json(&directory.join("specialization.json")),
         "rows": read_optional_json(&directory.join("display.json")),
         "schema": read_optional_json(&directory.join("feature-schema.json")),
         "report": fs::read_to_string(directory.join("report.md")).unwrap_or_default(),

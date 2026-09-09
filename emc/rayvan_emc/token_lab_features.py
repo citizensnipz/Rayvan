@@ -246,3 +246,17 @@ for key in ['attention_effective_tokens','attention_distance','position','source
 SCHEMA['token_count']['units']='occurrences'
 SCHEMA['token_char_length']['units']='decoded characters'
 for key in ['log_token_frequency','rarity']:SCHEMA[key]['units']='nats'
+
+register('relative_improvement','Outcome','improvement/(abs(baseline_loss)+1e-8)',role='outcome')
+register('successful','Outcome','1 if improvement > 0 else 0',role='outcome')
+# Origin and ground-truth access are orthogonal. Preserve legacy role for old runs.
+for key,item in SCHEMA.items():
+    item['requires_target']=key in ['baseline_loss','target_probability','target_margin'] or item['role']=='outcome' or key.startswith('change_target')
+    item['origin']=('expert_history' if key=='success_familiarity' else
+        'expert_internal' if item['category'] in ['Attention','FFN','Gradient'] else
+        'pre_expert' if item['role']=='input' or key in ['baseline_loss','target_probability','target_margin'] else 'post_expert')
+
+
+def blind_keys(require_inference_available=False):
+    """Allowlist enforced in backend; unknown keys and task metadata never qualify."""
+    return [k for k,v in SCHEMA.items() if v['origin']=='pre_expert' and (not require_inference_available or not v['requires_target'])]
