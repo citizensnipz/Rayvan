@@ -28,9 +28,10 @@ def validate(request):
     return source
 
 
-def read_locations(path,cap,seed,check):
+def read_locations(path,cap,seed,check,keep_task_metadata=False):
     """Stream grouped JSONL; retain uniformly sampled whole locations, not rows."""
     allowed=set(blind_keys(True))|{'sample_id','analysis_group','expert_id','topology','prefix_sha256','split','baseline_loss','expert_loss','improvement'}
+    if keep_task_metadata:allowed.add('task_id') # Split/reveal metadata, never an input column.
     rng=random.Random(seed);bank=[];seen=0;sha=hashlib.sha256();current=[];last=None
     def add(group):
         nonlocal seen
@@ -69,8 +70,8 @@ def targets(locations):
     return result
 
 
-def prepare(rows):
-    masks=split_rows(rows);tr=masks<6;va=(masks>=6)&(masks<8);te=masks>=8
+def prepare(rows,split_masks=None):
+    masks=split_rows(rows) if split_masks is None else split_masks;tr=masks<6;va=(masks>=6)&(masks<8);te=masks>=8
     if min(tr.sum(),va.sum(),te.sum())<15:return None
     keys=[k for k in blind_keys(True) if np.mean([finite(r.get(k)) for r,t in zip(rows,tr) if t])>=.8]
     X=np.array([[r.get(k) if finite(r.get(k)) else np.nan for k in keys] for r in rows],dtype=float)
@@ -189,13 +190,13 @@ def report(result):
     return '\n'.join(lines)
 
 
-def run_saved(request,runs_root,run_id):
+def run_saved(request,runs_root,run_id,cancel_path=None):
     source=validate(request)
     if not run_id or any(not (v.isascii() and (v.isalnum() or v in '-_')) for v in run_id):raise ValueError('Invalid run ID')
     root=Path(runs_root)/run_id;root.mkdir(parents=True,exist_ok=False);start=time.perf_counter()
     def write(name,obj):(root/name).write_text(json.dumps(obj,indent=2,allow_nan=False),encoding='utf-8')
     def check():
-        if (root/'cancel.requested').exists():raise InterruptedError('Cancelled saved analysis')
+        if (root/'cancel.requested').exists() or (cancel_path and Path(cancel_path).exists()):raise InterruptedError('Cancelled saved analysis')
     def emit(phase,**kw):
         ev=dict(type='token_lab_progress',run_id=run_id,phase=phase,elapsed_seconds=time.perf_counter()-start,**kw)
         write('status.json',dict(status='running',**ev));print(json.dumps(ev),flush=True)

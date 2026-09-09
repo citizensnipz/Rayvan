@@ -131,14 +131,14 @@ class ProbeModel(nn.Module):
 def write(path,obj):path.write_text(json.dumps(obj,indent=2,allow_nan=False),encoding='utf-8')
 
 
-def run(c,root,run_id):
+def run(c,root,run_id,cancel_path=None):
     c.validate()
     if not run_id or any(not (v.isascii() and (v.isalnum() or v in '-_')) for v in run_id):raise ValueError('Invalid run ID')
     root=Path(root)/run_id;root.mkdir(parents=True,exist_ok=False)
     write(root/'config.json',asdict(c));started=time.perf_counter();rng=random.Random(c.seed+500);reservoir=[];seen=0;observations=0;measured=0;feature_seconds=0.;expert_seconds=0.;training_targets=0;training_context=0
     excluded_prefixes=set();evaluation_prefixes=set();duplicate_skips=0
     def check():
-        if (root/'cancel.requested').exists():raise InterruptedError('Cancelled at safe probe boundary')
+        if (root/'cancel.requested').exists() or (cancel_path and Path(cancel_path).exists()):raise InterruptedError('Cancelled at safe probe boundary')
     def emit(phase,**kw):
         event=dict(type='token_lab_progress',run_id=run_id,phase=phase,elapsed_seconds=time.perf_counter()-started,observations=observations,measured_locations=measured,**kw)
         print(json.dumps(event,allow_nan=False),flush=True);write(root/'status.json',dict(status='running',**event))
@@ -257,7 +257,7 @@ def run(c,root,run_id):
         finally:
             if raw:raw.close()
         emit('analysis');rows=[r for group in reservoir for r in group]
-        analysis=analyze(rows,c.seed,lambda:(root/'cancel.requested').exists());check()
+        analysis=analyze(rows,c.seed,lambda:(root/'cancel.requested').exists() or bool(cancel_path and Path(cancel_path).exists()));check()
         if calibration is not None:
             from .token_lab_calibration_analysis import calibration_analysis
             calibration['sampling_rejections']=dict(short_examples=ds.short_rejections,overlapping_prefixes=ds.overlap_rejections)
@@ -300,6 +300,12 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('command',choices=['schema','estimate','validate','run']);p.add_argument('config',nargs='?');p.add_argument('--runs-dir',default='token-lab-runs');p.add_argument('--run-id',default=str(int(time.time())));args=p.parse_args()
     if args.command=='schema':print(json.dumps(dict(defaults=asdict(LabConfig()),families=['gpt','ssm','recurrent','delta'],tasks=list(CAPABILITIES))));return
     request=json.loads(Path(args.config).read_text(encoding='utf-8'))
+    if request.get('experiment_mode')=='validation_sweep':
+        from .token_lab_sweep import validate,run_sweep
+        request=validate(request)
+        if args.command in ['estimate','validate']:
+            print(json.dumps(dict(valid=True,warning=f"Automated sweep: {8*request['sweep_seed_count']} calibration runs plus analyses; common bases and controls are managed automatically.")));return
+        run_sweep(request,args.runs_dir,args.run_id);return
     if request.get('analysis_only'):
         from .token_lab_discovery import validate,run_saved
         validate(request)

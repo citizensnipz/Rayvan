@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useState,useRef} from 'react';
 import {invoke} from '@tauri-apps/api/core';
 import {listen} from '@tauri-apps/api/event';
 import * as echarts from 'echarts/core';
@@ -6,6 +6,7 @@ import {ScatterChart} from 'echarts/charts';
 import {EChart} from '../research/charts/EChart';
 import {CalibrationSetup,CalibrationResults} from './Calibration';
 import {DiscoverySetup,DiscoveryResults} from './FeatureDiscovery';
+import {SweepSetup,SweepResults,sweepDefaults} from './ValidationSweep';
 echarts.use([ScatterChart]);
 type Obj=Record<string,any>;
 const families=['gpt','ssm','recurrent','delta'];
@@ -19,26 +20,37 @@ const colors=['#38c6cc','#d8ff75','#8e69ff','#f2d276','#ef7b86'];
 function chart(title:string){return {animation:false,title:{text:title,textStyle:{color:'#e8edf5',fontSize:13}},tooltip:{trigger:'item'},grid:{left:65,right:45,top:50,bottom:65},xAxis:{type:'value',scale:true},yAxis:{type:'value',scale:true},dataZoom:[{type:'inside'}]};}
 
 export function TokenLab({initialConfig}:{initialConfig?:Obj}={}){
+ const schemaDefaults=useRef<Obj>(initialConfig??{});
  const [config,setConfig]=useState<Obj|undefined>(initialConfig),[runs,setRuns]=useState<Obj[]>([]),[detail,setDetail]=useState<Obj>(),[progress,setProgress]=useState<Obj>(),[active,setActive]=useState<string>(),[error,setError]=useState(''),[notice,setNotice]=useState(''),[mixed,setMixed]=useState(false),[tasks,setTasks]=useState<string[]>([]);
  const refresh=()=>invoke<Obj[]>('list_token_labs').then(setRuns);
  const reopen=async(id:string)=>{const d=await invoke<Obj>('get_token_lab',{runId:id});setDetail(d);setProgress(undefined);};
  useEffect(()=>{let gone=false;const off: Array<()=>void>=[];
-  Promise.all([invoke<Obj>('get_token_lab_schema'),invoke<Obj[]>('list_token_labs'),invoke<Obj|null>('get_active_token_lab')]).then(([s,r,a])=>{if(gone)return;setConfig(c=>c??s.defaults);setTasks(s.tasks??[]);setRuns(r);if(a)setActive(a.runId);}).catch(e=>setError(String(e)));
+  Promise.all([invoke<Obj>('get_token_lab_schema'),invoke<Obj[]>('list_token_labs'),invoke<Obj|null>('get_active_token_lab')]).then(([s,r,a])=>{if(gone)return;schemaDefaults.current=s.defaults;setConfig(c=>c??s.defaults);setTasks(s.tasks??[]);setRuns(r);if(a)setActive(a.runId);}).catch(e=>setError(String(e)));
   for(const [name,handler] of [['token-lab-log',(e:Obj)=>setNotice(String(e.line??''))],['token-lab-event',(e:Obj)=>setProgress(e)],['token-lab-process-exit',(e:Obj)=>{setActive(undefined);void reopen(e.runId).catch(e=>setError(String(e)));void refresh();}]] as const){void listen<Obj>(name,e=>{if(!gone)handler(e.payload);}).then(f=>{if(gone)f();else off.push(f);});}
   return()=>{gone=true;off.forEach(f=>f());};
  },[]);
  const set=(key:string,value:any)=>setConfig(c=>({...c,[key]:value}));
+ const changeMode=(mode:string)=>{
+  setMixed(false);
+  if(mode==='validation_sweep'){setConfig(c=>({...sweepDefaults,device:c?.device??'cpu'}));return;}
+  setConfig(c=>{
+   const clean={...schemaDefaults.current,...Object.fromEntries(Object.entries(c??{}).filter(([k])=>k in schemaDefaults.current))};
+   return {...clean,experiment_mode:mode,...(mode==='forced_specialization'?{dataset:'capability_10',topology:'independent',families:['gpt','gpt'],common_base_source:'pretrain',common_checkpoint:'',specialist_checkpoint:'',common_pretrain_steps:1000,specialization_strength:1,specialization_profile:'two_way',task_weights:null,identical_stream:true,calibration_samples_per_task:50,success_quantile:.2,sequence_length:48,train_steps:1000,evaluation_samples:2000,analysis_cap:2000,measurement_rate:1}:{})};
+  });
+ };
  const action=async(mode:string)=>{try{setError('');if(mode==='validate'){const r=await invoke<Obj>('validate_token_lab',{config});setNotice(r.warning);}
   if(mode==='run'){await invoke('validate_token_lab',{config});const r=await invoke<Obj>('start_token_lab',{request:{config}});setActive(r.runId);setDetail(undefined);setProgress(undefined);}
   if(mode==='stop')await invoke('cancel_token_lab');}catch(e){setError(String(e));}};
  const discovery=async(request:Obj)=>{try{setError('');await invoke('validate_token_lab',{config:request});const r=await invoke<Obj>('start_token_lab',{request:{config:request}});setActive(r.runId);setDetail(undefined);setProgress(undefined);}catch(e){setError(String(e));}};
  if(!config)return <section className="panel">{error||'Loading Token Lab…'}</section>;
  const calibration=config.experiment_mode==='forced_specialization';
+ const sweep=config.experiment_mode==='validation_sweep';
  const field=(key:string,label:string,min=1,step=1)=><label key={key}>{label}<input type="number" min={min} step={step} value={config[key]} onChange={e=>set(key,Number(e.target.value))}/></label>;
  return <div className="token-lab">
   <section className="panel"><h2>Token Lab · observe, don’t route</h2><p>Standalone experts with a common contextual encoder and readout. No EMC router or performance-based training allocation. Calibration deliberately controls task exposure; standard mode does not. Avoid running another GPU experiment concurrently.</p>
    <fieldset disabled={Boolean(active)}><div className="lab-fields">
-    <label>Experiment mode<select value={config.experiment_mode??'standard'} onChange={e=>{const mode=e.target.value;setMixed(false);setConfig(c=>({...c,experiment_mode:mode,...(mode==='forced_specialization'?{dataset:'capability_10',topology:'independent',families:['gpt','gpt'],common_base_source:'pretrain',common_pretrain_steps:1000,specialization_strength:1,specialization_profile:'two_way',task_weights:null,identical_stream:true,calibration_samples_per_task:50,success_quantile:.2,sequence_length:48,train_steps:1000,evaluation_samples:2000,analysis_cap:2000,measurement_rate:1}: {})}));}}><option value="standard">Standard Token Lab</option><option value="forced_specialization">Forced Specialization Calibration</option></select></label>
+    <label>Experiment mode<select value={config.experiment_mode??'standard'} onChange={e=>changeMode(e.target.value)}><option value="standard">Standard Token Lab</option><option value="forced_specialization">Forced Specialization Calibration</option><option value="validation_sweep">Specialization Validation Sweep</option></select></label>
+    {sweep?<SweepSetup config={config} setConfig={setConfig}/>:<>
     <label>Run name<input value={config.name} onChange={e=>set('name',e.target.value)}/></label>
     <label>Dataset<select disabled={calibration} value={config.dataset} onChange={e=>set('dataset',e.target.value)}><option value="tinystories">TinyStories</option><option value="capability_10">10-task capability suite</option></select></label>
     <label>Topology<select disabled={calibration} value={config.topology} onChange={e=>set('topology',e.target.value)}><option value="independent">Independent / same-state counterfactual</option><option value="serial">Serial / stage improvements</option></select></label>
@@ -54,17 +66,19 @@ export function TokenLab({initialConfig}:{initialConfig?:Obj}={}){
     <label><input type="checkbox" checked disabled/> Core measurements</label>
     {['spectral_enabled','deep_enabled','save_raw'].map((k,i)=><label key={k}><input type="checkbox" checked={config[k]} onChange={e=>set(k,e.target.checked)}/>{['Spectral measurements','Deep / gradient probes','Save raw observations'][i]}</label>)}
     {field('spectral_rate','Spectral sampling probability',0,.05)}{field('deep_rate','Gradient sampling probability',0,.01)}
-   </div>{calibration&&<CalibrationSetup config={config} setConfig={setConfig} tasks={tasks}/>}</fieldset>
-   <p>Saved results and the next experiment settings are separate. Opening results does not change the form.</p>{detail?.config&&<button disabled={Boolean(active)} onClick={()=>{setConfig({...detail.config});setMixed(new Set(detail.config.families).size>1);setNotice("Loaded saved settings into the next experiment form.");}}>Use saved settings for next experiment</button>}
-   <p>Training budget: {config.train_steps*config.batch_size} endpoint targets {calibration?'per specialist; training steps above are specialist fine-tuning steps. Common pretraining has its own budget.':'per expert. All experts receive every training example; shared layers receive the mean of baseline and expert/stage losses. Serial stages also receive intermediate supervision.'}</p>
+   </>}</div>{calibration&&<CalibrationSetup config={config} setConfig={setConfig} tasks={tasks}/>}</fieldset>
+   <p>Saved results and the next experiment settings are separate. Opening results does not change the form.</p>{detail?.config&&<button disabled={Boolean(active)} onClick={()=>{setConfig({...detail.config});setMixed(new Set(detail.config.families??[]).size>1);setNotice("Loaded saved settings into the next experiment form.");}}>Use saved settings for next experiment</button>}
+   <p>Training budget: {config.train_steps*config.batch_size} endpoint targets {sweep?'per specialist in each calibration run; common pretraining is additional. All checkpoints and analyses are managed by the sweep.':calibration?'per specialist; training steps above are specialist fine-tuning steps. Common pretraining has its own budget.':'per expert. All experts receive every training example; shared layers receive the mean of baseline and expert/stage losses. Serial stages also receive intermediate supervision.'}</p>
    <div className="lab-actions"><button disabled={Boolean(active)} onClick={()=>void action('validate')}>Validate</button><button disabled={Boolean(active)} onClick={()=>void action('run')}>Run Token Lab</button><button disabled={!active} onClick={()=>void action('stop')}>Stop</button><button onClick={()=>void refresh().catch(e=>setError(String(e)))}>Refresh saved runs</button><select aria-label="Reopen saved Token Lab run" value={detail?.runId??''} onChange={e=>void reopen(e.target.value).catch(e=>setError(String(e)))}><option value="">Reopen saved Token Lab run</option>{runs.map(r=><option key={r.run_id} value={r.run_id}>{r.name} · {r.run_id} · {r.status}</option>)}</select></div>
    {notice&&<p>{notice}</p>}{error&&<p role="alert">{error}</p>}
   </section>
   <section className="panel"><h3>Run status</h3><p>{active??detail?.runId??'No run selected'} · {progress?.phase??detail?.summary?.status??detail?.status?.status??'Idle'}</p><p>{progress?.step??0} / {progress?.total??'—'} · {progress?.measured_locations??detail?.summary?.measured_locations??0} locations · {progress?.observations??detail?.summary?.observations??0} expert observations · {fmt(progress?.elapsed_seconds??detail?.summary?.runtime_seconds)} seconds</p><p>Current expert/stage: {progress?.expert_id??'—'} / {progress?.expert_stage??'—'}. Training endpoint targets: {progress?.training_targets??detail?.summary?.training_targets??'—'}. Training context exposures: {progress?.training_context_tokens??detail?.summary?.training_context_tokens??'—'} tokens. Exact-prefix exclusions: {detail?.summary?.duplicate_prefixes_skipped??'—'}.</p><p>End-to-end measured locations/s: {fmt(detail?.summary?.locations_per_second)}. Probe + measurement seconds: {fmt(detail?.summary?.probe_and_measurement_seconds)} (includes expert execution; not isolated overhead).</p>{detail?.status?.error&&<p role="alert">{detail.status.error}</p>}<p>Feature/diagnostic time excluding instrumented expert forward: {fmt(detail?.summary?.feature_and_diagnostic_seconds)} seconds. FFN hook overhead remains counted with expert execution.</p>{detail?.logs&&<details><summary>Logs</summary><pre>{detail.logs}</pre></details>}</section>
-  {detail?.summary?.status==='completed'&&<DiscoverySetup key={'discovery-'+detail.runId} detail={detail} active={Boolean(active)} onRun={r=>void discovery(r)}/>}
+  {sweep&&<p>Sweep progress: {progress?.completed_jobs??detail?.summary?.completed_jobs??0} / {progress?.planned_jobs??detail?.summary?.planned_jobs??8*config.sweep_seed_count} jobs. {progress?.phase}</p>}
+  {detail?.analysis?.sweep&&<SweepResults key={detail.runId} detail={detail} onResume={c=>{if(!active)setConfig(c);}}/>}
+  {!sweep&&detail?.summary?.status==='completed'&&!detail?.analysis?.sweep&&<DiscoverySetup key={'discovery-'+detail.runId} detail={detail} active={Boolean(active)} onRun={r=>void discovery(r)}/>}
   {detail?.analysis?.discovery&&<DiscoveryResults key={detail.runId} detail={detail}/>}
   {detail?.analysis?.calibration&&<CalibrationResults key={detail.runId} detail={detail} runs={runs}/>}
-  {detail?.analysis&&!detail.analysis.discovery&&(detail.analysis.calibration?<details><summary>Secondary standard explorer and full report · includes outcomes and task labels</summary><Explorer key={detail.runId} detail={detail}/></details>:<Explorer key={detail.runId} detail={detail}/>)}
+  {detail?.analysis&&!detail.analysis.discovery&&!detail.analysis.sweep&&(detail.analysis.calibration?<details><summary>Secondary standard explorer and full report · includes outcomes and task labels</summary><Explorer key={detail.runId} detail={detail}/></details>:<Explorer key={detail.runId} detail={detail}/>)}
  </div>;
 }
 
