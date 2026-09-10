@@ -1,4 +1,4 @@
-"""Standalone Token Lab CLI and runner. Never constructs or trains a router."""
+"""Token Lab CLI. Observational modes and an explicitly separate frozen routing test."""
 import argparse
 from dataclasses import dataclass,asdict
 from datetime import datetime,timezone
@@ -300,6 +300,12 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('command',choices=['schema','estimate','validate','run']);p.add_argument('config',nargs='?');p.add_argument('--runs-dir',default='token-lab-runs');p.add_argument('--run-id',default=str(int(time.time())));args=p.parse_args()
     if args.command=='schema':print(json.dumps(dict(defaults=asdict(LabConfig()),families=['gpt','ssm','recurrent','delta'],tasks=list(CAPABILITIES))));return
     request=json.loads(Path(args.config).read_text(encoding='utf-8'))
+    if request.get('experiment_mode')=='frozen_routing':
+        from .token_lab_routing import validate,run_test,sources
+        request=validate(request)
+        if args.command in ['estimate','validate']:
+            print(json.dumps(dict(valid=True,warning=f"{len(sources(request))} saved expert banks; one-step and {request['sequential_steps']}-step routing; simple/full features; no expert retraining.")));return
+        run_test(request,args.runs_dir,args.run_id);return
     if request.get('experiment_mode')=='validation_sweep':
         from .token_lab_sweep import validate,run_sweep
         request=validate(request)

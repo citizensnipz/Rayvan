@@ -37,13 +37,14 @@ export function SweepSetup({config,setConfig}:{config:Obj;setConfig:(v:any)=>voi
  </section>;
 }
 
-export function SweepResults({detail,onResume}:{detail:Obj;onResume:(config:Obj)=>void}){
+export function SweepResults({detail,onResume,onRouting}:{detail:Obj;onResume:(config:Obj)=>void;onRouting?:()=>void}){
  const a=detail.analysis.sweep,entries=a.entries??[],[selected,setSelected]=useState(''),[outcome,setOutcome]=useState('');
  const e=entries.find((v:Obj)=>v.key===selected)??entries[0];
  const target=e?.discovery?.[outcome]?outcome:Object.keys(e?.discovery??{})[0],d=e?.discovery?.[target];
  const points=entries.filter((v:Obj)=>v.status==='completed'&&v.strength===1).map((v:Obj)=>({name:v.key,value:v.extra?.groups?.all?.decisions?.gain_over_constant??null}));
  return <section className="panel"><h2>Specialization Validation Sweep results</h2>
   <p>{a.status} · {entries.filter((v:Obj)=>v.status==='completed').length}/{a.planned_runs} calibration runs completed. Results are offline diagnostics, not a validated sequential router.</p>
+  {onRouting&&<button onClick={onRouting}>Test routing with these saved experts</button>}
   <button onClick={()=>onResume({...a.settings,resume_from:detail.runDirectory})}>Prepare resume / reanalysis of this sweep</button>
   <table><thead><tr><th>Family</th><th>Matched controls</th><th>Mean choice gain</th><th>Verdict</th></tr></thead><tbody>{Object.entries(a.families??{}).map(([family,v]:any)=><tr key={family}><td>{family}</td><td>{v.matched_identical_control_pairs}</td><td>{fmt(v.mean_choice_gain)}</td><td>{v.verdict}</td></tr>)}</tbody></table>
   <EChart replace option={{animation:false,tooltip:{},grid:{left:60,bottom:100},xAxis:{type:'category',data:points.map((v:Obj)=>v.name),axisLabel:{rotate:45}},yAxis:{type:'value',name:'Choice gain (nats)'},series:[{type:'bar',data:points.map((v:Obj)=>v.value)}]}}/>
