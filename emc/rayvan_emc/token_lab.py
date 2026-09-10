@@ -300,6 +300,13 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('command',choices=['schema','estimate','validate','run']);p.add_argument('config',nargs='?');p.add_argument('--runs-dir',default='token-lab-runs');p.add_argument('--run-id',default=str(int(time.time())));args=p.parse_args()
     if args.command=='schema':print(json.dumps(dict(defaults=asdict(LabConfig()),families=['gpt','ssm','recurrent','delta'],tasks=list(CAPABILITIES))));return
     request=json.loads(Path(args.config).read_text(encoding='utf-8'))
+    if request.get('experiment_mode')=='emergent_specialization':
+        from .token_lab_emergence import validate,run_study,cost
+        request=validate(request)
+        if args.command in ['estimate','validate']:
+            estimate=cost(request)
+            print(json.dumps(dict(valid=True,cost=estimate,warning=f"{estimate['jobs']} matched condition/seed jobs; {estimate['training_applications']:,} training expert applications plus {estimate['counterfactual_applications_without_optional_oracle']:,} diagnostic/probe applications. General common bases restored automatically; no task-assigned specialists.")));return
+        run_study(request,args.runs_dir,args.run_id);return
     if request.get('experiment_mode')=='frozen_routing':
         from .token_lab_routing import validate,run_test,sources
         request=validate(request)
