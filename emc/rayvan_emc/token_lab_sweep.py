@@ -17,7 +17,7 @@ from .token_lab_calibration_analysis import split_rows, regression_scores
 
 FAMILIES = ('gpt', 'ssm', 'recurrent', 'delta')
 DEFAULTS = dict(experiment_mode='validation_sweep', name='Specialization Validation Sweep',
-    sweep_seed_start=42, sweep_seed_count=3, diagnostic_seed=42,
+    population='homogeneous',sweep_seed_start=42, sweep_seed_count=3, diagnostic_seed=42,
     common_pretrain_steps=1000, train_steps=1000, batch_size=4, learning_rate=.001,
     evaluation_samples=2000, calibration_samples_per_task=50, latent_dim=64,
     hidden_dim=128, heads=4, sequence_length=48, window=16, reference_size=128,
@@ -27,11 +27,14 @@ DEFAULTS = dict(experiment_mode='validation_sweep', name='Specialization Validat
 
 def child_config(c, family, seed, strength, checkpoint=''):
     fields = {k: c[k] for k in DEFAULTS if k in LabConfig.__dataclass_fields__}
+    mixed=family=='mixed'
+    from .capability_tasks import CAPABILITIES
+    weights={str(i):{t:float((j+seed)%4==i) for j,t in enumerate(CAPABILITIES)} for i in range(4)} if mixed else None
     return LabConfig(**(fields | dict(name=f'{family.upper()} · {strength*100}% · seed {seed}',
-        experiment_mode='forced_specialization', dataset='capability_10', families=(family, family),
+        experiment_mode='forced_specialization', dataset='capability_10', families=FAMILIES if mixed else (family, family),architecture_confounded=mixed,
         topology='independent', seed=seed, specialization_strength=float(strength),
         common_base_source='checkpoint' if checkpoint else 'pretrain', common_checkpoint=checkpoint,
-        specialist_checkpoint='', specialization_profile='two_way', task_weights=None,
+        specialist_checkpoint='', specialization_profile='custom' if mixed else 'two_way', task_weights=weights,
         identical_stream=True, save_raw=True, measurement_rate=1., analysis_cap=c['evaluation_samples'])))
 
 
@@ -49,11 +52,12 @@ def validate(request):
     if c['evaluation_samples']<100:raise ValueError('Use at least 100 evaluation locations per run')
     for key in ['cross_task','spectral_enabled','deep_enabled']:
         if type(c[key]) is not bool:raise ValueError(f'{key} must be a boolean')
-    for family in FAMILIES:child_config(c,family,c['sweep_seed_start'],1).validate()
+    if c['population'] not in ['homogeneous','heterogeneous']:raise ValueError('Unknown population')
+    for family in (['mixed'] if c['population']=='heterogeneous' else FAMILIES):child_config(c,family,c['sweep_seed_start'],1).validate()
     if c['resume_from']:
         source=Path(c['resume_from'])
         old=json.loads((source/'config.json').read_text(encoding='utf-8'))
-        if old.get('experiment_mode')!='validation_sweep' or signature(old)!=signature(c):
+        if old.get('experiment_mode')!='validation_sweep' or signature(DEFAULTS|old)!=signature(c):
             raise ValueError('Resume requires the same sweep settings. Load the saved sweep settings first.')
         if not (source/'sweep-manifest.json').is_file():raise ValueError('Resume sweep manifest missing')
     return c
@@ -71,16 +75,17 @@ def checkpoint_json(path,obj):
 
 def verify_controls(path, counterpart=None):
     info=load(path/'specialization.json')
-    if not info['clone_identity_verified'] or len(set(info['initial_hashes']))!=1 or not info['shared_unchanged']:
+    mixed=info.get('architecture_confounded',False)
+    if not info['shared_unchanged'] or (not mixed and (not info['clone_identity_verified'] or len(set(info['initial_hashes']))!=1)):
         raise ValueError('Calibration clone/freeze verification failed')
     budgets=[{k:b[k] for k in ['steps','samples','target_tokens','context_tokens']} for b in info['budgets']]
-    if budgets[0]!=budgets[1]:raise ValueError('Specialist training budgets differ')
+    if any(b!=budgets[0] for b in budgets):raise ValueError('Specialist training budgets differ')
     if counterpart:
         other=load(counterpart/'specialization.json')
         for key in ['common_hash','shared_hash','initial_hashes','expert_parameter_counts','optimizer']:
             if info[key]!=other[key]:raise ValueError('Matched control differs: '+key)
         if budgets!=[{k:b[k] for k in budgets[0]} for b in other['budgets']]:raise ValueError('Strength budgets differ')
-    return dict(common_hash=info['common_hash'],initial_hashes=info['initial_hashes'],shared_unchanged=True,
+    return dict(architecture_confounded=mixed,common_hash=info['common_hash'],initial_hashes=info['initial_hashes'],shared_unchanged=True,
         equal_budgets=True,exact_control_final_identity=info['exact_control_final_identity'],
         strength=info['strength'],budgets=budgets,expert_parameter_counts=info['expert_parameter_counts'])
 
@@ -121,10 +126,10 @@ def decision_scores(rows,y,p,masks,seed):
         n=int(te.sum()),non_tie_n=int(valid.sum()),meaning='Offline single-step decision diagnostic, not a sequential EMC router test')
 
 
-def extra_analysis(path,c,check):
+def extra_analysis(path,c,check,pair_name=None):
     locations,_,_=discovery.read_locations(path/'observations.jsonl',c['evaluation_samples'],c['diagnostic_seed'],check,True)
     datasets=discovery.targets(locations)
-    pair=next(rows for name,rows in datasets.items() if name.endswith(' advantage'))
+    pair=datasets[pair_name] if pair_name is not None else next(rows for name,rows in datasets.items() if name.endswith(' advantage'))
     data=discovery.prepare(pair)
     if data is None:return dict(status='insufficient split sizes')
     X,y,keys,masks=data
@@ -170,6 +175,19 @@ def extra_analysis(path,c,check):
 
 
 def aggregate(entries):
+    if any(e['family']=='mixed' for e in entries):
+        complete=[e for e in entries if e['family']=='mixed' and e.get('status')=='completed']
+        positive=[e for e in complete if e['strength']==1]
+        controls={e['seed']:e for e in complete if e['strength']==0}
+        paired=[e for e in positive if e['seed'] in controls and e['controls']['common_hash']==controls[e['seed']]['controls']['common_hash']]
+        by_pair={}
+        for entry in complete:
+            for name,p in entry.get('pair_extras',{}).items():
+                by_pair.setdefault(name,[]).append(dict(seed=entry['seed'],strength=entry['strength'],status=p['status'],all_inputs=p.get('groups',{}).get('all'),controls=p.get('groups',{}).get('controls')))
+        gains=[float(np.mean([p['groups']['all']['decisions']['gain_over_constant'] for p in e.get('pair_extras',{}).values() if p['status']=='ok'])) for e in paired if len(e.get('pair_extras',{}))==6 and all(p['status']=='ok' for p in e['pair_extras'].values())]
+        return dict(mixed=dict(completed_runs=len(complete),matched_identical_control_pairs=0,matched_exposure_control_pairs=len(paired),eligible_replicates=len(gains),
+            verdict='EXPLORATORY heterogeneous pairwise evidence; 0% is an architecture baseline, not an identical-expert null',choice_gain_per_seed=gains,
+            mean_choice_gain=float(np.mean(gains)) if gains else None,feature_recurrence={},feature_denominator=len(positive),group_evidence={},pair_replication=by_pair))
     families={}
     for family in FAMILIES:
         rows=[e for e in entries if e['family']==family and e.get('status')=='completed']
@@ -212,15 +230,15 @@ def aggregate(entries):
 
 def make_report(result):
     lines=['# Specialization Validation Sweep',
-        'Controlled calibration, not emergent specialization or a production router. Four module families; two homogeneous experts per run.',
+        ('HETEROGENEOUS: GPT + SSM + GRU + Delta share one jointly pretrained encoder/readout. 0% retains architecture differences. All six cross-family pairs are analyzed; architecture/parameter counts are intentionally different.' if result['settings'].get('population')=='heterogeneous' else 'Controlled calibration, not emergent specialization or a production router. Four module families; two homogeneous experts per run.'),
         'Each family/seed has a newly pretrained base reused exactly at 100% and 0%. Expert-only updates; equal budgets; no task labels in predictors.',
-        'Families have different parameter counts and their own bases; comparisons are not architecture-isolated causal effects.',
+        'Architectures have different parameter counts. Mixed mode shares one encoder/readout; homogeneous-family runs have separate bases. Architecture comparisons are not parameter-count-isolated causal effects.',
         'Generated-example-group train/validation/test splits; target-free pre-expert features only. Novelty references use training data.',
         '0%/100% evaluation sets can differ due to training-prefix exclusions; across-strength scores are NOT paired observations.',
         'Three or more seeds are a screening minimum, not a guarantee. No universal signature or once-and-for-all validation is claimed.',
         f"Status: {result['status']}. Completed {sum(e.get('status')=='completed' for e in result['entries'])}/{result['planned_runs']}.",
         '\n## Replication overview','| Family | Matched controls | Mean offline choice gain | Verdict |','|---|---:|---:|---|']
-    for family,a in result['families'].items():lines.append(f"| {family} | {a['matched_identical_control_pairs']} | {a['mean_choice_gain']} | {a['verdict']} |")
+    for family,a in result['families'].items():lines.append(f"| {family} | {a.get('matched_exposure_control_pairs',a['matched_identical_control_pairs'])} | {a['mean_choice_gain']} | {a['verdict']} |")
     lines+=['\nChoice gain is constant-expert loss minus predicted-choice loss on held-out states, in nats; positive is better. The constant expert is chosen on training data. This does not test sequential trajectories.',
         '\n## Individual experiments','| Family | Seed | Strength | Outcome | All MLP R² | Compact MLP R² |','|---|---:|---:|---|---:|---:|']
     provenance=[]
@@ -256,6 +274,11 @@ def make_report(result):
         'Feature sets are selected independently per replicate. This tests the discovery procedure, not transfer of one frozen predictor or feature set to a new seed.',
         'Use cross-task and group checks to decide whether geometry adds beyond task-format/confidence clues. Do not infer a sequential EMC benefit from offline choice gains.',
         'All completed, failed and cancelled jobs remain in sweep-manifest.json. Child checkpoints, observations and reports live under jobs/.']
+    for e in result['entries']:
+        if 'pair_extras' in e:
+            lines.append(f"\n## Mixed seed {e['seed']} strength {e['strength']}: all pairwise diagnostics (not a four-way routing score)")
+            for name,p in e['pair_extras'].items():
+                lines.append(name+': '+json.dumps(p))
     return '\n'.join(lines)
 
 
@@ -278,7 +301,7 @@ def run_sweep(request,runs_root,run_id):
     if not run_id or any(not (v.isascii() and (v.isalnum() or v in '-_')) for v in run_id):raise ValueError('Invalid run ID')
     root=(Path(runs_root)/run_id).resolve();root.mkdir(parents=True,exist_ok=False);jobs=root/'jobs';jobs.mkdir()
     stdout=sys.stdout;start=time.perf_counter();started=datetime.now(timezone.utc).isoformat();entries=[]
-    result=dict(schema_version=1,status='running',settings=c,planned_runs=8*c['sweep_seed_count'],entries=entries,families={})
+    result=dict(schema_version=1,status='running',settings=c,planned_runs=(2 if c['population']=='heterogeneous' else 8)*c['sweep_seed_count'],entries=entries,families={})
     write(root/'config.json',c)
     write(root/'metadata.json',dict(started_at=started,experiment_type='token_lab_sweep',protocol_version=1,torch_version=torch.__version__))
     previous={}
@@ -301,7 +324,7 @@ def run_sweep(request,runs_root,run_id):
         (root/'report.md').write_text(make_report(result),encoding='utf-8')
     persist('running')
     try:
-        for family in FAMILIES:
+        for family in (['mixed'] if c['population']=='heterogeneous' else FAMILIES):
             for seed in range(c['sweep_seed_start'],c['sweep_seed_start']+c['sweep_seed_count']):
                 base=None
                 for strength in [1,0]:
@@ -314,7 +337,7 @@ def run_sweep(request,runs_root,run_id):
                         expected=asdict(cfg)
                         complete=(source/'status.json').is_file() and load(source/'status.json').get('status')=='completed'
                         if complete:
-                            actual=load(source/'config.json')
+                            actual={'architecture_confounded':False}|load(source/'config.json')
                             # A resumed base can live under an earlier sweep root.
                             if json.dumps(actual,sort_keys=True)!=json.dumps(expected,sort_keys=True):raise ValueError('Saved child configuration mismatch; refusing reuse')
                         else:
@@ -339,7 +362,14 @@ def run_sweep(request,runs_root,run_id):
                         sanity={name:{k:v for k,v in s.items() if k in ['task_matrix','specialization_gap','differential_gap','differential_gap_ci','specialization_formed']} for name,s in load(source/'calibration-analysis.json')['reveal'].items()}
                         entry.update(discovery=compact,raw_sha256=found['raw_sha256'],analysis_directory=str(analysis_path.resolve()),sanity=sanity)
                         emit(f'{key} · feature-group, shuffled-label and cross-task checks')
-                        entry['extra']=extra_analysis(source,c,check)
+                        if family=='mixed':
+                            entry['pair_extras']={}
+                            for name in found['targets']:
+                                if not name.endswith(' advantage'):continue
+                                emit(f'{key} · pair checks: {name}')
+                                entry['pair_extras'][name]=extra_analysis(source,c,check,name)
+                            entry['extra']=dict(status='all six cross-family pairs available in pair_extras')
+                        else:entry['extra']=extra_analysis(source,c,check)
                         entry['status']='completed'
                     except InterruptedError:
                         entry['status']='cancelled';raise

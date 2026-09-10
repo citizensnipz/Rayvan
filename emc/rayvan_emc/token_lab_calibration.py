@@ -44,7 +44,8 @@ def distributions(c):
 
 def validate_calibration(c):
     if c.dataset!='capability_10' or c.topology!='independent':raise ValueError('Calibration requires capability_10 and independent probes')
-    if len(set(c.families))!=1 or len(c.families)<2:raise ValueError('Controlled calibration requires 2–8 same-family experts')
+    if len(c.families)<2:raise ValueError('Calibration requires at least two experts')
+    if len(set(c.families))!=1 and not c.architecture_confounded:raise ValueError('Mixed calibration requires explicit architecture-confounded mode')
     if c.common_base_source not in ['pretrain','checkpoint']:raise ValueError('Choose common pretraining or a compatible Token Lab checkpoint')
     if c.common_base_source=='checkpoint' and not c.common_checkpoint and not c.specialist_checkpoint:raise ValueError('Common checkpoint path required')
     for key in ['common_pretrain_steps','calibration_samples_per_task']:
@@ -98,6 +99,9 @@ def load_compatible(path,c,model,tokenizer):
     for k in ['latent_dim','hidden_dim','heads','sequence_length','dataset']:
         if cfg[k]!=getattr(c,k):raise ValueError(f'Checkpoint mismatch: {k}')
     if saved['tokenizer']!=tokenizer.to_config():raise ValueError('Checkpoint tokenizer mismatch')
+    if len(set(cfg['families']))>1 or len(set(c.families))>1:
+        if list(cfg['families'])!=list(c.families):raise ValueError('Mixed checkpoint requires the exact ordered population; unrelated trunks cannot be combined')
+        model.load_state_dict(saved['model'],strict=True);return saved
     if cfg['families'][0]!=c.families[0]:raise ValueError('Common expert family mismatch')
     state={k:v for k,v in saved['model'].items() if not k.startswith('experts.')}
     first={k[len('experts.0.'):]:v for k,v in saved['model'].items() if k.startswith('experts.0.')}
@@ -109,6 +113,7 @@ def load_compatible(path,c,model,tokenizer):
 def train_specialists(c,model,ds,root,excluded,check,emit):
     from .token_lab import write
     ds.excluded=excluded
+    mixed=len(set(c.families))>1
     if c.specialist_checkpoint:
         source=Path(c.specialist_checkpoint)
         saved=torch.load(source/'model.pt',map_location=c.device,weights_only=True)
@@ -132,20 +137,22 @@ def train_specialists(c,model,ds,root,excluded,check,emit):
         excluded.update(saved['excluded_prefixes'])
     else:
         # One expert and shared machinery only; unused clones receive no updates.
-        params=[p for n,p in model.named_parameters() if not n.startswith('experts.') or n.startswith('experts.0.')]
+        params=[p for n,p in model.named_parameters() if not n.startswith('experts.') or n.startswith('experts.0.') or mixed]
         optimizer=torch.optim.AdamW(params,lr=c.learning_rate,weight_decay=0)
         for step in range(c.common_pretrain_steps):
             check();optimizer.zero_grad(set_to_none=True);total=0.
             for b in range(c.batch_size):
                 index=step*c.batch_size+b;x,y,m=ds.sample_task('train',index,CAPABILITIES[index%10],stream=11);excluded.add(m['prefix_sha256'])
-                h=model.embed(x.to(c.device));loss=F.cross_entropy(model.logits(h+model.experts[0](h)),torch.tensor([y],device=c.device))/c.batch_size
+                h=model.embed(x.to(c.device));active=list(model.experts) if mixed else [model.experts[0]]
+                loss=sum(F.cross_entropy(model.logits(h+expert(h)),torch.tensor([y],device=c.device)) for expert in active)/(c.batch_size*len(active))
                 loss.backward();total+=float(loss.detach())
             torch.nn.utils.clip_grad_norm_(params,1.,error_if_nonfinite=True);optimizer.step()
             if step%10==0:emit('common pretraining',step=step+1,total=c.common_pretrain_steps,loss=total)
     common=copy.deepcopy(model.experts[0].state_dict())
-    for expert in model.experts:expert.load_state_dict(common,strict=True)
+    if not mixed:
+        for expert in model.experts:expert.load_state_dict(common,strict=True)
     initial=[digest(e.state_dict()) for e in model.experts]
-    if len(set(initial))!=1:raise RuntimeError('Clone identity failed')
+    if not mixed and len(set(initial))!=1:raise RuntimeError('Clone identity failed')
     torch.save(dict(config=asdict(c),model=model.state_dict(),tokenizer=ds.tokenizer.to_config(),excluded_prefixes=sorted(excluded),calibration_common_base=True),root/'common-base.pt')
     shared={k:v.detach().clone() for k,v in model.state_dict().items() if not k.startswith('experts.')}
     common_hash=digest(model.state_dict());dist=distributions(c);budgets=[];changed=[]
@@ -177,17 +184,18 @@ def train_specialists(c,model,ds,root,excluded,check,emit):
     if digest(shared)!=digest({k:v for k,v in model.state_dict().items() if not k.startswith('experts.')}):raise RuntimeError('Shared parameters changed')
     finals=[digest(e.state_dict()) for e in model.experts]
     info=dict(schema_version=1,generator_version=CAPABILITY_GENERATOR_VERSION,common_source=c.common_base_source,common_hash=common_hash,
-        initial_hashes=initial,clone_identity_verified=True,final_hashes=finals,shared_hash=digest(shared),shared_unchanged=True,
+        initial_hashes=initial,architecture_confounded=mixed,clone_identity_verified=not mixed,final_hashes=finals,shared_hash=digest(shared),shared_unchanged=True,
         frozen_names=list(shared),changed_names=changed,distributions=dist,strength=c.specialization_strength,budgets=budgets,
         expert_families=list(c.families),expert_parameter_counts=[sum(p.numel() for p in e.parameters()) for e in model.experts],
         common_pretraining_steps=c.common_pretrain_steps,common_pretraining_targets=c.common_pretrain_steps*c.batch_size,
+        common_pretraining_expert_applications=c.common_pretrain_steps*c.batch_size*(len(c.families) if mixed else 1),
         seed=c.seed,trainable_names=[[n for n,_ in model.named_parameters() if n.startswith(f'experts.{i}.')] for i in range(len(c.families))],
         optimizer=dict(name='AdamW',learning_rate=c.learning_rate,weight_decay=0,betas=[.9,.999],epsilon=1e-8,clip_norm=1,precision='float32',schedule='constant'),
         exact_stream_control=c.specialization_strength==0 and c.identical_stream,exact_control_final_identity=len(set(finals))==1,
         answer_protocol='Fixed-length causal prefix, one uniformly sampled eligible answer character; reject short examples within chosen task. Same path for all stages.',eligibility_rejections=ds.rejections)
     for i,expert in enumerate(model.experts):torch.save(dict(state=expert.state_dict(),common_hash=common_hash,initial_hash=initial[i],final_hash=finals[i],budget=budgets[i],distribution=dist[i]),root/f'specialist-{i+1}.pt')
     write(root/'specialization.json',info)
-    n=c.train_steps*c.batch_size*len(c.families)+(c.common_pretrain_steps*c.batch_size if c.common_base_source=='pretrain' else 0)
+    n=c.train_steps*c.batch_size*len(c.families)+(c.common_pretrain_steps*c.batch_size*(len(c.families) if mixed else 1) if c.common_base_source=='pretrain' else 0)
     return info,n,n*c.sequence_length
 
 

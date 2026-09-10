@@ -1,5 +1,7 @@
 # Emergent Specialization: controlled development experiment
 
+**Mixed-population extension:** GPT + SSM + GRU + Delta is now supported. See [heterogeneous studies](heterogeneous-token-lab.md) for the mixed-bank setup and changed control interpretation. The identical-clone descriptions below apply to homogeneous mode.
+
 This Token Lab mode tests three separate hypotheses: neutral weight differences can develop into stable specialization (H1); the existing competence learner can recognize developing competence (H2); and competence-informed training improves final held-out loss compared with matched equal and random exposure (H3). A successful fit alone is not evidence for all three.
 
 No production EMC router is replaced. There are no task assignments, specialist profiles or task-label inputs. This first developmental test uses the existing Token Lab operation `h_after = h + expert(h)`, one step, with the common encoder and readout frozen. It isolates the expert/router feedback loop; it does not yet test jointly changing shared representations or recurrent EMC trajectories.

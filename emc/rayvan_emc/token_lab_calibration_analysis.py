@@ -171,10 +171,10 @@ def calibration_analysis(rows,c,info,check):
 def calibration_report(c,info,a):
     lines=['# Forced Specialization Calibration','','## Experimental controls',
         f"Common source: {info['common_source']}; common hash: {info['common_hash']}",
-        f"Identical clones verified: {info['clone_identity_verified']}; shared unchanged: {info['shared_unchanged']}; strength: {c.specialization_strength}",
+        (f"Distinct architecture states recorded; shared unchanged: {info['shared_unchanged']}; strength: {c.specialization_strength}" if info.get('architecture_confounded') else f"Identical clones verified: {info['clone_identity_verified']}; shared unchanged: {info['shared_unchanged']}; strength: {c.specialization_strength}"),
         'Only expert module parameters train during specialization. Shared embeddings, position, context block, normalization and output head are frozen. Application is always h + expert(h).',
         'Budgets: '+json.dumps([{k:v for k,v in b.items() if k in ['expert_id','steps','samples','target_tokens','context_tokens']} for b in info['budgets']]), 'Optimizer: '+json.dumps(info['optimizer']),info['answer_protocol'],
-        'Common pretraining optimizes one expert endpoint only (no separate baseline loss); all shared parameters then freeze.',
+        ('ARCHITECTURE-CONFOUNDED: common pretraining averages all expert endpoint losses on the same examples. 0% means equal general exposure, not identical experts or absent specialization.' if info.get('architecture_confounded') else 'Common pretraining optimizes one expert endpoint only (no separate baseline loss); all shared parameters then freeze.'),
         '', '## Blind signal discovery',a['caveat']]
     for e,d in a['experts'].items():
         lines+=['',f'### {e}', 'Features screened on analysis-train only; following effects measured on untouched analysis-test:']

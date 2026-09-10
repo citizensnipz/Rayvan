@@ -61,7 +61,8 @@ def validate(request):
     if c['source_mode'] not in ['sweep','checkpoint']:raise ValueError('Choose sweep common bases or one common checkpoint')
     if not c['source_sweep'] and c['source_mode']=='sweep':raise ValueError('Select a saved validation sweep')
     if not c['common_checkpoint'] and c['source_mode']=='checkpoint':raise ValueError('Select a calibration common-base.pt, not specialized model.pt')
-    if c['family'] not in ['gpt','ssm','recurrent','delta'] or c['expert_count'] not in [2,4,8]:raise ValueError('Use 2, 4 or 8 homogeneous experts of a supported family')
+    if c['family'] not in ['gpt','ssm','recurrent','delta','mixed'] or c['expert_count'] not in [2,4,8]:raise ValueError('Use 2, 4 or 8 homogeneous experts of a supported family')
+    if c['family']=='mixed' and c['expert_count']!=4:raise ValueError('Mixed population is exactly GPT + SSM + GRU + Delta (4 experts)')
     if c['asymmetry_type']!='weight_perturbation':raise ValueError('Primary experiment supports weight perturbation only')
     if c['design'] not in ['narrow','factorial']:raise ValueError('Unknown design')
     if c['descriptor_set'] not in ['controls','full']:raise ValueError('Unknown descriptor set')
@@ -111,21 +112,21 @@ def initialize(c,seed):
     if c['source_mode']=='sweep':
         source=next(v for v in load(Path(c['source_sweep'])/'sweep-analysis.json')['entries'] if v['family']==c['family'] and v['seed']==seed and v['strength']==1)
         if digest(saved['model'])!=source['controls']['common_hash']:raise ValueError('Sweep/common-base hash mismatch')
-    cfg=LabConfig(**(saved['config']|dict(experiment_mode='standard',topology='independent',device=c['device'],families=[c['family']]*c['expert_count'],seed=saved['config']['seed']))).validate()
-    if saved['config']['families'][0]!=c['family'] or cfg.dataset!='capability_10':raise ValueError('Common base family/dataset mismatch')
+    cfg=LabConfig(**(saved['config']|dict(experiment_mode='standard',topology='independent',device=c['device'],families=['gpt','ssm','recurrent','delta'] if c['family']=='mixed' else [c['family']]*c['expert_count'],seed=saved['config']['seed']))).validate()
+    if (c['family']!='mixed' and saved['config']['families'][0]!=c['family']) or cfg.dataset!='capability_10':raise ValueError('Common base family/dataset mismatch')
     ds=Dataset(cfg);model=ProbeModel(cfg,ds.tokenizer.vocab_size).to(c['device'])
     load_compatible(path,cfg,model,ds.tokenizer)
     hashes=[digest(e.state_dict()) for e in model.experts]
-    if len(set(hashes))!=1:raise RuntimeError('Common clone identity failed')
+    if c['family']!='mixed' and len(set(hashes))!=1:raise RuntimeError('Common clone identity failed')
     model.eval().requires_grad_(False)
-    return cfg,ds,model,set(saved['excluded_prefixes']),dict(path=str(path),common_hash=digest(saved['model']),shared_hash=digest(shared_state(model)),clone_hashes=hashes,clones_identical=True,
+    return cfg,ds,model,set(saved['excluded_prefixes']),dict(path=str(path),common_hash=digest(saved['model']),shared_hash=digest(shared_state(model)),clone_hashes=hashes,clones_identical=len(set(hashes))==1,architecture_confounded=c['family']=='mixed',expert_families=list(cfg.families),
         frozen_parameter_names=[n for n,_ in model.named_parameters() if not n.startswith('experts.')],trainable_parameter_names=[n for n,_ in model.named_parameters() if n.startswith('experts.')])
 
 
-def perturb(model,strength,seed):
+def perturb(model,strength,seed,allow_nonidentical=False):
     """Each expert's global parameter perturbation has exact L2 = a*||theta||."""
     initial=[digest(e.state_dict()) for e in model.experts]
-    if len(set(initial))!=1:raise ValueError('Perturbation requires identical clones')
+    if not allow_nonidentical and len(set(initial))!=1:raise ValueError('Perturbation requires identical clones')
     details=[]
     for i,e in enumerate(model.experts):
         gen=torch.Generator().manual_seed(seed+104729*(i+1));params=list(e.parameters())
@@ -136,13 +137,15 @@ def perturb(model,strength,seed):
             for p,v in zip(params,noise):p.add_(v.to(p.device),alpha=strength*norm/max(size,1e-20))
         realized=math.sqrt(sum(float((p.detach()-b).double().square().sum()) for p,b in zip(params,before)))
         details.append(dict(expert=i,perturbation_seed=seed+104729*(i+1),base_norm=norm,delta_norm=realized,relative_delta_norm=realized/max(norm,1e-20),initial_hash=initial[i],perturbed_hash=digest(e.state_dict())))
-    if strength==0 and len({d['perturbed_hash'] for d in details})!=1:raise RuntimeError('Zero perturbation changed identity')
+    if strength==0 and [d['perturbed_hash'] for d in details]!=initial:raise RuntimeError('Zero perturbation changed identity')
     return dict(mechanism='independent Gaussian direction normalized to global expert parameter L2',strength=strength,experts=details,pairwise=parameter_distances(model))
 
 
 def parameter_distances(model):
     out=[]
     for i,j in itertools.combinations(range(len(model.experts)),2):
+        if type(model.experts[i])!=type(model.experts[j]):
+            out.append(dict(a=i,b=j,l2=None,relative_l2=None,unavailable='Different architectures; parameter coordinates are not comparable'));continue
         a=torch.cat([p.detach().flatten().cpu() for p in model.experts[i].parameters()]);b=torch.cat([p.detach().flatten().cpu() for p in model.experts[j].parameters()])
         out.append(dict(a=i,b=j,l2=float((a-b).norm()),relative_l2=float((a-b).norm()/((a.norm()+b.norm())/2).clamp_min(1e-8))))
     return out
@@ -280,7 +283,7 @@ def train_batch(model,batch,tickets,optimizers,seed,check):
 
 def train_condition(c,seed,condition,base,pools,bank,cfg,ds,root,check,emit,replay=None):
     from .token_lab_emergence_analysis import checkpoint_analysis
-    model=copy.deepcopy(base);frozen=digest(shared_state(model));initial=perturb(model,condition['asymmetry'],seed)
+    model=copy.deepcopy(base);frozen=digest(shared_state(model));initial=perturb(model,condition['asymmetry'],seed,allow_nonidentical=c['family']=='mixed')
     write(root/'initialization.json',initial)
     optimizers=[torch.optim.AdamW(e.parameters(),lr=c['expert_learning_rate'],weight_decay=0) for e in model.experts]
     E=c['expert_count'];router=PopulationRouter(E);exposure=np.zeros(E,dtype=int);updates=np.zeros(E,dtype=int);probes=np.zeros(E,dtype=int)
@@ -320,7 +323,7 @@ def train_condition(c,seed,condition,base,pools,bank,cfg,ds,root,check,emit,repl
                     if step and exposure.min()<.05*exposure.sum()/E:metrics['warnings'].append('Training starvation: an expert received less than 5% of equal-share exposure')
                     if step and exposure.max()>.95*exposure.sum():metrics['warnings'].append('Training concentration above 95%')
                     if c['probe_samples']<100:metrics['warnings'].append('Fewer than 100 current training probe states per expert; competence evidence may be weak')
-                    if condition['condition']=='A' and len({digest(e.state_dict()) for e in model.experts})!=1:raise RuntimeError('Identical-exposure control diverged unexpectedly')
+                    if c['family']!='mixed' and condition['condition']=='A' and len({digest(e.state_dict()) for e in model.experts})!=1:raise RuntimeError('Identical-exposure control diverged unexpectedly')
                     torch.save(dict(config=asdict(cfg),model=model.state_dict(),optimizer_states=[o.state_dict() for o in optimizers],condition=condition,step=step),folder/'model.pt');router.save(folder/'router')
                     for i,e in enumerate(model.experts):torch.save(e.state_dict(),folder/f'expert-{i}.pt')
                     write(folder/'metrics.json',metrics);checkpoints.append(metrics)

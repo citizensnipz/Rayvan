@@ -60,7 +60,7 @@ def checkpoint_analysis(c,seed,step,pools,L,base,disagreement,D,db,router,fixed,
         for i,v in enumerate(rows):
             for e in range(E):
                 rank=1+int(np.sum(L[i]<L[i,e]-c['tie_epsilon']))
-                f.write(json.dumps(dict(v['meta']|v['features'],expert_id=str(e),expert_family=c['family'],expert_stage=1,checkpoint_step=step,
+                f.write(json.dumps(dict(v['meta']|v['features'],expert_id=str(e),expert_family=['gpt','ssm','recurrent','delta'][e] if c['family']=='mixed' else c['family'],expert_stage=1,checkpoint_step=step,
                     baseline_loss=float(base[i]),expert_loss=float(L[i,e]),improvement=float(I[i,e]),relative_advantage=float(adv[i,e]),expert_rank=rank,
                     chosen_expert=int(chosen[i]),preference=float(scores[i,e]),best_expert=int(L[i].argmin())))+'\n')
     diagnostics={}
@@ -142,9 +142,9 @@ def summarize(entries,c):
 def report(result):
     c=result['settings'];s=result['summary']
     lines=['# Emergent Specialization',f"Status: {result['status']}. Family: {c['family']}; experts: {c['expert_count']}; seeds: {c['seeds']}.",
-        'Task-agnostic Gaussian parameter perturbations; same mixed inputs across conditions; shared encoder/readout frozen. One residual expert application per prediction. No task-assigned roles.',
+        ('HETEROGENEOUS: GPT + SSM + GRU + Delta share the same general encoder/readout. A is equal exposure with no added perturbation, NOT identical experts. Architecture differences exist at initialization; parameter distances across families are unavailable. No task profiles from the sweep are reused.' if c['family']=='mixed' else 'Task-agnostic Gaussian parameter perturbations; same mixed inputs across conditions; shared encoder/readout frozen. One residual expert application per prediction. No task-assigned roles.'),
         'Validated full/simple observer and pairwise regret-weighted logistic learner reused. For >2 experts, pairwise win-count aggregation is an unvalidated population extension, not a replacement representation or loss.',
-        'A identical/equal; B perturbation/equal; C no perturbation/feedback; D perturbation/feedback; E D ticket counts randomly permuted across inputs within each minibatch; optional F privileged oracle feedback.',
+        'A no-added-perturbation/equal (identical only in homogeneous mode); B perturbation/equal; C no added perturbation/feedback; D perturbation/feedback; E D ticket counts randomly permuted across inputs within each minibatch; optional F privileged oracle feedback.',
         'Each input has E training tickets. A/B assign one to each expert. A fraction beta is redirected using competence, with mandatory epsilon uniform exploration. Total E*B applications per update block are fixed; optimizer update counts may differ and are recorded.',
         'Router refreshes use fresh losses on a fixed TRAINING probe panel. Validation chooses old/candidate/fixed router. Evaluation and diagnostic panels never influence training. Shared states and descriptor references are fixed and common to all conditions.',
         'Expert learning rate and optimizer settings are identical. No FLOP estimate is claimed; forward applications, token exposures, optimizer updates, probe/router/diagnostic time and wall time are separate.',
@@ -169,7 +169,7 @@ def report(result):
         'Parameter distance is not specialization. Improvement prediction can reflect common difficulty; consult state-by-expert interaction, distinct unique winners, relative-advantage stability and above-fixed routing gains.',
         'High concentration, zero exposure, stale/insufficient probes, identical functions and worsening loss remain visible. All-zero identity controls can predict common difficulty without demonstrating specialization.',
         'Best checkpoint loss is retrospective descriptive data, never a selection criterion. Repeated evaluation-panel curves are correlated. Confidence intervals are exploratory and not multiplicity-adjusted.',
-        'Ordinary mixed training here means expert-only training under a frozen general representation. It does not establish emergence with a jointly changing trunk, multi-step EMC integration, heterogeneous expert architectures or unseen tasks.',
+        'Training here means expert-only development under a frozen general representation. It does not establish a benefit with a jointly changing trunk, multi-step EMC integration or unseen tasks. Mixed mode intentionally changes architecture and parameter counts; initial complementarity is not newly emergent specialization.',
         'Per-expert optimizer updates and unique examples can differ despite matched total application budgets. E controls D marginal usage exactly within each block; random assignments may accidentally coincide with D.',
         'F is a privileged one-step reference, not a rigorous upper bound on future developmental utility. Source common bases are reused; with a single checkpoint, seeds do not replicate common pretraining.',
         'Raw observations and diagnostic inputs, router/checkpoint weights, initialization hashes, assignments and matched data are saved. Share emergence-analysis.json and this report.']

@@ -48,6 +48,7 @@ class LabConfig:
     tie_epsilon:float=.001
     train_stories:int=1000
     validation_stories:int=500
+    architecture_confounded:bool=False
     experiment_mode:str='standard'
     common_base_source:str='pretrain'
     common_checkpoint:str=''
@@ -317,7 +318,7 @@ def main():
         from .token_lab_sweep import validate,run_sweep
         request=validate(request)
         if args.command in ['estimate','validate']:
-            print(json.dumps(dict(valid=True,warning=f"Automated sweep: {8*request['sweep_seed_count']} calibration runs plus analyses; common bases and controls are managed automatically.")));return
+            print(json.dumps(dict(valid=True,warning=f"Automated sweep: {(2 if request['population']=='heterogeneous' else 8)*request['sweep_seed_count']} calibration runs plus analyses; common bases and controls are managed automatically.")));return
         run_sweep(request,args.runs_dir,args.run_id);return
     if request.get('analysis_only'):
         from .token_lab_discovery import validate,run_saved
